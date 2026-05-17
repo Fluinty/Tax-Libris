@@ -1,0 +1,436 @@
+'use server'
+
+import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { createSupabaseAdmin } from '@/lib/supabase/admin'
+import { revalidatePath } from 'next/cache'
+
+// Helper to get authenticated user email
+async function getUserEmail(): Promise<string> {
+  const supabase = await createSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.email ?? 'system'
+}
+
+// Helper to log audit
+async function logAudit(
+  supabase: any,
+  action: string,
+  clientNip: string,
+  zapisId: number | null,
+  details: any
+) {
+  await supabase.from('audit_log').insert({
+    action,
+    client_nip: clientNip,
+    zapis_id: zapisId,
+    details,
+  })
+}
+
+// ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
+export async function approveFaktura(exceptionId: number) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  // Pobierz dane wyjątku żeby skopiować ai_kwoty do final_kwoty
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id, ai_proponowany_opis, ai_kwoty_per_kolumna, zapis_vat_data')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  // Update
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({
+      status: 'approved',
+      resolved_opis: exception.ai_proponowany_opis,
+      final_kwoty_per_kolumna: exception.ai_kwoty_per_kolumna,
+      final_zapis_vat_data: exception.zapis_vat_data,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString()
+    })
+    .eq('id', exceptionId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    resolved_by: userEmail,
+    opis: exception.ai_proponowany_opis,
+    kwoty: exception.ai_kwoty_per_kolumna,
+    zapis_vat: exception.zapis_vat_data,
+    type: 'ai_accepted'
+  })
+
+  revalidatePath('/do-akceptacji')
+  return { success: true }
+}
+
+// ZATWIERDŹ Z EDYCJĄ (dla pending_review - gdy księgowa zmieni kwoty lub opis - WERSJA LEGACY)
+export async function approveWithEdit(exceptionId: number, opis: string, kwoty: Record<string, number>) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({
+      status: 'approved',
+      resolved_opis: opis,
+      final_kwoty_per_kolumna: kwoty,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString()
+    })
+    .eq('id', exceptionId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'approved_with_edit', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    resolved_by: userEmail,
+    opis,
+    kwoty,
+    type: 'manual_edit'
+  })
+
+  revalidatePath('/do-akceptacji')
+  return { success: true }
+}
+
+// ZATWIERDŹ Z EDYCJĄ PEŁNĄ (KPiR + VAT) z modalu
+export async function approveExceptionFull(
+  exceptionId: number,
+  finalKwotyPerKolumna: Record<string, number>,
+  finalZapisVatData: any,
+  finalOpis: string
+) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({
+      status: 'approved',
+      resolved_opis: finalOpis,
+      final_kwoty_per_kolumna: finalKwotyPerKolumna,
+      final_zapis_vat_data: finalZapisVatData,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString()
+    })
+    .eq('id', exceptionId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    resolved_by: userEmail,
+    opis: finalOpis,
+    kwoty: finalKwotyPerKolumna,
+    zapis_vat: finalZapisVatData,
+    type: 'manual_edit_full'
+  })
+
+  revalidatePath('/do-akceptacji')
+  return { success: true }
+}
+
+// UPDATE ONLY VAT
+export async function updateFinalZapisVAT(
+  exceptionId: number,
+  zapisVatData: any
+) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+  
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({ final_zapis_vat_data: zapisVatData })
+    .eq('id', exceptionId);
+  
+  if (error) {
+    return { success: false, error: error.message }
+  }
+  
+  await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    user: userEmail,
+    payload: { final_zapis_vat_data: zapisVatData }
+  });
+  
+  revalidatePath('/do-akceptacji');
+  return { success: true }
+}
+
+// ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
+export async function resolveException(exceptionId: number, opis: string) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({
+      status: 'resolved',
+      resolved_opis: opis,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString()
+    })
+    .eq('id', exceptionId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    resolved_by: userEmail,
+    opis,
+    type: 'manual_resolve'
+  })
+
+  revalidatePath('/do-akceptacji')
+  return { success: true }
+}
+
+// POMIŃ
+export async function ignoreFaktura(exceptionId: number) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  const { data: exception, error: fetchErr } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, zapis_id')
+    .eq('id', exceptionId)
+    .single()
+
+  if (fetchErr || !exception) {
+    return { success: false, error: 'Nie znaleziono faktury.' }
+  }
+
+  const { error } = await supabase
+    .from('exceptions_queue')
+    .update({
+      status: 'ignored',
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString()
+    })
+    .eq('id', exceptionId)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id, {
+    exception_id: exceptionId,
+    resolved_by: userEmail
+  })
+
+  revalidatePath('/do-akceptacji')
+  return { success: true }
+}
+
+// DODAJ PROPOZYCJĘ DO LISTY KLIENTA (reuse z sesji 5)
+export async function addProponowanyToClientOpisy(exceptionId: number) {
+  const userEmail = await getUserEmail()
+  const supabase = createSupabaseAdmin()
+
+  const { data: exception, error: errFetch } = await supabase
+    .from('exceptions_queue')
+    .select('client_nip, ai_proponowany_opis, typ_dokumentu')
+    .eq('id', exceptionId)
+    .single()
+
+  if (errFetch || !exception || !exception.ai_proponowany_opis) {
+    return { success: false, error: 'Brak danych propozycji AI' }
+  }
+
+  const opisT = exception.ai_proponowany_opis.trim()
+  const opisLower = opisT.toLowerCase()
+
+  // Sprawdzamy czy opis istnieje u klienta
+  const { data: existing } = await supabase
+    .from('client_opisy')
+    .select('id, aktywny, opis')
+    .eq('client_nip', exception.client_nip)
+
+  const found = existing?.find((e) => e.opis.toLowerCase() === opisLower)
+
+  if (found) {
+    if (!found.aktywny) {
+      await supabase
+        .from('client_opisy')
+        .update({ aktywny: true, updated_at: new Date().toISOString() })
+        .eq('id', found.id)
+      
+      await logAudit(supabase, 'opis_reactivated_from_ai', exception.client_nip, null, {
+        opis: found.opis,
+        user: userEmail,
+        exception_id: exceptionId
+      })
+      return { success: true, message: 'Opis istniał, został aktywowany.' }
+    }
+    return { success: true, message: 'Opis był już aktywny.' }
+  }
+
+  // Insert nowej wartości
+  const { error: errInsert } = await supabase
+    .from('client_opisy')
+    .insert({
+      client_nip: exception.client_nip,
+      opis: opisT,
+      typ_dokumentu: exception.typ_dokumentu ?? 'zakup',
+      aktywny: true,
+      hit_count: 0,
+      created_by: userEmail
+    })
+
+  if (errInsert) {
+    return { success: false, error: errInsert.message }
+  }
+
+  await logAudit(supabase, 'opis_added_from_ai', exception.client_nip, null, {
+    opis: opisT,
+    user: userEmail,
+    exception_id: exceptionId
+  })
+
+  return { success: true, message: 'Opis dodany poprawnie.' }
+}
+
+
+// ── SESJA 7: JPK Section Updates ──────────────────────────────────
+
+const RESET_FIELDS: Record<string, Record<string, unknown>> = {
+  vat: { pozycje_vat_final: null, pozycje_vat_edited: false },
+  rezim: { rezim_paliwowy_final: null, pojazd_id_final: null, rezim_edited: false },
+  procedury: { procedura_jpk_final: null, typ_dokumentu_jpk_final: null, jpk_procedury_edited: false },
+  gtu: { gtu_bitmask_final: null, gtu_edited_by_user: false },
+}
+
+// Generic update for any JPK section — pass the exact columns to SET
+export async function updateJpkSection(
+  exceptionId: number,
+  data: Record<string, unknown>
+) {
+  try {
+    const userEmail = await getUserEmail()
+    const supabase = createSupabaseAdmin()
+
+    const { error } = await supabase
+      .from('exceptions_queue')
+      .update(data)
+      .eq('id', exceptionId)
+
+    if (error) return { success: false, error: error.message }
+
+    // Audit
+    const { data: exc } = await supabase
+      .from('exceptions_queue')
+      .select('client_nip')
+      .eq('id', exceptionId)
+      .single()
+
+    if (exc) {
+      await logAudit(supabase, 'jpk_section_update', exc.client_nip, null, {
+        exception_id: exceptionId,
+        fields: Object.keys(data),
+        user: userEmail,
+      })
+    }
+
+    revalidatePath('/do-akceptacji')
+    return { success: true }
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Nieznany błąd' }
+  }
+}
+
+// Reset a JPK section back to AI defaults
+export async function resetJpkSection(
+  exceptionId: number,
+  section: 'vat' | 'rezim' | 'procedury' | 'gtu'
+) {
+  try {
+    const fields = RESET_FIELDS[section]
+    if (!fields) return { success: false, error: `Nieznana sekcja: ${section}` }
+
+    const userEmail = await getUserEmail()
+    const supabase = createSupabaseAdmin()
+
+    const { error } = await supabase
+      .from('exceptions_queue')
+      .update(fields)
+      .eq('id', exceptionId)
+
+    if (error) return { success: false, error: error.message }
+
+    const { data: exc } = await supabase
+      .from('exceptions_queue')
+      .select('client_nip')
+      .eq('id', exceptionId)
+      .single()
+
+    if (exc) {
+      await logAudit(supabase, 'jpk_section_reset', exc.client_nip, null, {
+        exception_id: exceptionId,
+        section,
+        user: userEmail,
+      })
+    }
+
+    revalidatePath('/do-akceptacji')
+    return { success: true }
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Nieznany błąd' }
+  }
+}
+

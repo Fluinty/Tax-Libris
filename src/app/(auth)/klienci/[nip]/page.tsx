@@ -1,0 +1,125 @@
+import { createSupabaseAdmin } from '@/lib/supabase/admin'
+import { getAllowedNips } from '@/lib/auth-helpers'
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { ClientHeader } from '@/components/client-detail/ClientHeader'
+import { ClientStats } from '@/components/client-detail/ClientStats'
+import { ClientDataPanel } from '@/components/client-detail/ClientDataPanel'
+import { PojazdyTable } from '@/components/client-detail/PojazdyTable'
+import { OpisyTable } from '@/components/client-detail/OpisyTable'
+import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
+
+export default async function ClientDetailPage({ params }: { params: Promise<{ nip: string }> }) {
+  const { nip } = await params
+  const { nips, isAdmin } = await getAllowedNips()
+
+  // Authorization check: non-admin can only view their assigned NIPs
+  if (!isAdmin && nips && !nips.includes(nip)) {
+    notFound()
+  }
+
+  const supabase = createSupabaseAdmin()
+
+  const { data: client } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('nip', nip)
+    .single()
+
+  if (!client) {
+    notFound()
+  }
+
+  // Statystyki
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const thirtyDaysIso = thirtyDaysAgo.toISOString()
+
+  // 1. Zsumowane exception i reguly
+  const { count: exceptionsCount } = await supabase.from('exceptions_queue').select('*', { count: 'exact', head: true }).eq('client_nip', nip).in('status', ['pending', 'pending_review'])
+  const { count: rulesCount } = await supabase.from('rules').select('*', { count: 'exact', head: true }).eq('client_nip', nip)
+
+  // 2. Faktury z tego miesiąca (z auditu action = 'auto_create_full' lub 'set_opis')
+  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+  const { count: invoicesMonth } = await supabase.from('audit_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_nip', nip)
+    .in('action', ['auto_create_full', 'set_opis'])
+    .gte('timestamp', firstDayOfMonth)
+
+  // 3. Pojazdy
+  const { data: pojazdy } = await supabase.from('client_pojazdy').select('*').eq('client_nip', nip).order('aktywny', { ascending: false }).order('data_dodania', { ascending: false })
+  const activePojazdyCount = pojazdy?.filter(p => p.aktywny).length || 0
+
+  // 4. Hit rate (przybliżenie na bazie ostatnich 30 dni)
+  const { data: recentAudits } = await supabase.from('audit_log')
+    .select('action, timestamp')
+    .eq('client_nip', nip)
+    .in('action', ['auto_create_full', 'set_opis', 'exception'])
+    .gte('timestamp', thirtyDaysIso)
+
+  let autoCount = 0
+  let exceptionCount = 0
+
+  const dailyStats = new Map() // 'YYYY-MM-DD' => { auto: 0, wyjatki: 0 }
+
+  for (const a of recentAudits || []) {
+    const d = a.timestamp.split('T')[0]
+    if (!dailyStats.has(d)) dailyStats.set(d, { data: d, obsluzone: 0, wyjatki: 0 })
+
+    if (a.action === 'exception') {
+      exceptionCount++
+      dailyStats.get(d).wyjatki++
+    } else {
+      autoCount++
+      dailyStats.get(d).obsluzone++
+    }
+  }
+
+  const hitRate = (autoCount + exceptionCount) > 0 ? Math.round((autoCount / (autoCount + exceptionCount)) * 100) : 0
+
+  // Sort and format chart data
+  const chartData = Array.from(dailyStats.values()).sort((a, b) => a.data.localeCompare(b.data))
+
+  const stats = {
+    invoicesMonth: invoicesMonth || 0,
+    hitRate,
+    exceptionsCount: exceptionsCount || 0,
+    rulesCount: rulesCount || 0,
+    activePojazdyCount,
+    chartData
+  }
+
+  // Opisy
+  const { data: opisy } = await supabase.from('client_opisy').select('*').eq('client_nip', nip).order('hit_count', { ascending: false })
+
+  // Logi (ostatnie 20)
+  const { data: logs } = await supabase.from('client_changes_log')
+    .select('*')
+    .eq('client_nip', nip)
+    .order('changed_at', { ascending: false })
+    .limit(20)
+
+  return (
+    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <Link href="/klienci" className="inline-flex items-center text-sm font-medium text-[#64748B] hover:text-[#1F3A5F]">
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Wróć do listy
+      </Link>
+
+      <ClientHeader client={client} isAdmin={isAdmin} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <ClientStats stats={stats} />
+        <ClientDataPanel client={client} isAdmin={isAdmin} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
+        <PojazdyTable nip={nip} pojazdy={pojazdy || []} />
+        <OpisyTable nip={nip} opisy={opisy || []} />
+        <ClientChangesLog logs={logs || []} />
+      </div>
+    </div>
+  )
+}

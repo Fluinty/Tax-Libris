@@ -1,0 +1,345 @@
+// Typy TypeScript dla schematu fluinty w Supabase
+
+export type TypDokumentu = 'zakup' | 'sprzedaz'
+
+export type RejestrVAT = 'Rejestr sprzedaży VAT' | 'Rejestr zakupów VAT' | 'Rejestr zakupów dla marża VAT';
+
+export type RodzajZakupu = number | string;
+export type RodzajOdliczenia = number | string;
+export type CelZakupu = number | string;
+export type ProceduraJPK = 'MK' | 'FP' | 'RO' | 'TP' | 'KR' | null;
+export type GrupaAsortymentu = number | string | null;  // INT bitmask (0-8191) or legacy string enum
+
+export interface PozycjaVAT {
+  stawka_symbol: string;          // "23", "8", "5", "0", "zw", "np"
+  stawka_id: string;              // GUID stawki w Rachmistrzu
+  netto: number;
+  vat: number;
+  brutto: number;
+  pole_deklaracji?: string | null;  // np. "P:42" — pole na deklaracji VAT-7
+}
+
+export interface ZapisVATData {
+  rejestr_id: number;
+  rejestr_nazwa: RejestrVAT;
+  transakcja_id: number;
+  transakcja_nazwa: string;
+  
+  // Tylko zakup
+  rodzaj_zakupu?: RodzajZakupu;
+  rodzaj_odliczenia?: RodzajOdliczenia;
+  cel_zakupu?: CelZakupu;
+  
+  // Tylko sprzedaż
+  procedura_jpk?: ProceduraJPK;
+  grupa_asortymentu?: GrupaAsortymentu;
+  typ_dokumentu?: string | null;
+  
+  // Zawsze
+  pozycje_vat: PozycjaVAT[];
+  suma_netto: number;
+  suma_vat: number;
+  suma_brutto: number;
+}
+
+export interface Client {
+  nip: string;
+  nazwa: string;
+  nazwa_bazy_rachmistrz: string;
+  aktywny: boolean;
+  pilot: boolean;
+  auto_write_enabled: boolean;
+  avg_faktur_mies: number | null;
+  utworzony: string;
+  ostatni_sync: string | null;
+  platnik_vat?: boolean;
+}
+
+export interface Rule {
+  id: number;
+  client_nip: string;
+  pattern_pozycji: string;
+  is_pattern: boolean;
+  opis_zdarzenia: string;
+  typ_dokumentu: TypDokumentu | null;
+  confidence: number;
+  hit_count: number;
+  last_used_at: string | null;
+  source: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface PozycjaXml {
+  lp: string;
+  nazwaTowaru: string;
+  ilosc: string;
+  jednostkaMiary: string;
+  cenaNetto: string | null;
+  cenaBrutto: string | null;
+  wartoscNetto: string | null;
+  stawkaVat: string;
+  kodCN: string;
+  pkWiU: string;
+  gtu: string | null;
+  dataSprzedazy?: string | null;
+}
+
+export interface KlasyfikacjaAiPozycja {
+  lp: number;
+  kolumna_kpir: number;
+  kategoria: string;
+  wartosc_brutto: number;
+}
+
+export interface ExceptionItem {
+  id: number;
+  client_nip: string;
+  zapis_id: number;
+  ksiegowe_numer: string | null;
+  numer_ksef: string | null;
+  pozycja_xml: string;
+  nip_dostawcy: string | null;
+  nazwa_dostawcy: string | null;
+  kwota_brutto: number | null;
+  status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored';
+  resolved_opis: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  rule_created_id: number | null;
+  typ_dokumentu: TypDokumentu | null;
+  created_at: string;
+  data_wystawienia?: string | null;
+  data_sprzedazy?: string | null;
+  ddk_data?: { dataDokumentu?: string | null; dataSprzedazy?: string | null } | null;
+  ai_proponowany_opis: string | null;
+  ai_uzasadnienie: string | null;
+  ai_confidence: number | null;
+  ai_kwoty_per_kolumna: Record<string, number> | null;
+  final_kwoty_per_kolumna: Record<string, number> | null;
+  pozycje_xml_full: PozycjaXml[] | null;
+  ai_klasyfikacja_pozycji: KlasyfikacjaAiPozycja[] | null;
+  zapis_vat_data: ZapisVATData | null;
+  final_zapis_vat_data: ZapisVATData | null;
+  kpir_pojazdowe_data: {
+    wydatki_dotycza_pojazdu: boolean;
+    procent_do_ujecia_w_kosztach: number;
+    wydatki_pozostale_wartosc_faktury: number;
+    koszt_kpir_obliczony: number;
+    strategia: string;
+    rezim_proc: string;
+  } | null;
+  final_kpir_pojazdowe_data?: {
+    wydatki_dotycza_pojazdu: boolean;
+    procent_do_ujecia_w_kosztach: number;
+    wydatki_pozostale_wartosc_faktury: number;
+    koszt_kpir_obliczony: number;
+    strategia: string;
+    rezim_proc: string;
+  } | null;
+
+  // Confidence aggregation (sesja 7)
+  confidence_overall?: number | null;
+  confidence_reasons?: { dim: string; score: number; msg: string }[] | null;
+
+  // Weryfikacja kontrahenta (sesja 7)
+  vendor_vat_active?: boolean | null;
+  vendor_vat_checked_at?: string | null;
+  vendor_first_occurrence?: boolean;
+  vendor_invoice_count?: number;
+
+  // Rachunek bankowy (sesja 9)
+  rachunek_z_faktury?: string | null;
+  rachunek_match_status?: 'ok' | 'wirtualny_match' | 'mismatch' | 'no_account_in_invoice' | 'below_threshold' | 'skip_foreign' | 'skip_no_vat' | 'error' | null;
+  rachunek_match_reason?: string | null;
+
+  // Środek trwały (sesja 9)
+  srodek_trwaly_status?: 'mocny_alert' | 'slaby_alert' | null;
+  srodek_trwaly_kwota?: number | null;
+  srodek_trwaly_kwota_typ?: 'netto' | 'brutto' | null;
+  srodek_trwaly_keyword?: string | null;
+  srodek_trwaly_pozycja?: string | null;
+  srodek_trwaly_reason?: string | null;
+
+  is_potential_duplicate?: boolean;
+  duplicate_of_zapis_id?: number | null;
+  date_anomaly?: string | null;
+
+  // GTU (backend sesja 21 + panel sesja 7)
+  gtu_bitmask?: number | null;
+  gtu_sources?: { bit: number; gtu: number; source: string; detail: string }[] | null;
+  gtu_bitmask_final?: number | null;
+  gtu_edited_by_user?: boolean;
+
+  // Procedury JPK (backend sesja 20 + panel sesja 7)
+  procedura_jpk?: number | null;
+  typ_dokumentu_jpk?: number | null;
+  procedura_jpk_final?: number | null;
+  typ_dokumentu_jpk_final?: number | null;
+  jpk_procedury_edited?: boolean;
+
+  // Pozycje VAT final (panel sesja 7)
+  pozycje_vat_final?: { stawka: string; netto: number; vat: number; brutto: number }[] | null;
+  pozycje_vat_edited?: boolean;
+
+  // Reżim paliwowy final (panel sesja 7)
+  rezim_paliwowy_final?: string | null;
+  pojazd_id?: number | null;
+  pojazd_id_final?: number | null;
+  rezim_edited?: boolean;
+
+  // Joined client data
+  client?: Client;
+}
+
+export interface AuditLog {
+  id: number;
+  timestamp: string;
+  client_nip: string | null;
+  zapis_id: number | null;
+  action: string;
+  pozycja_xml: string | null;
+  rule_id: number | null;
+  opis_zapisany: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  details: Record<string, unknown> | null;
+}
+
+export type PanelUserRola = 'admin' | 'ksiegowa' | 'klient'
+
+export interface PanelUser {
+  email: string;
+  rola: PanelUserRola;
+  biuro_id: string;
+  biuro_klienci_nipy: string[] | null; // null = admin, widzi wszystko
+  aktywny: boolean;
+  ostatnie_logowanie: string | null;
+}
+
+export interface UserProfile {
+  email: string;
+  full_name: string;
+  role: PanelUserRola;
+  biuro_klienci_nipy: string[] | null;
+}
+
+// Typ dla klienta z agregowanymi danymi
+export interface ClientWithCounts extends Client {
+  rules_count: number;
+  exceptions_count: number;
+}
+
+// Typ dla wyjątku z nazwą klienta
+export interface ExceptionWithClient extends ExceptionItem {
+  client_nazwa: string;
+}
+
+// Typ dla sidebar z liczbą wyjątków per klient
+export interface ClientExceptionCount {
+  client_nip: string;
+  nazwa: string;
+  pending_count: number;
+  has_ai_proposal?: boolean;
+}
+
+// Typ dla reguły z nazwą klienta (strona Reguły)
+export interface RuleWithClient extends Rule {
+  client_nazwa: string;
+}
+
+// Typ dla metryki dashboardu
+export interface DashboardMetrics {
+  hitRate: number;
+  hitRateTrend: number | null;
+  invoicesProcessed: number;
+  invoicesTrend: number | null;
+  activeRules: number;
+  rulesTrend: number | null;
+  pendingExceptions: number;
+  exceptionsTrend: number | null;
+}
+
+// Typ dla danych wykresu aktywności
+export interface ActivityChartData {
+  data: string;
+  obsluzone: number;
+  wyjatki: number;
+}
+
+// Typ dla top klienta w dashboardzie
+export interface TopClient {
+  klient: string;
+  obsluzone: number;
+  hit_rate: number;
+}
+
+// Typ dla top reguły w dashboardzie
+export interface TopRule {
+  id: number;
+  pattern_pozycji: string;
+  opis_zdarzenia: string;
+  klient: string;
+  hit_count: number;
+}
+
+// Typ dla wpisu z ostatniej aktywności
+export interface RecentActivity {
+  id: number;
+  timestamp: string;
+  action: string;
+  client_nazwa: string;
+  client_nip: string | null;
+  zapis_id: number | null;
+  opis_zapisany: string | null;
+  pozycja_xml: string | null;
+  error_message: string | null;
+  rule_id: number | null;
+  details: Record<string, unknown> | null;
+}
+
+export interface ClientPojazd {
+  id: number;
+  client_nip: string;
+  nr_rejestracyjny: string;
+  marka_model: string | null;
+  nr_umowy_leasingu: string | null;
+  sposob_rozliczenia: 'pelne_100' | 'mieszane_50' | 'mieszane_75_50' | 'wynajem_75' | 'inne';
+  aktywny: boolean;
+  data_dodania: string;
+  data_zakonczenia: string | null;
+  notatki: string | null;
+}
+
+
+export interface ClientOpis {
+  id: number;
+  client_nip: string;
+  opis: string;
+  typ_dokumentu: TypDokumentu | null;
+  hit_count: number;
+  aktywny: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  created_by: string;
+}
+
+export interface ClientChange {
+  id: number;
+  client_nip: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string;
+  changed_at: string;
+}
+
+export interface ClientFull extends Client {
+  pkd_glowny: string | null;
+  pkd_dodatkowe: string | null;
+  forma_dzialalnosci: string | null;
+  sprzedaz_mieszana: boolean;
+  platnik_vat: boolean;
+  proporcja_vat_odliczalna: number;
+  dodatkowe_info_ksiegowej: string | null;
+}
