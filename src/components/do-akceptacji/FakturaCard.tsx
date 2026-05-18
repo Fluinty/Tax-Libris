@@ -280,6 +280,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
   // renderRezimPojazdowy removed — replaced by PojazdRezimSection (sesja 7)
 
+  const isClientVatPayer = exception.client?.platnik_vat !== false
+
   const renderJpkSections = (isReadOnly: boolean) => {
     // Extract AI pozycje_vat from zapis_vat_data
     const aiPozycjeVat = (exception.zapis_vat_data?.pozycje_vat ?? []).map((p: PozycjaVAT) => ({
@@ -295,14 +297,17 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
     return (
       <div className="mt-4 space-y-3">
-        <PozycjeVatSection
-          exceptionId={exception.id}
-          kwotaBrutto={exception.kwota_brutto ?? 0}
-          pozycjeVatFinal={exception.pozycje_vat_final}
-          pozycjeVatAi={aiPozycjeVat.length > 0 ? aiPozycjeVat : null}
-          isEdited={exception.pozycje_vat_edited ?? false}
-          readOnly={isReadOnly}
-        />
+        {/* Pozycje VAT — ukryj dla klientów zwolnionych z VAT */}
+        {isClientVatPayer && (
+          <PozycjeVatSection
+            exceptionId={exception.id}
+            kwotaBrutto={exception.kwota_brutto ?? 0}
+            pozycjeVatFinal={exception.pozycje_vat_final}
+            pozycjeVatAi={aiPozycjeVat.length > 0 ? aiPozycjeVat : null}
+            isEdited={exception.pozycje_vat_edited ?? false}
+            readOnly={isReadOnly}
+          />
+        )}
         {/* Pojazd i reżim paliwowy — UKRYJ dla sprzedaży */}
         {exception.typ_dokumentu !== 'sprzedaz' && (
           <PojazdRezimSection
@@ -323,18 +328,21 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           <SrodekTrwalySection exception={exception} />
         )}
         <WeryfikacjaKontrahentaSection exception={exception} />
-        <ProceduryJpkSection
-          exceptionId={exception.id}
-          proceduraJpk={exception.procedura_jpk}
-          typDokumentuJpk={exception.typ_dokumentu_jpk}
-          proceduraJpkFinal={exception.procedura_jpk_final}
-          typDokumentuJpkFinal={exception.typ_dokumentu_jpk_final}
-          isEdited={exception.jpk_procedury_edited ?? false}
-          readOnly={isReadOnly}
-          typDokumentu={exception.typ_dokumentu}
-        />
-        {/* GTU 1-13 — UKRYJ dla zakupu */}
-        {exception.typ_dokumentu === 'sprzedaz' && (
+        {/* Procedury JPK i GTU — tylko dla płatników VAT */}
+        {isClientVatPayer && (
+          <ProceduryJpkSection
+            exceptionId={exception.id}
+            proceduraJpk={exception.procedura_jpk}
+            typDokumentuJpk={exception.typ_dokumentu_jpk}
+            proceduraJpkFinal={exception.procedura_jpk_final}
+            typDokumentuJpkFinal={exception.typ_dokumentu_jpk_final}
+            isEdited={exception.jpk_procedury_edited ?? false}
+            readOnly={isReadOnly}
+            typDokumentu={exception.typ_dokumentu}
+          />
+        )}
+        {/* GTU 1-13 — UKRYJ dla zakupu i dla zwolnionych z VAT */}
+        {isClientVatPayer && exception.typ_dokumentu === 'sprzedaz' && (
           <GtuSection
             exceptionId={exception.id}
             gtuBitmask={gtuBitmaskResolved}
@@ -351,10 +359,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const renderZapisVat = () => {
     if (exception.client && exception.client.platnik_vat === false) {
       return (
-        <div className="mt-4 mb-2 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden shadow-sm p-3">
-          <div className="text-sm text-slate-600 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-slate-400" />
-            Klient nie jest płatnikiem VAT — zapis VAT pomijany dla wszystkich faktur
+        <div className="mt-4 mb-2 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden shadow-sm p-3">
+          <div className="text-sm text-blue-700 flex items-center gap-2">
+            ℹ️ Klient zwolniony z VAT — rejestr VAT nie jest prowadzony
           </div>
         </div>
       )
@@ -390,12 +397,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
         )
       } else {
         return (
-          <div className="mt-4 mb-2 bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm p-3">
-            <div className="text-sm font-semibold text-slate-700 flex items-center gap-2 mb-2">
-              💰 Zapis VAT
-            </div>
-            <div className="text-sm text-slate-600">
-              ℹ️ Faktura zwolniona z VAT — brak zapisu w ewidencji VAT. Tylko KPiR.
+          <div className="mt-4 mb-2 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden shadow-sm p-3">
+            <div className="text-sm text-blue-700 flex items-center gap-2">
+              ℹ️ Faktura zwolniona z VAT — brak pozycji opodatkowanych
             </div>
           </div>
         )

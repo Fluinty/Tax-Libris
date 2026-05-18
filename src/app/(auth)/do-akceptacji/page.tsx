@@ -27,7 +27,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   let exceptionsQuery = applyNipFilter(
     supabase
       .from('exceptions_queue')
-      .select('*, clients!inner(nazwa)')
+      .select('*, clients!inner(nazwa, platnik_vat)')
       .in('status', ['pending', 'pending_review', 'auto_created']),
     nips
   )
@@ -54,11 +54,17 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const { data: rawExceptions } = await exceptionsQuery
 
   // Transform to typed data
-  const allExceptions: ExceptionWithClient[] = (rawExceptions ?? []).map((e) => ({
-    ...e,
-    client_nazwa: (e.clients as unknown as { nazwa: string })?.nazwa ?? 'Nieznany',
-    clients: undefined,
-  }))
+  const allExceptions: ExceptionWithClient[] = (rawExceptions ?? []).map((e) => {
+    const clientData = e.clients as unknown as { nazwa: string; platnik_vat?: boolean }
+    return {
+      ...e,
+      client_nazwa: clientData?.nazwa ?? 'Nieznany',
+      client: {
+        platnik_vat: clientData?.platnik_vat ?? true, // default to true (safe: shows VAT sections)
+      } as any,
+      clients: undefined,
+    }
+  })
 
   // Brak filtra typu na poziomie serwera - przekazujemy wszystko do klienta
   const typedExceptions = allExceptions
