@@ -3,6 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
 
 // Helper to get authenticated user email
 async function getUserEmail(): Promise<string> {
@@ -32,16 +33,19 @@ export async function approveFaktura(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  // Pobierz dane wyjątku żeby skopiować ai_kwoty do final_kwoty
   const { data: exception, error: fetchErr } = await supabase
     .from('exceptions_queue')
-    .select('client_nip, zapis_id, ai_proponowany_opis, ai_kwoty_per_kolumna, zapis_vat_data')
+    .select('*, clients!inner(platnik_vat)')
     .eq('id', exceptionId)
     .single()
 
   if (fetchErr || !exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
+
+  // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
+  const scalonyVat = mergeInlineEditsVat(exception)
+  const scalonyPojazd = mergeInlineEditsPojazd(exception)
 
   // Update
   const { error } = await supabase
@@ -50,7 +54,8 @@ export async function approveFaktura(exceptionId: number) {
       status: 'approved',
       resolved_opis: exception.ai_proponowany_opis,
       final_kwoty_per_kolumna: exception.ai_kwoty_per_kolumna,
-      final_zapis_vat_data: exception.zapis_vat_data,
+      final_zapis_vat_data: scalonyVat,
+      final_kpir_pojazdowe_data: scalonyPojazd,
       resolved_by: userEmail,
       resolved_at: new Date().toISOString()
     })
@@ -127,7 +132,7 @@ export async function approveExceptionFull(
 
   const { data: exception, error: fetchErr } = await supabase
     .from('exceptions_queue')
-    .select('client_nip, zapis_id')
+    .select('*')
     .eq('id', exceptionId)
     .single()
 
@@ -135,13 +140,20 @@ export async function approveExceptionFull(
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  // Scalenie inline edits z modal edits
+  // Modal daje finalKwotyPerKolumna + finalZapisVatData + finalOpis
+  // Ale GTU/procedury/pojazd mogą być z inline sections — trzeba scalić
+  const baseVat = finalZapisVatData || mergeInlineEditsVat(exception)
+  const scalonyPojazd = mergeInlineEditsPojazd(exception)
+
   const { error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
       resolved_opis: finalOpis,
       final_kwoty_per_kolumna: finalKwotyPerKolumna,
-      final_zapis_vat_data: finalZapisVatData,
+      final_zapis_vat_data: baseVat,
+      final_kpir_pojazdowe_data: scalonyPojazd,
       resolved_by: userEmail,
       resolved_at: new Date().toISOString()
     })

@@ -36,6 +36,8 @@ import { ProceduryJpkSection } from './sections/ProceduryJpkSection'
 import { GtuSection } from './sections/GtuSection'
 import { SrodekTrwalySection } from './sections/SrodekTrwalySection'
 import { AiReviewSection, AiReviewBadge } from './sections/AiReviewSection'
+import { PozycjeFakturySection } from './sections/PozycjeFakturySection'
+import { WalidatorBadge } from './sections/WalidatorBadge'
 import { getLatestReview } from '@/lib/ai-review'
 import type { ExceptionWithClient, ClientPojazd, PozycjaXml, KlasyfikacjaAiPozycja, TypDokumentu, ZapisVATData, PozycjaVAT } from '@/types/database'
 
@@ -696,7 +698,19 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               })()}
             </div>
 
-            {renderPozycjeXml()}
+            {/* Pozycje faktury — v8 editable or legacy read-only */}
+            {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
+              <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
+            )}
+            {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
+              <PozycjeFakturySection
+                pozycje={exception.pozycje_editable}
+                typDokumentu={exception.typ_dokumentu}
+                readOnly={false}
+              />
+            ) : (
+              renderPozycjeXml()
+            )}
             {renderZapisVat()}
             {renderJpkSections(false)}
 
@@ -779,7 +793,19 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             </div>
           )}
 
-          {renderPozycjeXml()}
+          {/* Pozycje faktury — v8 editable or legacy read-only */}
+          {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
+            <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
+          )}
+          {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
+            <PozycjeFakturySection
+              pozycje={exception.pozycje_editable}
+              typDokumentu={exception.typ_dokumentu}
+              readOnly={false}
+            />
+          ) : (
+            renderPozycjeXml()
+          )}
           {renderZapisVat()}
           {renderJpkSections(false)}
 
@@ -887,7 +913,19 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             </div>
 
             <div className="sm:col-span-2 -mx-2 sm:mx-0">
-              {renderPozycjeXml()}
+              {/* Pozycje faktury — v8 read-only or legacy */}
+              {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
+                <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
+              )}
+              {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
+                <PozycjeFakturySection
+                  pozycje={exception.pozycje_editable}
+                  typDokumentu={exception.typ_dokumentu}
+                  readOnly={true}
+                />
+              ) : (
+                renderPozycjeXml()
+              )}
               {renderZapisVat()}
               {renderJpkSections(true)}
             </div>

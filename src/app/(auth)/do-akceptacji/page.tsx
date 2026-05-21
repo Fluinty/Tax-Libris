@@ -26,7 +26,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
 
   let exceptionsQuery = applyNipFilter(
     supabase
-      .from('exceptions_queue')
+      .from('exceptions_queue_v2')
       .select(`*, clients!inner(nazwa, platnik_vat), ai_review_log(id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia)`)
       .in('status', ['pending', 'pending_review', 'auto_created']),
     nips
@@ -115,7 +115,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   // 3. Statystyki dnia (obliczane ze wszystkich faktur z dzisiaj)
   const { data: todayStatsData } = await applyNipFilter(
     supabase
-      .from('exceptions_queue')
+      .from('exceptions_queue_v2')
       .select('status, ai_confidence, created_at')
       .gte('created_at', today.toISOString()),
     nips
@@ -133,7 +133,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   // 4. Sidebar - count items per client (count pending and pending_review)
   const { data: allPendingItems } = await applyNipFilter(
     supabase
-      .from('exceptions_queue')
+      .from('exceptions_queue_v2')
       .select('client_nip, typ_dokumentu, ai_proponowany_opis, clients!inner(nazwa)')
       .in('status', ['pending', 'pending_review']),
     nips
