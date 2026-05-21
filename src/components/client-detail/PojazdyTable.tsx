@@ -128,7 +128,7 @@ export function PojazdyTable({ nip, pojazdy }: { nip: string, pojazdy: any[] }) 
       </div>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Edytuj pojazd' : 'Dodaj nowy pojazd'}</DialogTitle>
           </DialogHeader>

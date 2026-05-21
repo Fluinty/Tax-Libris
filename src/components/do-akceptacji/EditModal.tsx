@@ -33,6 +33,8 @@ interface EditModalProps {
   initialKwoty: Record<string, number>
   initialZapisVatData: ZapisVATData | null
   kwotaBrutto: number | null
+  kwotaNetto: number | null
+  isVatPayer: boolean
   typDokumentu: string | null
   clientOpisy: ClientOpis[]
   onSave: (opis: string, kwoty: Record<string, number>, zapisVat: ZapisVATData | null) => void
@@ -49,6 +51,8 @@ export function EditModal({
   initialKwoty,
   initialZapisVatData,
   kwotaBrutto,
+  kwotaNetto,
+  isVatPayer,
   typDokumentu,
   clientOpisy,
   onSave
@@ -100,8 +104,11 @@ export function EditModal({
     return acc + (isNaN(num) ? 0 : num)
   }, 0)
 
-  const isMatched = kwotaBrutto !== null && Math.abs(totalSum - kwotaBrutto) <= 0.5
-  const diff = kwotaBrutto !== null ? kwotaBrutto - totalSum : 0
+  // Bug #3 fix: VAT-owiec księguje netto w KPiR, zwolniony księguje brutto
+  const kwotaReferencyjna = isVatPayer ? (kwotaNetto ?? kwotaBrutto) : kwotaBrutto
+  const labelKwoty = isVatPayer ? 'Kwota netto z faktury' : 'Kwota brutto z faktury'
+  const isMatched = kwotaReferencyjna !== null && Math.abs(totalSum - kwotaReferencyjna) <= 0.5
+  const diff = kwotaReferencyjna !== null ? kwotaReferencyjna - totalSum : 0
 
   // Obliczenia sumy VAT
   const totalSumVatBrutto = zapisVat.pozycje_vat?.reduce((acc, poz) => acc + (poz.brutto || 0), 0) || 0
@@ -182,12 +189,12 @@ export function EditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" onKeyDown={handleKeyDown}>
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Edytuj propozycję AI</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 space-y-6 py-4">
           {/* Opis księgowy */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-[#1E293B]">Opis księgowy:</label>
@@ -401,9 +408,9 @@ export function EditModal({
                   
                   <div className="space-y-2">
                     {zapisVat.pozycje_vat?.map((poz, i) => (
-                      <div key={i} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-100">
+                      <div key={i} className="grid grid-cols-[70px_1fr_1fr_1fr_36px] gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100">
                         <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
-                          <SelectTrigger className="w-20 h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="23">23%</SelectItem>
                             <SelectItem value="8">8%</SelectItem>
@@ -414,20 +421,19 @@ export function EditModal({
                             <SelectItem value="oo">oo</SelectItem>
                           </SelectContent>
                         </Select>
-                        
-                        <div className="flex-1 flex items-center gap-1">
-                          <span className="text-[10px] text-slate-400 w-8 text-right">Netto</span>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Netto</label>
                           <Input className="h-8 text-xs text-right" value={poz.netto === 0 && poz.netto.toString() !== '0' ? '' : poz.netto} onChange={e => handlePozycjaVatChange(i, 'netto', e.target.value)} />
                         </div>
-                        <div className="flex-1 flex items-center gap-1">
-                          <span className="text-[10px] text-slate-400 w-6 text-right">VAT</span>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">VAT</label>
                           <Input className="h-8 text-xs text-right bg-slate-100/50" value={poz.vat === 0 && poz.vat.toString() !== '0' ? '' : poz.vat} onChange={e => handlePozycjaVatChange(i, 'vat', e.target.value)} />
                         </div>
-                        <div className="flex-1 flex items-center gap-1">
-                          <span className="text-[10px] text-slate-400 w-8 text-right">Brutto</span>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Brutto</label>
                           <Input className="h-8 text-xs text-right font-medium bg-slate-100" value={poz.brutto} readOnly />
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => handleRemovePozycjaVat(i)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 self-end" onClick={() => handleRemovePozycjaVat(i)}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -475,13 +481,14 @@ export function EditModal({
                 </Badge>
               )}
             </div>
-            {kwotaBrutto !== null && (
-              <span className="text-sm text-[#64748B]">Kwota z faktury: {kwotaBrutto.toFixed(2)} zł</span>
+            {kwotaReferencyjna !== null && (
+              <span className="text-sm text-[#64748B]">{labelKwoty}: {kwotaReferencyjna.toFixed(2)} zł</span>
             )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-2">
+        {/* Sticky footer */}
+        <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Anuluj
           </Button>

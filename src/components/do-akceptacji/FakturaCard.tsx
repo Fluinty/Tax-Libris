@@ -915,6 +915,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           initialKwoty={exception.ai_kwoty_per_kolumna || {}}
           initialZapisVatData={exception.final_zapis_vat_data || exception.zapis_vat_data || null}
           kwotaBrutto={exception.kwota_brutto}
+          kwotaNetto={exception.zapis_vat_data?.suma_netto ?? null}
+          isVatPayer={exception.client?.platnik_vat !== false}
           typDokumentu={exception.typ_dokumentu}
           clientOpisy={clientOpisy}
           onSave={handleEditSave}
