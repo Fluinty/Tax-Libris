@@ -230,9 +230,29 @@ export interface ClientWithCounts extends Client {
   exceptions_count: number;
 }
 
+// A3 Final Review types
+export interface AiReviewOstrzezenie {
+  typ: 'vat_stawka' | 'kategoria' | 'kolumna_kpir' | 'brak_mpp' | 'brak_gtu' | 'anomalia' | 'inne';
+  severity: 'info' | 'warning' | 'error';
+  wiadomosc: string;
+}
+
+export interface AiReviewLog {
+  id: number;
+  queue_id: number;
+  review_ok: boolean;
+  review_pewnosc: number;
+  review_ostrzezenia: AiReviewOstrzezenie[];
+  review_sugestie: string[];
+  model_version: string | null;
+  duration_ms: number | null;
+  data_utworzenia: string;
+}
+
 // Typ dla wyjątku z nazwą klienta
 export interface ExceptionWithClient extends ExceptionItem {
   client_nazwa: string;
+  ai_review_log?: AiReviewLog[];
 }
 
 // Typ dla sidebar z liczbą wyjątków per klient

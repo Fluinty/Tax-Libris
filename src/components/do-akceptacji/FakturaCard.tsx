@@ -35,6 +35,8 @@ import { WeryfikacjaKontrahentaSection } from './sections/WeryfikacjaKontrahenta
 import { ProceduryJpkSection } from './sections/ProceduryJpkSection'
 import { GtuSection } from './sections/GtuSection'
 import { SrodekTrwalySection } from './sections/SrodekTrwalySection'
+import { AiReviewSection, AiReviewBadge } from './sections/AiReviewSection'
+import { getLatestReview } from '@/lib/ai-review'
 import type { ExceptionWithClient, ClientPojazd, PozycjaXml, KlasyfikacjaAiPozycja, TypDokumentu, ZapisVATData, PozycjaVAT } from '@/types/database'
 
 interface ClientOpis {
@@ -569,6 +571,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                 ⚠ {weakCount} {weakCount === 1 ? 'wymiar' : 'wymiary'}
               </Badge>
             )}
+            {(() => {
+              const latestReview = getLatestReview(exception.ai_review_log)
+              return latestReview ? <AiReviewBadge review={latestReview} /> : null
+            })()}
           </div>
           <div className="flex items-center gap-2 text-sm text-[#475569]">
             <Building2 className="w-4 h-4" />
@@ -582,6 +588,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           <Badge className="bg-green-100 text-green-800 border-none">Zaksięgowane</Badge>
         )}
       </div>
+
+      {/* A3 AI Review section — show BEFORE confidence and classification */}
+      {(() => {
+        const latestReview = getLatestReview(exception.ai_review_log)
+        return latestReview ? <AiReviewSection review={latestReview} /> : null
+      })()}
 
       {/* Confidence weak points */}
       <ConfidenceWeakPointsSection

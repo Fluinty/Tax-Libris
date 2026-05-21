@@ -27,7 +27,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   let exceptionsQuery = applyNipFilter(
     supabase
       .from('exceptions_queue')
-      .select('*, clients!inner(nazwa, platnik_vat)')
+      .select(`*, clients!inner(nazwa, platnik_vat), ai_review_log(id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia)`)
       .in('status', ['pending', 'pending_review', 'auto_created']),
     nips
   )
@@ -60,8 +60,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       ...e,
       client_nazwa: clientData?.nazwa ?? 'Nieznany',
       client: {
-        platnik_vat: clientData?.platnik_vat ?? true, // default to true (safe: shows VAT sections)
+        platnik_vat: clientData?.platnik_vat ?? true,
       } as any,
+      ai_review_log: (e as any).ai_review_log ?? [],
       clients: undefined,
     }
   })
