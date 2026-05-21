@@ -10,42 +10,53 @@ async function getUserEmail(): Promise<string> {
   return user?.email ?? 'system'
 }
 
+type WymiarType = 'kolumna_kpir' | 'kup_status' | 'vat_odliczalny' | 'kategoria'
+
+const FIELD_MAP: Record<WymiarType, string> = {
+  kolumna_kpir: 'final_kolumna_kpir',
+  kup_status: 'final_kup_status',
+  vat_odliczalny: 'final_vat_odliczalny',
+  kategoria: 'final_kategoria',
+}
+
 /**
- * Update kolumna_kpir for a single pozycja.
- * Sets final_kolumna_kpir; effective_kolumna_kpir is GENERATED ALWAYS by Postgres.
- * Trigger recompute_final_kwoty auto-updates header kwoty.
+ * Unified action: update any classification dimension for a single pozycja.
+ * Postgres GENERATED columns auto-update effective_* values.
+ * Trigger log_korekta_pozycji auto-logs to klasyfikacja_korekty.
  */
-export async function updatePozycjaKpir(
+export async function updatePozycjaWymiar(
   pozycjaId: number,
-  newKolumna: number,
-  newKategoria?: string
+  wymiar: WymiarType,
+  nowaWartosc: string | number,
+  podstawaPrawna?: string
 ) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const updateData: Record<string, unknown> = {
-    final_kolumna_kpir: newKolumna,
+  const updates: Record<string, unknown> = {
+    [FIELD_MAP[wymiar]]: nowaWartosc,
   }
-  if (newKategoria !== undefined) {
-    updateData.final_kategoria = newKategoria
+  if (podstawaPrawna !== undefined) {
+    updates.final_podstawa_prawna = podstawaPrawna
   }
 
   const { error } = await supabase
     .from('faktury_pozycje')
-    .update(updateData)
+    .update(updates)
     .eq('id', pozycjaId)
 
   if (error) {
     return { success: false, error: error.message }
   }
 
-  // Audit
+  // Audit log
   await supabase.from('audit_log').insert({
-    action: 'pozycja_kpir_edit',
+    action: 'pozycja_wymiar_edit',
     details: {
       pozycja_id: pozycjaId,
-      new_kolumna: newKolumna,
-      new_kategoria: newKategoria,
+      wymiar,
+      nowa_wartosc: nowaWartosc,
+      podstawa_prawna: podstawaPrawna,
       user: userEmail,
     },
   })
@@ -55,12 +66,28 @@ export async function updatePozycjaKpir(
 }
 
 /**
+ * Backward-compatible wrapper for kolumna_kpir edits.
+ */
+export async function updatePozycjaKpir(
+  pozycjaId: number,
+  newKolumna: number,
+  newKategoria?: string
+) {
+  const result = await updatePozycjaWymiar(pozycjaId, 'kolumna_kpir', newKolumna)
+  if (!result.success) return result
+
+  if (newKategoria !== undefined) {
+    return updatePozycjaWymiar(pozycjaId, 'kategoria', newKategoria)
+  }
+  return result
+}
+
+/**
  * Fetch similar historical positions via RPC match_pozycje (pgvector).
  */
 export async function getSimilarPozycje(pozycjaId: number, matchCount = 10) {
   const supabase = createSupabaseAdmin()
 
-  // 1. Get embedding + client_nip for this pozycja
   const { data: poz, error: fetchErr } = await supabase
     .from('faktury_pozycje')
     .select('nazwa_embedding, client_nip')
@@ -71,7 +98,6 @@ export async function getSimilarPozycje(pozycjaId: number, matchCount = 10) {
     return []
   }
 
-  // 2. RPC similarity search
   const { data: similar, error: rpcErr } = await supabase.rpc('match_pozycje', {
     query_embedding: poz.nazwa_embedding,
     p_client_nip: poz.client_nip,

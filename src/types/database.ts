@@ -119,6 +119,19 @@ export interface FakturaPozycja {
   // Walidator
   walidator_zmiana: boolean | null;
   walidator_powod: string | null;
+
+  // === Sesja 33: 3-wymiarowa klasyfikacja ===
+  // Wymiar 2: KUP/NKUP (art. 22 vs art. 23 PIT)
+  ai_kup_status: 'kup' | 'nkup' | null;
+  final_kup_status: 'kup' | 'nkup' | null;
+  effective_kup_status: 'kup' | 'nkup';
+  // Wymiar 3: VAT odliczalny (art. 86 vs art. 88 VAT)
+  ai_vat_odliczalny: 'pelny' | 'brak' | 'czesciowe_50' | 'czesciowe_25' | null;
+  final_vat_odliczalny: 'pelny' | 'brak' | 'czesciowe_50' | 'czesciowe_25' | null;
+  effective_vat_odliczalny: 'pelny' | 'brak' | 'czesciowe_50' | 'czesciowe_25';
+  // Podstawa prawna
+  ai_podstawa_prawna: string | null;
+  final_podstawa_prawna: string | null;
 }
 
 // Walidator usluga obca warning entry
@@ -128,6 +141,16 @@ export interface WalidatorWarning {
   stara_kolumna: number;
   nowa_kolumna: number;
   powod: string;
+}
+
+// Walidator KUP/VAT warning entry (sesja 33)
+export interface WalidatorKupVatWarning {
+  lp: string;
+  nazwa: string;
+  pole: 'kup_status' | 'vat_odliczalny';
+  stara_wartosc: string;
+  nowa_wartosc: string;
+  podstawa_prawna: string;
 }
 
 export interface ExceptionItem {
@@ -293,6 +316,7 @@ export interface ExceptionWithClient extends ExceptionItem {
   ai_review_log?: AiReviewLog[];
   // Schema v8 additions
   walidator_usluga_warningi?: WalidatorWarning[] | null;
+  walidator_kup_vat_warningi?: WalidatorKupVatWarning[] | null;
   pozycje_editable?: FakturaPozycja[];
 }
 

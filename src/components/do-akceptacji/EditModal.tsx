@@ -11,7 +11,8 @@ import { Check, ChevronsUpDown, AlertCircle, Trash2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu } from '@/types/database'
+import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu, FakturaPozycja } from '@/types/database'
+import { kwotaReferencyjnaPozycje } from '@/lib/kpir-calc'
 import { 
   REJESTRY_VAT, TRANSAKCJE_VAT_KRAJOWE, 
   RODZAJ_ZAKUPU_LABELS, RODZAJ_ODLICZENIA_LABELS, CEL_ZAKUPU_LABELS,
@@ -35,6 +36,7 @@ interface EditModalProps {
   kwotaBrutto: number | null
   kwotaNetto: number | null
   isVatPayer: boolean
+  pozycjeEditable?: FakturaPozycja[]
   typDokumentu: string | null
   clientOpisy: ClientOpis[]
   onSave: (opis: string, kwoty: Record<string, number>, zapisVat: ZapisVATData | null) => void
@@ -53,6 +55,7 @@ export function EditModal({
   kwotaBrutto,
   kwotaNetto,
   isVatPayer,
+  pozycjeEditable,
   typDokumentu,
   clientOpisy,
   onSave
@@ -104,9 +107,14 @@ export function EditModal({
     return acc + (isNaN(num) ? 0 : num)
   }, 0)
 
-  // Bug #3 fix: VAT-owiec księguje netto w KPiR, zwolniony księguje brutto
-  const kwotaReferencyjna = isVatPayer ? (kwotaNetto ?? kwotaBrutto) : kwotaBrutto
-  const labelKwoty = isVatPayer ? 'Kwota netto z faktury' : 'Kwota brutto z faktury'
+  // Bug #3 fix: per-pozycja calculation when v8 data available
+  // Accounts for NKUP (excluded from KPiR) and partial VAT deduction (brutto vs netto)
+  const kwotaReferencyjna = pozycjeEditable && pozycjeEditable.length > 0
+    ? kwotaReferencyjnaPozycje(pozycjeEditable, isVatPayer)
+    : (isVatPayer ? (kwotaNetto ?? kwotaBrutto) : kwotaBrutto)
+  const labelKwoty = pozycjeEditable && pozycjeEditable.length > 0
+    ? 'Kwota referencyjna (per-pozycja KUP/VAT)'
+    : (isVatPayer ? 'Kwota netto z faktury' : 'Kwota brutto z faktury')
   const isMatched = kwotaReferencyjna !== null && Math.abs(totalSum - kwotaReferencyjna) <= 0.5
   const diff = kwotaReferencyjna !== null ? kwotaReferencyjna - totalSum : 0
 
