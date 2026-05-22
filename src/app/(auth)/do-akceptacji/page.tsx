@@ -271,7 +271,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
         </aside>
 
         {/* LISTA FAKTUR */}
-        <div className="flex-1 min-w-0 pb-20">
+        <div className="flex-1 min-w-0 max-w-full pb-20">
           <FakturaListClient 
             pendingReview={pendingReview}
             pending={pending}

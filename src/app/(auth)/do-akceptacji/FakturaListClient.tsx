@@ -88,7 +88,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
           <h2 className="sticky top-[120px] z-30 bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2 rounded-lg font-bold shadow-sm mb-4">
             Czeka na akceptację ({filteredPendingReview.length})
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             {filteredPendingReview.map((exc, idx) => (
               <FakturaCard 
                 key={exc.id} 
@@ -108,7 +108,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
           <h2 className="bg-red-50 border border-red-200 text-red-900 px-4 py-2 rounded-lg font-bold shadow-sm mb-4">
             Wymaga decyzji ({filteredPending.length})
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             {filteredPending.map((exc) => (
               <FakturaCard 
                 key={exc.id} 
@@ -130,7 +130,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
               <span>Zaksięgowane dziś ({filteredAutoCreated.length})</span>
               <ChevronDown className="w-5 h-5" />
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4">
+            <CollapsibleContent className="space-y-4 min-w-0">
               {filteredAutoCreated.map((exc) => (
                 <FakturaCard 
                   key={exc.id} 

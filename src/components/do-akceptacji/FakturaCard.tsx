@@ -543,15 +543,15 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     <Card 
       ref={cardRef}
       className={cn(
-        "p-5 transition-all relative overflow-hidden",
+        "p-5 transition-all relative overflow-hidden w-full max-w-full",
         isActive ? "ring-2 ring-[#1F3A5F] shadow-md" : confidenceCardClasses,
         stan === 'auto_created' && "bg-green-50/30"
       )}
     >
       {/* HEADER WSPÓLNY */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4 min-w-0">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1 min-w-0">
             {exception.typ_dokumentu === 'sprzedaz' ? (
               <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-none mr-1">
                 <ArrowUp className="w-3 h-3 mr-1" />
