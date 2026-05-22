@@ -315,7 +315,7 @@ export function EditModal({
                       }}
                     >
                       <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                      <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                         {REJESTRY_VAT.map(r => (
                           <SelectItem key={r.id} value={String(r.id)}>{r.nazwa}</SelectItem>
                         ))}
@@ -332,7 +332,7 @@ export function EditModal({
                       }}
                     >
                       <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                      <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                         {TRANSAKCJE_VAT_KRAJOWE.filter(t => t.dla === typDokumentu || !typDokumentu).map(t => (
                           <SelectItem key={t.id} value={String(t.id)}>{t.nazwa}</SelectItem>
                         ))}
@@ -351,7 +351,7 @@ export function EditModal({
                             {zapisVat.rodzaj_zakupu !== undefined && zapisVat.rodzaj_zakupu !== null && zapisVat.rodzaj_zakupu !== '' ? getRodzajZakupuLabel(zapisVat.rodzaj_zakupu) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                           {Object.entries(RODZAJ_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -364,7 +364,7 @@ export function EditModal({
                             {zapisVat.rodzaj_odliczenia !== undefined && zapisVat.rodzaj_odliczenia !== null && zapisVat.rodzaj_odliczenia !== '' ? getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                           {Object.entries(RODZAJ_ODLICZENIA_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -377,7 +377,7 @@ export function EditModal({
                             {zapisVat.cel_zakupu !== undefined && zapisVat.cel_zakupu !== null && zapisVat.cel_zakupu !== '' ? getCelZakupuLabel(zapisVat.cel_zakupu) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                           {Object.entries(CEL_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -389,7 +389,7 @@ export function EditModal({
                       <label className="text-xs font-medium text-slate-500">Procedura JPK</label>
                       <Select value={zapisVat.procedura_jpk || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, procedura_jpk: v === 'none' ? null : v as ProceduraJPK})}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                           {PROCEDURY_JPK.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -398,7 +398,7 @@ export function EditModal({
                       <label className="text-xs font-medium text-slate-500">Grupa asort.</label>
                       <Select value={String(zapisVat.grupa_asortymentu ?? '') || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, grupa_asortymentu: v === 'none' ? null : v as GrupaAsortymentu})}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                           {GRUPY_ASORTYMENTU.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -419,7 +419,7 @@ export function EditModal({
                       <div key={i} className="grid grid-cols-[80px_minmax(110px,1fr)_minmax(110px,1fr)_minmax(110px,1fr)_40px] gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
                         <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
                           <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
                             <SelectItem value="23">23%</SelectItem>
                             <SelectItem value="8">8%</SelectItem>
                             <SelectItem value="5">5%</SelectItem>
