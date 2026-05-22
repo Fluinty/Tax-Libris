@@ -197,7 +197,7 @@ export function EditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-5xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
+      <DialogContent className="w-[calc(100vw-32px)] sm:max-w-5xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Edytuj propozycję AI</DialogTitle>
         </DialogHeader>
