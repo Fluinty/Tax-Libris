@@ -24,10 +24,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  // 1a. Fetch exceptions from view (without clients join — views lack FK constraints)
   let exceptionsQuery = applyNipFilter(
     supabase
       .from('exceptions_queue_v2')
-      .select(`*, clients!inner(nazwa, platnik_vat), ai_review_log(id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia)`)
+      .select(`*, ai_review_log(id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia)`)
       .in('status', ['pending', 'pending_review', 'auto_created']),
     nips
   )
@@ -53,17 +54,29 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
 
   const { data: rawExceptions } = await exceptionsQuery
 
-  // Transform to typed data
+  // 1b. Fetch clients separately and build lookup map
+  const exceptionNips = [...new Set(rawExceptions?.map(e => e.client_nip) ?? [])]
+  const { data: clientsData } = exceptionNips.length > 0
+    ? await supabase
+        .from('clients')
+        .select('nip, nazwa, platnik_vat')
+        .in('nip', exceptionNips)
+    : { data: [] as { nip: string; nazwa: string; platnik_vat: boolean }[] }
+
+  const clientsMap = new Map(
+    (clientsData ?? []).map(c => [c.nip, c])
+  )
+
+  // 1c. Merge exceptions with client data
   const allExceptions: ExceptionWithClient[] = (rawExceptions ?? []).map((e) => {
-    const clientData = e.clients as unknown as { nazwa: string; platnik_vat?: boolean }
+    const c = clientsMap.get(e.client_nip)
     return {
       ...e,
-      client_nazwa: clientData?.nazwa ?? 'Nieznany',
+      client_nazwa: c?.nazwa ?? 'Nieznany',
       client: {
-        platnik_vat: clientData?.platnik_vat ?? true,
+        platnik_vat: c?.platnik_vat ?? true,
       } as any,
       ai_review_log: (e as any).ai_review_log ?? [],
-      clients: undefined,
     }
   })
 
@@ -131,15 +144,29 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const hitRate = todayTotal > 0 ? Math.round((highConfidenceProposals / todayTotal) * 100) : 0
 
   // 4. Sidebar - count items per client (count pending and pending_review)
+  // 4a. Sidebar - fetch pending items from view (without clients join)
   const { data: allPendingItems } = await applyNipFilter(
     supabase
       .from('exceptions_queue_v2')
-      .select('client_nip, typ_dokumentu, ai_proponowany_opis, clients!inner(nazwa)')
+      .select('client_nip, typ_dokumentu, ai_proponowany_opis')
       .in('status', ['pending', 'pending_review']),
     nips
   )
 
   const filteredItemsForSidebar = allPendingItems ?? []
+
+  // 4b. Fetch client names for sidebar (reuse clientsMap if NIPs overlap, else fetch)
+  const sidebarNips = [...new Set(filteredItemsForSidebar.map(i => i.client_nip))]
+  const missingSidebarNips = sidebarNips.filter(n => !clientsMap.has(n))
+  if (missingSidebarNips.length > 0) {
+    const { data: extraClients } = await supabase
+      .from('clients')
+      .select('nip, nazwa, platnik_vat')
+      .in('nip', missingSidebarNips)
+    for (const c of extraClients ?? []) {
+      clientsMap.set(c.nip, c)
+    }
+  }
 
   function aggregateCounts(items: any[]): ClientExceptionCount[] {
     const counts = new Map<string, ClientExceptionCount>()
@@ -152,7 +179,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       } else {
         counts.set(item.client_nip, {
           client_nip: item.client_nip,
-          nazwa: (item.clients as unknown as { nazwa: string })?.nazwa ?? 'Nieznany',
+          nazwa: clientsMap.get(item.client_nip)?.nazwa ?? 'Nieznany',
           pending_count: 1,
           has_ai_proposal: hasAi,
         })
