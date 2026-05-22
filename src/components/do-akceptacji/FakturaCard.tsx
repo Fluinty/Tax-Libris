@@ -486,11 +486,15 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <div className="text-slate-500 mb-1">Pozycje per stawka:</div>
             <div className="pl-2 border-l-2 border-slate-200 space-y-1">
               {zapisVat.pozycje_vat?.map((poz: PozycjaVAT, i: number) => (
-                <div key={i} className="font-mono text-xs">
-                  <span className="inline-block w-8">{poz.stawka_symbol}%:</span>
-                  <span className="text-slate-600">netto</span> {Number(poz.netto).toFixed(2)} zł + 
-                  <span className="text-slate-600"> VAT</span> {Number(poz.vat).toFixed(2)} zł = 
-                  <span className="font-medium text-slate-800"> brutto {Number(poz.brutto).toFixed(2)} zł</span>
+                <div key={i} className="font-mono text-xs flex items-center gap-1 mb-1">
+                  <span className="inline-block w-16 font-medium">
+                    {poz.stawka_symbol.replace('Stawka', '')}%
+                  </span>
+                  <span className="text-slate-600">netto</span> {Number(poz.netto).toFixed(2)} zł
+                  {' '}+{' '}
+                  <span className="text-slate-600">VAT</span> {Number(poz.vat).toFixed(2)} zł
+                  {' '}={' '}
+                  <span className="font-medium text-slate-800">brutto {Number(poz.brutto).toFixed(2)} zł</span>
                   {poz.pole_deklaracji && (
                     <Badge variant="outline" className="ml-2 text-[9px] h-4 font-mono text-indigo-600 border-indigo-200 bg-indigo-50">
                       {poz.pole_deklaracji}
@@ -502,21 +506,33 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           </div>
 
           {isSumInvalid && (
-            <div className="mt-2 bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-md text-sm flex items-start gap-2">
+            <div className="mt-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2.5 rounded-md text-sm flex items-start gap-2">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" />
-              <span>⚠️ Suma stawek VAT nie zgadza się z kwotą brutto faktury (różnica: {diff.toFixed(2)} zł)</span>
+              <span>
+                Suma stawek VAT nie zgadza się z kwotą brutto faktury 
+                <span className="font-medium ml-1">(różnica: {diff.toFixed(2)} zł)</span>
+              </span>
             </div>
           )}
 
-          <div className="mt-3 pt-2 border-t border-slate-100 flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-800">
-              Razem: netto {Number(zapisVat.suma_netto).toFixed(2)} + VAT {Number(zapisVat.suma_vat).toFixed(2)} = {Number(zapisVat.suma_brutto).toFixed(2)}
-            </span>
-            {!isSumInvalid && (
-              <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200 h-5">
-                ✓
-              </Badge>
-            )}
+          <div className="mt-3 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-slate-500 text-xs">Razem netto</div>
+                <div className="font-medium tabular-nums">{Number(zapisVat.suma_netto).toFixed(2)} zł</div>
+              </div>
+              <div>
+                <div className="text-slate-500 text-xs">Razem VAT</div>
+                <div className="font-medium tabular-nums">{Number(zapisVat.suma_vat).toFixed(2)} zł</div>
+              </div>
+              <div>
+                <div className="text-slate-500 text-xs">Razem brutto</div>
+                <div className="font-medium tabular-nums flex items-center">
+                  {Number(zapisVat.suma_brutto).toFixed(2)} zł
+                  {!isSumInvalid && <span className="ml-1 text-green-600">✓</span>}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

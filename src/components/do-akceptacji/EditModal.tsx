@@ -197,7 +197,7 @@ export function EditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-32px)] max-w-3xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-5xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Edytuj propozycję AI</DialogTitle>
         </DialogHeader>
@@ -266,232 +266,262 @@ export function EditModal({
             </Popover>
           </div>
 
-          {/* Kwoty KPiR */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-[#1E293B]">Kwoty per kolumna KPiR:</label>
-            <div className="border border-[#E2E8F0] rounded-lg p-4 space-y-3 bg-[#F8FAFC]">
-              {getKolumnyForTyp(typDokumentu).map(col => (
-                <div key={col.numer} className="flex items-center justify-between">
-                  <span className="text-sm text-[#475569]">Kolumna {col.numer} ({col.label})</span>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      className="w-32 text-right"
-                      value={kwoty[col.klucz] || ''}
-                      onChange={(e) => handleKwotaChange(col.klucz, e.target.value)}
-                    />
-                    <span className="text-sm text-[#475569] w-4">zł</span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-2">
+            {/* LEFT — KPiR */}
+            <div className="space-y-4">
+              <h3 className="font-medium text-sm text-slate-700">Kwoty per kolumna KPiR</h3>
+              <div className="border border-[#E2E8F0] rounded-lg p-4 space-y-3 bg-[#F8FAFC]">
+                {getKolumnyForTyp(typDokumentu).map(col => (
+                  <div key={col.numer} className="flex items-center justify-between">
+                    <span className="text-sm text-[#475569]">Kolumna {col.numer} ({col.label})</span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        className="w-32 text-right tabular-nums"
+                        value={kwoty[col.klucz] || ''}
+                        onChange={(e) => handleKwotaChange(col.klucz, e.target.value)}
+                      />
+                      <span className="text-sm text-[#475569] w-4">zł</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Zapis VAT */}
-          <div className="space-y-3 pt-2 border-t">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-[#1E293B]">Ewidencja VAT</label>
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="zwolniona" 
-                  checked={isZwolnionaVat} 
-                  onCheckedChange={(c) => setIsZwolnionaVat(c === true)}
-                />
-                <label htmlFor="zwolniona" className="text-sm text-slate-600 cursor-pointer">
-                  Faktura zwolniona z VAT (tylko KPiR)
-                </label>
+                ))}
               </div>
             </div>
 
-            {!isZwolnionaVat && (
-              <div className="border border-[#E2E8F0] rounded-lg p-4 space-y-4 bg-white">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-500">Rejestr VAT</label>
-                    <Select 
-                      value={String(zapisVat.rejestr_id)} 
-                      onValueChange={(val) => {
-                        const r = REJESTRY_VAT.find(x => String(x.id) === val)
-                        if (r) setZapisVat({ ...zapisVat, rejestr_id: r.id, rejestr_nazwa: r.nazwa as RejestrVAT })
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                        {REJESTRY_VAT.map(r => (
-                          <SelectItem key={r.id} value={String(r.id)}>{r.nazwa}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-500">Transakcja</label>
-                    <Select 
-                      value={String(zapisVat.transakcja_id)} 
-                      onValueChange={(val) => {
-                        const t = TRANSAKCJE_VAT_KRAJOWE.find(x => String(x.id) === val)
-                        if (t) setZapisVat({ ...zapisVat, transakcja_id: t.id, transakcja_nazwa: t.nazwa })
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                        {TRANSAKCJE_VAT_KRAJOWE.filter(t => t.dla === typDokumentu || !typDokumentu).map(t => (
-                          <SelectItem key={t.id} value={String(t.id)}>{t.nazwa}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {/* RIGHT — VAT */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-sm text-slate-700">Ewidencja VAT</h3>
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="zwolniona" 
+                    checked={isZwolnionaVat} 
+                    onCheckedChange={(c) => setIsZwolnionaVat(c === true)}
+                  />
+                  <label htmlFor="zwolniona" className="text-sm text-slate-600 cursor-pointer">
+                    Faktura zwolniona z VAT (tylko KPiR)
+                  </label>
                 </div>
+              </div>
 
-                {typDokumentu === 'zakup' ? (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Rodzaj zakupu</label>
-                      <Select value={String(zapisVat.rodzaj_zakupu ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, rodzaj_zakupu: Number(v) as RodzajZakupu})}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Wybierz...">
-                            {zapisVat.rodzaj_zakupu !== undefined && zapisVat.rodzaj_zakupu !== null && zapisVat.rodzaj_zakupu !== '' ? getRodzajZakupuLabel(zapisVat.rodzaj_zakupu) : "Wybierz..."}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                          {Object.entries(RODZAJ_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Odliczenie</label>
-                      <Select value={String(zapisVat.rodzaj_odliczenia ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, rodzaj_odliczenia: Number(v) as RodzajOdliczenia})}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Wybierz...">
-                            {zapisVat.rodzaj_odliczenia !== undefined && zapisVat.rodzaj_odliczenia !== null && zapisVat.rodzaj_odliczenia !== '' ? getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia) : "Wybierz..."}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                          {Object.entries(RODZAJ_ODLICZENIA_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Cel zakupu</label>
-                      <Select value={String(zapisVat.cel_zakupu ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, cel_zakupu: Number(v) as CelZakupu})}>
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Wybierz...">
-                            {zapisVat.cel_zakupu !== undefined && zapisVat.cel_zakupu !== null && zapisVat.cel_zakupu !== '' ? getCelZakupuLabel(zapisVat.cel_zakupu) : "Wybierz..."}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                          {Object.entries(CEL_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Procedura JPK</label>
-                      <Select value={zapisVat.procedura_jpk || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, procedura_jpk: v === 'none' ? null : v as ProceduraJPK})}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                          {PROCEDURY_JPK.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-500">Grupa asort.</label>
-                      <Select value={String(zapisVat.grupa_asortymentu ?? '') || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, grupa_asortymentu: v === 'none' ? null : v as GrupaAsortymentu})}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                          {GRUPY_ASORTYMENTU.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2 mt-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-500">Pozycje VAT (kwoty w PLN)</label>
-                    <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={handleAddPozycjaVat}>
-                      <Plus className="w-3 h-3 mr-1" /> Dodaj stawkę
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {zapisVat.pozycje_vat?.map((poz, i) => (
-                      <div key={i} className="grid grid-cols-[80px_minmax(110px,1fr)_minmax(110px,1fr)_minmax(110px,1fr)_40px] gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
-                        <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
-                          <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+              {!isZwolnionaVat && (
+                <div className="border border-[#E2E8F0] rounded-lg p-4 space-y-4 bg-white">
+                  {typDokumentu === 'zakup' ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Rejestr VAT</label>
+                        <Select 
+                          value={String(zapisVat.rejestr_id)} 
+                          onValueChange={(val) => {
+                            const r = REJESTRY_VAT.find(x => String(x.id) === val)
+                            if (r) setZapisVat({ ...zapisVat, rejestr_id: r.id, rejestr_nazwa: r.nazwa as RejestrVAT })
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                            <SelectItem value="23">23%</SelectItem>
-                            <SelectItem value="8">8%</SelectItem>
-                            <SelectItem value="5">5%</SelectItem>
-                            <SelectItem value="0">0%</SelectItem>
-                            <SelectItem value="zw">zw</SelectItem>
-                            <SelectItem value="np">np</SelectItem>
-                            <SelectItem value="oo">oo</SelectItem>
+                            {REJESTRY_VAT.map(r => (
+                              <SelectItem key={r.id} value={String(r.id)}>{r.nazwa}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Netto</label>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Transakcja</label>
+                        <Select 
+                          value={String(zapisVat.transakcja_id)} 
+                          onValueChange={(val) => {
+                            const t = TRANSAKCJE_VAT_KRAJOWE.find(x => String(x.id) === val)
+                            if (t) setZapisVat({ ...zapisVat, transakcja_id: t.id, transakcja_nazwa: t.nazwa })
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {TRANSAKCJE_VAT_KRAJOWE.filter(t => t.dla === typDokumentu || !typDokumentu).map(t => (
+                              <SelectItem key={t.id} value={String(t.id)}>{t.nazwa}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Rodzaj zakupu</label>
+                        <Select value={String(zapisVat.rodzaj_zakupu ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, rodzaj_zakupu: Number(v) as RodzajZakupu})}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Wybierz...">
+                              {zapisVat.rodzaj_zakupu !== undefined && zapisVat.rodzaj_zakupu !== null && zapisVat.rodzaj_zakupu !== '' ? getRodzajZakupuLabel(zapisVat.rodzaj_zakupu) : "Wybierz..."}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {Object.entries(RODZAJ_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Odliczenie</label>
+                        <Select value={String(zapisVat.rodzaj_odliczenia ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, rodzaj_odliczenia: Number(v) as RodzajOdliczenia})}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Wybierz...">
+                              {zapisVat.rodzaj_odliczenia !== undefined && zapisVat.rodzaj_odliczenia !== null && zapisVat.rodzaj_odliczenia !== '' ? getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia) : "Wybierz..."}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {Object.entries(RODZAJ_ODLICZENIA_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2 space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Cel zakupu</label>
+                        <Select value={String(zapisVat.cel_zakupu ?? '')} onValueChange={(v) => setZapisVat({...zapisVat, cel_zakupu: Number(v) as CelZakupu})}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Wybierz...">
+                              {zapisVat.cel_zakupu !== undefined && zapisVat.cel_zakupu !== null && zapisVat.cel_zakupu !== '' ? getCelZakupuLabel(zapisVat.cel_zakupu) : "Wybierz..."}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {Object.entries(CEL_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Rejestr VAT</label>
+                        <Select 
+                          value={String(zapisVat.rejestr_id)} 
+                          onValueChange={(val) => {
+                            const r = REJESTRY_VAT.find(x => String(x.id) === val)
+                            if (r) setZapisVat({ ...zapisVat, rejestr_id: r.id, rejestr_nazwa: r.nazwa as RejestrVAT })
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {REJESTRY_VAT.map(r => (
+                              <SelectItem key={r.id} value={String(r.id)}>{r.nazwa}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Transakcja</label>
+                        <Select 
+                          value={String(zapisVat.transakcja_id)} 
+                          onValueChange={(val) => {
+                            const t = TRANSAKCJE_VAT_KRAJOWE.find(x => String(x.id) === val)
+                            if (t) setZapisVat({ ...zapisVat, transakcja_id: t.id, transakcja_nazwa: t.nazwa })
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {TRANSAKCJE_VAT_KRAJOWE.filter(t => t.dla === typDokumentu || !typDokumentu).map(t => (
+                              <SelectItem key={t.id} value={String(t.id)}>{t.nazwa}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Procedura JPK</label>
+                        <Select value={zapisVat.procedura_jpk || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, procedura_jpk: v === 'none' ? null : v as ProceduraJPK})}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {PROCEDURY_JPK.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-500">Grupa asort.</label>
+                        <Select value={String(zapisVat.grupa_asortymentu ?? '') || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, grupa_asortymentu: v === 'none' ? null : v as GrupaAsortymentu})}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
+                          <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                            {GRUPY_ASORTYMENTU.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2 mt-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-slate-500">Pozycje VAT (kwoty w PLN)</label>
+                      <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={handleAddPozycjaVat}>
+                        <Plus className="w-3 h-3 mr-1" /> Dodaj stawkę
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {zapisVat.pozycje_vat?.length > 0 && (
+                        <div className="grid grid-cols-[100px_1fr_1fr_1fr_40px] gap-2 text-[10px] text-slate-500 mb-1 px-1">
+                          <div>Stawka</div>
+                          <div className="text-right">Netto</div>
+                          <div className="text-right">VAT</div>
+                          <div className="text-right">Brutto</div>
+                          <div></div>
+                        </div>
+                      )}
+                      {zapisVat.pozycje_vat?.map((poz, i) => (
+                        <div key={i} className="grid grid-cols-[100px_1fr_1fr_1fr_40px] gap-2 items-center bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
+                          <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
+                            <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
+                              <SelectItem value="23">23%</SelectItem>
+                              <SelectItem value="8">8%</SelectItem>
+                              <SelectItem value="5">5%</SelectItem>
+                              <SelectItem value="0">0%</SelectItem>
+                              <SelectItem value="zw">zw</SelectItem>
+                              <SelectItem value="np">np</SelectItem>
+                              <SelectItem value="oo">oo</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <Input className="h-8 text-xs text-right tabular-nums" value={poz.netto === 0 && poz.netto.toString() !== '0' ? '' : poz.netto} onChange={e => handlePozycjaVatChange(i, 'netto', e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">VAT</label>
                           <Input className="h-8 text-xs text-right bg-slate-100/50 tabular-nums" value={poz.vat === 0 && poz.vat.toString() !== '0' ? '' : poz.vat} onChange={e => handlePozycjaVatChange(i, 'vat', e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Brutto</label>
                           <Input className="h-8 text-xs text-right font-medium bg-slate-100 tabular-nums" value={poz.brutto} readOnly />
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => handleRemovePozycjaVat(i)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 self-end" onClick={() => handleRemovePozycjaVat(i)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    {(!zapisVat.pozycje_vat || zapisVat.pozycje_vat.length === 0) && (
-                      <div className="text-center text-xs text-slate-400 py-2 italic border border-dashed rounded">
-                        Brak zdefiniowanych pozycji VAT
-                      </div>
-                    )}
+                      ))}
+                      {(!zapisVat.pozycje_vat || zapisVat.pozycje_vat.length === 0) && (
+                        <div className="text-center text-xs text-slate-400 py-2 italic border border-dashed rounded">
+                          Brak zdefiniowanych pozycji VAT
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm font-medium">
-                  <span className="text-slate-600">Razem VAT brutto:</span>
-                  <div className="flex items-center gap-2">
-                    <span className={cn(isVatMatched ? "text-slate-800" : "text-red-600")}>
-                      {totalSumVatBrutto.toFixed(2)} zł
-                    </span>
-                    {!isVatMatched && kwotaBrutto !== null && (
-                      <span className="text-xs text-red-500 font-normal">
-                        (niezg. {(kwotaBrutto - totalSumVatBrutto).toFixed(2)})
+                  <div className="flex justify-between items-center bg-slate-50 p-2 rounded text-sm font-medium">
+                    <span className="text-slate-600">Razem VAT brutto:</span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(isVatMatched ? "text-slate-800" : "text-red-600")}>
+                        {totalSumVatBrutto.toFixed(2)} zł
                       </span>
-                    )}
+                      {!isVatMatched && kwotaBrutto !== null && (
+                        <span className="text-xs text-red-500 font-normal">
+                          (niezg. {(kwotaBrutto - totalSumVatBrutto).toFixed(2)})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Podsumowanie */}
-          <div className={cn(
-            "flex items-center justify-between p-3 rounded-lg border",
-            isMatched ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
-          )}>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-[#1E293B]">Razem: {totalSum.toFixed(2)} zł</span>
-              {isMatched ? (
-                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
-                  ✓ zgadza się
-                </Badge>
-              ) : (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Niezgodność: brakuje {diff.toFixed(2)} zł
-                </Badge>
               )}
             </div>
-            {kwotaReferencyjna !== null && (
-              <span className="text-sm text-[#64748B]">{labelKwoty}: {kwotaReferencyjna.toFixed(2)} zł</span>
-            )}
+          </div>
+        </div>
+
+        {/* Pasek walidacji - PEŁNA SZEROKOŚĆ pod gridem */}
+        <div className="border-t bg-slate-50 px-6 py-3 shrink-0">
+          <div className="grid grid-cols-3 gap-4 items-center text-sm">
+            <div>
+              <div className="text-slate-500 text-xs">Razem KPiR</div>
+              <div className="font-medium tabular-nums">{totalSum.toFixed(2)} zł</div>
+            </div>
+            <div>
+              <div className="text-slate-500 text-xs">{labelKwoty}</div>
+              <div className="font-medium tabular-nums">{kwotaReferencyjna?.toFixed(2) ?? '—'} zł</div>
+            </div>
+            <div className={isMatched ? 'text-green-700' : 'text-red-700'}>
+              <div className="text-xs">{isMatched ? 'Status' : 'Niezgodność'}</div>
+              <div className="font-medium tabular-nums flex items-center">
+                {isMatched ? '✓ Zgodne' : `${diff > 0 ? '−' : '+'}${Math.abs(diff).toFixed(2)} zł`}
+              </div>
+            </div>
           </div>
         </div>
 
