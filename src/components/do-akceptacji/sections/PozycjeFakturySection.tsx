@@ -95,7 +95,16 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-[#1E293B] text-sm mb-0.5 flex items-center gap-1.5 flex-wrap">
               <span className="text-slate-400 font-normal text-xs">[LP {poz.lp}]</span>
-              <span className="truncate max-w-[300px]">{poz.nazwa}</span>
+              <TooltipProvider delay={300}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="truncate max-w-[400px] cursor-help block text-left">{poz.nazwa}</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md text-sm">
+                    {poz.nazwa}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {poz.edytowane_przez_monike && (
                 <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 shrink-0">
                   <Pencil className="w-2.5 h-2.5 mr-0.5" />edytowane
@@ -139,8 +148,14 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
               onValueChange={(v) => v && handleWymiarChange(poz.id, 'kolumna_kpir', v)}
               disabled={isPending}
             >
-              <SelectTrigger className={`h-7 text-xs w-[165px] ${isInvalid ? 'border-orange-300 bg-orange-50' : ''}`}>
-                <SelectValue placeholder="Kolumna..." />
+              <SelectTrigger className={`h-7 text-xs w-[200px] ${isInvalid ? 'border-orange-300 bg-orange-50' : ''}`}>
+                {kolDef ? (
+                  <span className="truncate">{kolDef.numer} — {kolDef.labelKrotki}</span>
+                ) : effectiveKol != null ? (
+                  <span>Kol. {effectiveKol}</span>
+                ) : (
+                  <SelectValue placeholder="Kolumna..." />
+                )}
               </SelectTrigger>
               <SelectContent>
                 {kolumny.map(k => (
