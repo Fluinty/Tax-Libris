@@ -550,7 +550,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     >
       {/* HEADER WSPÓLNY */}
       <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             {exception.typ_dokumentu === 'sprzedaz' ? (
               <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-none mr-1">
@@ -595,10 +595,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               return latestReview ? <AiReviewBadge review={latestReview} /> : null
             })()}
           </div>
-          <div className="flex items-center gap-2 text-sm text-[#475569]">
-            <Building2 className="w-4 h-4" />
-            <span className="font-medium">{getEtykietaKontrahenta(exception.typ_dokumentu)}: {exception.nazwa_dostawcy || 'Brak nazwy'}</span>
-            <span className="text-[#94A3B8]">
+          <div className="flex items-center gap-2 text-sm text-[#475569] min-w-0">
+            <Building2 className="w-4 h-4 shrink-0" />
+            <span className="font-medium truncate">{getEtykietaKontrahenta(exception.typ_dokumentu)}: {exception.nazwa_dostawcy || 'Brak nazwy'}</span>
+            <span className="text-[#94A3B8] shrink-0">
               (NIP: {exception.nip_dostawcy || 'brak'})
             </span>
           </div>
