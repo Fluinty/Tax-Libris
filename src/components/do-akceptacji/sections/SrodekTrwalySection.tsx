@@ -27,21 +27,27 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
     >
       <div className={`p-3 rounded border ${bgColor}`}>
         <div className={`font-medium ${headerColor} mb-2`}>
-          {isMocny ? 'Możliwy środek trwały — wymaga uwagi' : 'Wysoka kwota — sprawdź czy nie ŚT'}
+          {isMocny ? 'Możliwy środek trwały (pojedyncza pozycja) — wymaga uwagi' : 'Wysoka kwota pojedynczej pozycji — sprawdź czy nie ŚT'}
         </div>
         
         {/* Co wykryto */}
         <div className="text-sm space-y-1">
           <div>
             <span className="text-gray-600">Kwota:</span>{' '}
-            <span className="font-medium">{kwota?.toFixed(2)} zł {kwotaTyp}</span>
-            <span className="text-gray-500 text-xs ml-2">(próg: 10 000 zł)</span>
+            <span className="font-medium tabular-nums">
+              {kwota?.toLocaleString('pl-PL', {
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2
+              }) ?? '—'} zł {kwotaTyp}
+            </span>
+            <span className="text-gray-500 text-xs ml-2">(próg: 10 000 zł netto)</span>
           </div>
           
           {keyword && (
             <div>
-              <span className="text-gray-600">Wykryte słowo:</span>{' '}
+              <span className="text-gray-600">Wykryto:</span>{' '}
               <span className="font-medium font-mono bg-orange-100 px-1 rounded">{keyword}</span>
+              <span className="text-gray-500 text-xs ml-2">(możliwy środek trwały)</span>
             </div>
           )}
           
@@ -60,7 +66,13 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
           </div>
           <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
             <li>Czy klient zamierza używać tego &gt;1 rok? Jeśli TAK → ewidencja środków trwałych</li>
-            <li>Czy &gt; 10 000 zł {kwotaTyp}? TAK ({kwota?.toFixed(2)}) → obowiązkowo amortyzacja (art. 22f ust. 3 PIT)</li>
+            <li>
+              Czy &gt; 10 000 zł {kwotaTyp}? <strong>{(kwota ?? 0) > 10000 ? 'TAK' : 'NIE'}</strong>
+              {(kwota ?? 0) > 10000 && (
+                <span> ({kwota?.toLocaleString('pl-PL', {minimumFractionDigits: 2, maximumFractionDigits: 2})} zł)</span>
+              )}
+              {' → '} obowiązkowo amortyzacja (art. 22f ust. 3 PIT)
+            </li>
             <li>Możliwa amortyzacja jednorazowa (mały podatnik / fabrycznie nowy ŚT)</li>
             <li>JPK_V7: pole K_40/K_41 zamiast K_42/K_43 (zakup inwestycyjny)</li>
           </ul>
