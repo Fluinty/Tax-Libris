@@ -197,7 +197,7 @@ export function EditModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
+      <DialogContent className="w-[calc(100vw-32px)] max-w-3xl max-h-[90vh] flex flex-col p-0" onKeyDown={handleKeyDown}>
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Edytuj propozycję AI</DialogTitle>
         </DialogHeader>
@@ -315,7 +315,7 @@ export function EditModal({
                       }}
                     >
                       <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                         {REJESTRY_VAT.map(r => (
                           <SelectItem key={r.id} value={String(r.id)}>{r.nazwa}</SelectItem>
                         ))}
@@ -332,7 +332,7 @@ export function EditModal({
                       }}
                     >
                       <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                         {TRANSAKCJE_VAT_KRAJOWE.filter(t => t.dla === typDokumentu || !typDokumentu).map(t => (
                           <SelectItem key={t.id} value={String(t.id)}>{t.nazwa}</SelectItem>
                         ))}
@@ -351,7 +351,7 @@ export function EditModal({
                             {zapisVat.rodzaj_zakupu !== undefined && zapisVat.rodzaj_zakupu !== null && zapisVat.rodzaj_zakupu !== '' ? getRodzajZakupuLabel(zapisVat.rodzaj_zakupu) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                           {Object.entries(RODZAJ_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -364,7 +364,7 @@ export function EditModal({
                             {zapisVat.rodzaj_odliczenia !== undefined && zapisVat.rodzaj_odliczenia !== null && zapisVat.rodzaj_odliczenia !== '' ? getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                           {Object.entries(RODZAJ_ODLICZENIA_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -377,7 +377,7 @@ export function EditModal({
                             {zapisVat.cel_zakupu !== undefined && zapisVat.cel_zakupu !== null && zapisVat.cel_zakupu !== '' ? getCelZakupuLabel(zapisVat.cel_zakupu) : "Wybierz..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                           {Object.entries(CEL_ZAKUPU_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -389,7 +389,7 @@ export function EditModal({
                       <label className="text-xs font-medium text-slate-500">Procedura JPK</label>
                       <Select value={zapisVat.procedura_jpk || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, procedura_jpk: v === 'none' ? null : v as ProceduraJPK})}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                           {PROCEDURY_JPK.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -398,7 +398,7 @@ export function EditModal({
                       <label className="text-xs font-medium text-slate-500">Grupa asort.</label>
                       <Select value={String(zapisVat.grupa_asortymentu ?? '') || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, grupa_asortymentu: v === 'none' ? null : v as GrupaAsortymentu})}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                           {GRUPY_ASORTYMENTU.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -416,10 +416,10 @@ export function EditModal({
                   
                   <div className="space-y-2">
                     {zapisVat.pozycje_vat?.map((poz, i) => (
-                      <div key={i} className="grid grid-cols-[70px_1fr_1fr_1fr_36px] gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100">
+                      <div key={i} className="grid grid-cols-[80px_minmax(110px,1fr)_minmax(110px,1fr)_minmax(110px,1fr)_40px] gap-2 items-end bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
                         <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
                           <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
-                          <SelectContent>
+                          <SelectContent position="popper" hideWhenDetached sideOffset={4} className="min-w-[var(--radix-select-trigger-width)] w-fit max-w-[400px]">
                             <SelectItem value="23">23%</SelectItem>
                             <SelectItem value="8">8%</SelectItem>
                             <SelectItem value="5">5%</SelectItem>
@@ -431,15 +431,15 @@ export function EditModal({
                         </Select>
                         <div>
                           <label className="text-[10px] text-slate-400 block mb-0.5">Netto</label>
-                          <Input className="h-8 text-xs text-right" value={poz.netto === 0 && poz.netto.toString() !== '0' ? '' : poz.netto} onChange={e => handlePozycjaVatChange(i, 'netto', e.target.value)} />
+                          <Input className="h-8 text-xs text-right tabular-nums" value={poz.netto === 0 && poz.netto.toString() !== '0' ? '' : poz.netto} onChange={e => handlePozycjaVatChange(i, 'netto', e.target.value)} />
                         </div>
                         <div>
                           <label className="text-[10px] text-slate-400 block mb-0.5">VAT</label>
-                          <Input className="h-8 text-xs text-right bg-slate-100/50" value={poz.vat === 0 && poz.vat.toString() !== '0' ? '' : poz.vat} onChange={e => handlePozycjaVatChange(i, 'vat', e.target.value)} />
+                          <Input className="h-8 text-xs text-right bg-slate-100/50 tabular-nums" value={poz.vat === 0 && poz.vat.toString() !== '0' ? '' : poz.vat} onChange={e => handlePozycjaVatChange(i, 'vat', e.target.value)} />
                         </div>
                         <div>
                           <label className="text-[10px] text-slate-400 block mb-0.5">Brutto</label>
-                          <Input className="h-8 text-xs text-right font-medium bg-slate-100" value={poz.brutto} readOnly />
+                          <Input className="h-8 text-xs text-right font-medium bg-slate-100 tabular-nums" value={poz.brutto} readOnly />
                         </div>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 self-end" onClick={() => handleRemovePozycjaVat(i)}>
                           <Trash2 className="w-4 h-4" />
