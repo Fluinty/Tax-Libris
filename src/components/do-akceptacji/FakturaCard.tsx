@@ -543,9 +543,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     <Card 
       ref={cardRef}
       className={cn(
-        "p-5 transition-all relative overflow-hidden w-full max-w-full",
+        "p-5 transition-all relative overflow-hidden w-full max-w-full [&>*]:min-w-0",
         isActive ? "ring-2 ring-[#1F3A5F] shadow-md" : confidenceCardClasses,
-        stan === 'auto_created' && "bg-green-50/30"
+        stan === 'auto_created' && "bg-green-50/30 border-green-200"
       )}
     >
       {/* HEADER WSPÓLNY */}
