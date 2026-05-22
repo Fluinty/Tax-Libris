@@ -24,11 +24,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // 1a. Fetch exceptions from view (without clients join — views lack FK constraints)
+  // 1a. Fetch exceptions from view (without embedded joins — views lack FK constraints)
   let exceptionsQuery = applyNipFilter(
     supabase
       .from('exceptions_queue_v2')
-      .select(`*, ai_review_log(id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia)`)
+      .select(`*`)
       .in('status', ['pending', 'pending_review', 'auto_created']),
     nips
   )
@@ -52,7 +52,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       exceptionsQuery = exceptionsQuery.order('created_at', { ascending: false })
   }
 
-  const { data: rawExceptions } = await exceptionsQuery
+  const { data: rawExceptions, error: rawError } = await exceptionsQuery
+
+  console.log('[do-akceptacji] rawExceptions count:', rawExceptions?.length, 'error:', rawError?.message ?? 'none')
 
   // 1b. Fetch clients separately and build lookup map
   const exceptionNips = [...new Set(rawExceptions?.map(e => e.client_nip) ?? [])]
@@ -67,7 +69,23 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     (clientsData ?? []).map(c => [c.nip, c])
   )
 
-  // 1c. Merge exceptions with client data
+  // 1c. Fetch ai_review_log separately (FK is on exceptions_queue table, not the view)
+  const exceptionIds = rawExceptions?.map(e => e.id) ?? []
+  const { data: reviewLogsData } = exceptionIds.length > 0
+    ? await supabase
+        .from('ai_review_log')
+        .select('id, queue_id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia')
+        .in('queue_id', exceptionIds)
+    : { data: [] as any[] }
+
+  const reviewMap = new Map<number, typeof reviewLogsData>()
+  for (const log of reviewLogsData ?? []) {
+    const existing = reviewMap.get(log.queue_id) ?? []
+    existing.push(log)
+    reviewMap.set(log.queue_id, existing)
+  }
+
+  // 1d. Merge exceptions with client data and review logs
   const allExceptions: ExceptionWithClient[] = (rawExceptions ?? []).map((e) => {
     const c = clientsMap.get(e.client_nip)
     return {
@@ -76,9 +94,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       client: {
         platnik_vat: c?.platnik_vat ?? true,
       } as any,
-      ai_review_log: (e as any).ai_review_log ?? [],
+      ai_review_log: reviewMap.get(e.id) ?? [],
     }
   })
+
+  console.log('[do-akceptacji] allExceptions count:', allExceptions.length)
 
   // Brak filtra typu na poziomie serwera - przekazujemy wszystko do klienta
   const typedExceptions = allExceptions
