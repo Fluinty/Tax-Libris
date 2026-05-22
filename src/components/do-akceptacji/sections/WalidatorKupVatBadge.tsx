@@ -55,9 +55,9 @@ export function WalidatorKupVatBadge({ warnings }: Props) {
             <code className="text-xs bg-amber-100 px-1 rounded">{w.stara_wartosc}</code>
             <span>→</span>
             <code className="text-xs bg-amber-200 px-1 rounded font-medium">{w.nowa_wartosc}</code>
-            <TooltipProvider delayDuration={300}>
+            <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger asChild>
+                <TooltipTrigger>
                   <Badge variant="outline" className="ml-1 text-[10px] text-amber-700 border-amber-300 bg-amber-100/50 cursor-help">
                     {powodLabel(w.powod)}
                   </Badge>
