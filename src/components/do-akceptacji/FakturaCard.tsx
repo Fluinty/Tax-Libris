@@ -427,12 +427,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           {title}
         </div>
         <div className="p-3 text-sm space-y-2">
-          <div className="grid grid-cols-[140px_1fr] gap-1">
+          <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-1">
             <div className="text-slate-500">Rejestr:</div>
             <div className="font-medium text-slate-800">{zapisVat.rejestr_nazwa}</div>
             
             <div className="text-slate-500">Transakcja VAT:</div>
-            <div className="font-medium text-slate-800 flex items-center gap-2">
+            <div className="font-medium text-slate-800 flex flex-wrap items-center gap-2">
               {zapisVat.transakcja_nazwa}
               {isBadTransakcja && <span className="text-orange-600 text-xs">⚠️ AI wybrał transakcję nieodpowiadającą typowi dokumentu — sprawdź ręcznie</span>}
             </div>

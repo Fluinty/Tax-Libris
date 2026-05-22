@@ -448,7 +448,7 @@ export function EditModal({
                     
                     <div className="space-y-2">
                       {(zapisVat.pozycje_vat?.length ?? 0) > 0 && (
-                        <div className="grid grid-cols-[100px_1fr_1fr_1fr_40px] gap-2 text-[10px] text-slate-500 mb-1 px-1">
+                        <div className="grid grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_40px] gap-2 text-[10px] text-slate-500 mb-1 px-1">
                           <div>Stawka</div>
                           <div className="text-right">Netto</div>
                           <div className="text-right">VAT</div>
@@ -457,7 +457,7 @@ export function EditModal({
                         </div>
                       )}
                       {zapisVat.pozycje_vat?.map((poz, i) => (
-                        <div key={i} className="grid grid-cols-[100px_1fr_1fr_1fr_40px] gap-2 items-center bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
+                        <div key={i} className="grid grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_40px] gap-2 items-center bg-slate-50 p-2 rounded border border-slate-100 tabular-nums">
                           <Select value={poz.stawka_symbol || ''} onValueChange={(v) => handlePozycjaVatChange(i, 'stawka_symbol', v || '')}>
                             <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
                             <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">

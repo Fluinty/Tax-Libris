@@ -137,8 +137,8 @@ export function PozycjeVatSection({
 
   // Dynamic grid: add pole_deklaracji column if any row has it
   const gridCols = hasPoleDeklaracji
-    ? 'grid-cols-[80px_1fr_1fr_1fr_80px_32px]'
-    : 'grid-cols-[80px_1fr_1fr_1fr_32px]'
+    ? 'grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px_32px]'
+    : 'grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_32px]'
 
   return (
     <CollapsibleJpkSection title="Pozycje VAT (edycja)" badge={badge} defaultOpen={defaultOpen}>

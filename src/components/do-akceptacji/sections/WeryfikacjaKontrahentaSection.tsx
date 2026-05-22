@@ -174,7 +174,7 @@ export function WeryfikacjaKontrahentaSection({ exception: e }: Props) {
             // Próbuj: pozycje_xml_full[0].dataSprzedazy → ddk_data.dataSprzedazy → data_sprzedazy
             const dataSprzedazy = e.pozycje_xml_full?.[0]?.dataSprzedazy ?? e.ddk_data?.dataSprzedazy ?? e.data_sprzedazy ?? null
             return (
-              <div className="grid grid-cols-[120px_1fr] gap-1 text-xs mb-2">
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-1 text-xs mb-2">
                 <span className="text-slate-500">Data wystawienia:</span>
                 <span className="text-slate-800">{formatDate(dataWystawienia)}</span>
                 <span className="text-slate-500">Data sprzedaży:</span>

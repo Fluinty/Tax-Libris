@@ -112,7 +112,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
               <div className="text-xs font-medium text-blue-700 uppercase mb-2 flex items-center gap-1.5">
                 🤖 Wyliczenie AI (worker)
               </div>
-              <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-1 text-sm">
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
                 <span className="text-slate-500">W koszty:</span>
                 <span className="font-medium text-slate-800">
                   {PROCENT_LABELS[kpirPojazdoweData.procent_do_ujecia_w_kosztach] ?? `${kpirPojazdoweData.procent_do_ujecia_w_kosztach}`}
