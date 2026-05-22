@@ -447,7 +447,7 @@ export function EditModal({
                     </div>
                     
                     <div className="space-y-2">
-                      {zapisVat.pozycje_vat?.length > 0 && (
+                      {(zapisVat.pozycje_vat?.length ?? 0) > 0 && (
                         <div className="grid grid-cols-[100px_1fr_1fr_1fr_40px] gap-2 text-[10px] text-slate-500 mb-1 px-1">
                           <div>Stawka</div>
                           <div className="text-right">Netto</div>
