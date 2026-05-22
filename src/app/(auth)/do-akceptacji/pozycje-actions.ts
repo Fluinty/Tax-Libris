@@ -40,6 +40,13 @@ export async function updatePozycjaWymiar(
     updates.final_podstawa_prawna = podstawaPrawna
   }
 
+  // Fetch client_nip and faktura_id to use in audit log
+  const { data: poz } = await supabase
+    .from('faktury_pozycje')
+    .select('client_nip, faktura_id')
+    .eq('id', pozycjaId)
+    .single()
+
   const { error } = await supabase
     .from('faktury_pozycje')
     .update(updates)
@@ -52,8 +59,11 @@ export async function updatePozycjaWymiar(
   // Audit log
   await supabase.from('audit_log').insert({
     action: 'pozycja_wymiar_edit',
+    client_nip: poz?.client_nip ?? null,
+    zapis_id: null,
     details: {
       pozycja_id: pozycjaId,
+      faktura_id: poz?.faktura_id,
       wymiar,
       nowa_wartosc: nowaWartosc,
       podstawa_prawna: podstawaPrawna,

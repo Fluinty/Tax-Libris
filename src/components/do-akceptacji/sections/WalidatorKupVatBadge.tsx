@@ -2,6 +2,7 @@
 
 import { ShieldAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { WalidatorKupVatWarning } from '@/types/database'
 
 function truncate(s: string, max: number): string {
@@ -54,9 +55,18 @@ export function WalidatorKupVatBadge({ warnings }: Props) {
             <code className="text-xs bg-amber-100 px-1 rounded">{w.stara_wartosc}</code>
             <span>→</span>
             <code className="text-xs bg-amber-200 px-1 rounded font-medium">{w.nowa_wartosc}</code>
-            <Badge variant="outline" className="ml-1 text-[10px] text-amber-700 border-amber-300 bg-amber-100/50">
-              {powodLabel(w.podstawa_prawna)}
-            </Badge>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="ml-1 text-[10px] text-amber-700 border-amber-300 bg-amber-100/50 cursor-help">
+                    {powodLabel(w.powod)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {w.podstawa_prawna}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </li>
         ))}
       </ul>

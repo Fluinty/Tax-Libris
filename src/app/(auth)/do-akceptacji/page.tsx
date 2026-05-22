@@ -33,6 +33,10 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     nips
   )
 
+  if (typFilter === 'zakup' || typFilter === 'sprzedaz') {
+    exceptionsQuery = exceptionsQuery.eq('typ_dokumentu', typFilter)
+  }
+
   if (params.client) {
     exceptionsQuery = exceptionsQuery.eq('client_nip', params.client)
   }
@@ -69,20 +73,34 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     (clientsData ?? []).map(c => [c.nip, c])
   )
 
-  // 1c. Fetch ai_review_log separately (FK is on exceptions_queue table, not the view)
+  // 1c. Fetch ai_review_log and faktury_pozycje separately
   const exceptionIds = rawExceptions?.map(e => e.id) ?? []
-  const { data: reviewLogsData } = exceptionIds.length > 0
-    ? await supabase
-        .from('ai_review_log')
-        .select('id, queue_id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia')
-        .in('queue_id', exceptionIds)
-    : { data: [] as any[] }
+  const [{ data: reviewLogsData }, { data: pozycjeData }] = exceptionIds.length > 0
+    ? await Promise.all([
+        supabase
+          .from('ai_review_log')
+          .select('id, queue_id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia')
+          .in('queue_id', exceptionIds),
+        supabase
+          .from('faktury_pozycje')
+          .select('*')
+          .in('faktura_id', exceptionIds)
+          .order('lp', { ascending: true })
+      ])
+    : [{ data: [] as any[] }, { data: [] as any[] }]
 
   const reviewMap = new Map<number, typeof reviewLogsData>()
   for (const log of reviewLogsData ?? []) {
     const existing = reviewMap.get(log.queue_id) ?? []
     existing.push(log)
     reviewMap.set(log.queue_id, existing)
+  }
+
+  const pozycjeMap = new Map<number, any[]>()
+  for (const p of pozycjeData ?? []) {
+    const existing = pozycjeMap.get(p.faktura_id) ?? []
+    existing.push(p)
+    pozycjeMap.set(p.faktura_id, existing)
   }
 
   // 1d. Merge exceptions with client data and review logs
@@ -95,6 +113,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
         platnik_vat: c?.platnik_vat ?? true,
       } as any,
       ai_review_log: reviewMap.get(e.id) ?? [],
+      pozycje_editable: pozycjeMap.get(e.id) ?? [],
     }
   })
 

@@ -150,6 +150,7 @@ export interface WalidatorKupVatWarning {
   pole: 'kup_status' | 'vat_odliczalny';
   stara_wartosc: string;
   nowa_wartosc: string;
+  powod: string;
   podstawa_prawna: string;
 }
 

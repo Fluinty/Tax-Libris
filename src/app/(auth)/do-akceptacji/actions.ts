@@ -33,6 +33,13 @@ export async function approveFaktura(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
+  // Pobierz dane z fluinty.faktury (gdzie trigger przelicza final_kwoty_per_kolumna)
+  const { data: faktura } = await supabase
+    .from('faktury')
+    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna')
+    .eq('legacy_queue_id', exceptionId)
+    .maybeSingle()
+
   const { data: exception, error: fetchErr } = await supabase
     .from('exceptions_queue')
     .select('*, clients!inner(platnik_vat)')
@@ -47,13 +54,17 @@ export async function approveFaktura(exceptionId: number) {
   const scalonyVat = mergeInlineEditsVat(exception)
   const scalonyPojazd = mergeInlineEditsPojazd(exception)
 
-  // Update
+  // KLUCZ: użyj final_kwoty_per_kolumna z fluinty.faktury (po triggerze)
+  // Fallback do ai_kwoty jeśli Monika nie edytowała per-pozycja
+  const kwotyDoZapisu = faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna
+
+  // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
   const { error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
       resolved_opis: exception.ai_proponowany_opis,
-      final_kwoty_per_kolumna: exception.ai_kwoty_per_kolumna,
+      final_kwoty_per_kolumna: kwotyDoZapisu,
       final_zapis_vat_data: scalonyVat,
       final_kpir_pojazdowe_data: scalonyPojazd,
       resolved_by: userEmail,
@@ -65,12 +76,29 @@ export async function approveFaktura(exceptionId: number) {
     return { success: false, error: error.message }
   }
 
+  // Sync też do fluinty.faktury (audit + future migration off exceptions_queue)
+  if (faktura) {
+    await supabase
+      .from('faktury')
+      .update({
+        status: 'approved',
+        final_opis: exception.ai_proponowany_opis,
+        final_zapis_vat_data: scalonyVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('legacy_queue_id', exceptionId)
+  }
+
   await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id, {
     exception_id: exceptionId,
+    faktura_id: faktura?.id,
     resolved_by: userEmail,
     opis: exception.ai_proponowany_opis,
-    kwoty: exception.ai_kwoty_per_kolumna,
-    zapis_vat: exception.zapis_vat_data,
+    kwoty: kwotyDoZapisu,
+    zapis_vat: scalonyVat,
+    source: faktura && 'final_kwoty_per_kolumna' in faktura && faktura.final_kwoty_per_kolumna ? 'monika_edits' : 'ai_default',
     type: 'ai_accepted'
   })
 
@@ -130,6 +158,12 @@ export async function approveExceptionFull(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
+  const { data: faktura } = await supabase
+    .from('faktury')
+    .select('id')
+    .eq('legacy_queue_id', exceptionId)
+    .maybeSingle()
+
   const { data: exception, error: fetchErr } = await supabase
     .from('exceptions_queue')
     .select('*')
@@ -163,8 +197,24 @@ export async function approveExceptionFull(
     return { success: false, error: error.message }
   }
 
+  // Sync też do fluinty.faktury
+  if (faktura) {
+    await supabase
+      .from('faktury')
+      .update({
+        status: 'approved',
+        final_opis: finalOpis,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('legacy_queue_id', exceptionId)
+  }
+
   await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id, {
     exception_id: exceptionId,
+    faktura_id: faktura?.id,
     resolved_by: userEmail,
     opis: finalOpis,
     kwoty: finalKwotyPerKolumna,
