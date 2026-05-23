@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { Shield, CheckCircle2, AlertTriangle, XCircle, Clock, Copy, CalendarX } from 'lucide-react'
@@ -92,8 +93,13 @@ export function WeryfikacjaKontrahentaSection({ exception: e }: Props) {
   const status = getOverallStatus(e)
   const defaultOpen = status === 'error' || status === 'warn'
 
-  const formatDate = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString('pl-PL') : '—'
-  const formatDateTime = (d: string | null | undefined) => d ? new Date(d).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const formatDate = (d: string | null | undefined) => mounted ? (d ? new Date(d).toLocaleDateString('pl-PL') : '—') : '...'
+  const formatDateTime = (d: string | null | undefined) => mounted ? (d ? new Date(d).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null) : '...'
 
   return (
     <CollapsibleJpkSection

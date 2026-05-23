@@ -93,6 +93,11 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const confidenceCardClasses = getConfidenceCardClasses(exception.confidence_overall)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   
   // Pending state
   const [selectedOpis, setSelectedOpis] = useState('')
@@ -569,18 +574,18 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <User className="w-4 h-4 text-[#64748B]" />
             <span className="font-semibold text-[#1F3A5F]">{exception.client_nazwa}</span>
             <span className="text-[#94A3B8]">·</span>
-            <span className="text-[#64748B] text-sm" suppressHydrationWarning>
-              Faktura z: {(() => {
+            <span className="text-[#64748B] text-sm">
+              Faktura z: {mounted ? (() => {
                 const d = exception.ddk_data?.dataDokumentu ?? exception.pozycje_xml_full?.[0]?.dataSprzedazy ?? exception.data_wystawienia ?? exception.created_at
                 return d ? formatDate(d) : '?'
-              })()}
+              })() : '...'}
             </span>
             <span className="text-[#94A3B8]">·</span>
             <span className="font-bold text-[#1E293B]">
               {exception.kwota_brutto ? `${exception.kwota_brutto.toFixed(2)} zł` : 'Brak kwoty'}
             </span>
             <Badge variant="secondary" className="ml-2 font-mono text-xs">
-              <span suppressHydrationWarning>{stan === 'auto_created' ? timeAgo(exception.resolved_at || '') : 'teraz'}</span>
+              {mounted ? (stan === 'auto_created' ? timeAgo(exception.resolved_at || '') : 'teraz') : '...'}
             </Badge>
             {exception.confidence_overall != null && (
               <ConfidenceBadge score={exception.confidence_overall} className="ml-1" />
@@ -961,10 +966,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                 <User className="w-3 h-3" />
                 Zatwierdził/a: {exception.resolved_by || 'system'}
               </div>
-              <div className="flex items-center gap-1" suppressHydrationWarning>
-                <Clock className="w-3 h-3" />
-                {exception.resolved_at ? new Date(exception.resolved_at).toLocaleTimeString() : '?'}
-              </div>
+              {mounted && (
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {exception.resolved_at ? new Date(exception.resolved_at).toLocaleTimeString() : '?'}
+                </div>
+              )}
             </div>
           </div>
         </div>
