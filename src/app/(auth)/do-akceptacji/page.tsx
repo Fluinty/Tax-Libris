@@ -16,7 +16,7 @@ interface PageProps {
 
 export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const params = await searchParams
-  const typFilter = params.typ ?? 'zakup'
+  const typFilter = params.typ ?? 'all'
   const supabase = createSupabaseAdmin()
   const { nips } = await getAllowedNips()
 

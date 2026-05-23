@@ -493,7 +493,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               {zapisVat.pozycje_vat?.map((poz: PozycjaVAT, i: number) => (
                 <div key={i} className="font-mono text-xs flex items-center gap-1 mb-1">
                   <span className="inline-block w-16 font-medium">
-                    {poz.stawka_symbol.replace('Stawka', '')}%
+                    {poz.stawka_symbol.startsWith('Stawka') 
+                      ? `${poz.stawka_symbol.replace('Stawka', '')}%`
+                      : poz.stawka_symbol}
                   </span>
                   <span className="text-slate-600">netto</span> {Number(poz.netto).toFixed(2)} zł
                   {' '}+{' '}
@@ -983,7 +985,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           open={showEditModal} 
           onOpenChange={setShowEditModal}
           initialOpis={exception.ai_proponowany_opis || ''}
-          initialKwoty={exception.ai_kwoty_per_kolumna || {}}
+          initialKwoty={exception.final_kwoty_per_kolumna || exception.ai_kwoty_per_kolumna || {}}
           initialZapisVatData={exception.final_zapis_vat_data || exception.zapis_vat_data || null}
           kwotaBrutto={exception.kwota_brutto}
           kwotaNetto={exception.zapis_vat_data?.suma_netto ?? null}

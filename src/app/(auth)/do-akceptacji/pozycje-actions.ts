@@ -47,6 +47,8 @@ export async function updatePozycjaWymiar(
     .eq('id', pozycjaId)
     .single()
 
+  if (!poz) return { success: false, error: 'Pozycja nie istnieje' }
+
   const { error } = await supabase
     .from('faktury_pozycje')
     .update(updates)

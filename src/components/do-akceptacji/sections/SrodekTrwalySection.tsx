@@ -10,7 +10,7 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
   const kwotaTyp = exception.srodek_trwaly_kwota_typ;
   const keyword = exception.srodek_trwaly_keyword;
   const pozycja = exception.srodek_trwaly_pozycja;
-  // const reason = exception.srodek_trwaly_reason;
+  const reason = exception.srodek_trwaly_reason;
   
   if (!status) return null;
 
@@ -55,6 +55,13 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
             <div>
               <span className="text-gray-600">W pozycji:</span>{' '}
               <span className="text-sm italic">"{pozycja}"</span>
+            </div>
+          )}
+          
+          {reason && (
+            <div className="mt-2 pt-2 border-t border-orange-200/50">
+              <span className="text-gray-600">Uzasadnienie:</span>{' '}
+              <span className="text-sm italic text-orange-800">{reason}</span>
             </div>
           )}
         </div>
