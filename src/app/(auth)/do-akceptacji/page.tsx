@@ -8,7 +8,7 @@ import { ChevronDown, BarChart2 } from 'lucide-react'
 import { RealtimeToast } from '@/components/do-akceptacji/RealtimeToast'
 import { FakturaListClient } from './FakturaListClient'
 
-export const revalidate = 30 // Auto-refresh (ISR) co 30 sekund
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   searchParams: Promise<{ client?: string; sort?: string; typ?: string }>
