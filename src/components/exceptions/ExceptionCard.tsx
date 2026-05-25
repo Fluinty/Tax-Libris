@@ -123,7 +123,7 @@ export function ExceptionCard({
     if (!effectiveOpis) return
     setIsResolving(true)
     try {
-      const actionId = (exception as any).legacy_queue_id || exception.id
+      const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
       await resolveException(actionId, effectiveOpis, isPattern)
       toast.success('Reguła utworzona', {
         description: `"${effectiveOpis}" dla ${exception.client_nazwa}`,
@@ -141,7 +141,7 @@ export function ExceptionCard({
   const handleIgnore = async () => {
     setIsIgnoring(true)
     try {
-      const actionId = (exception as any).legacy_queue_id || exception.id
+      const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
       await ignoreException(actionId)
       toast.info('Wyjątek pominięty')
       router.refresh()
@@ -158,7 +158,7 @@ export function ExceptionCard({
     if (!exception.ai_proponowany_opis) return
     setIsAddingOpis(true)
     try {
-      const actionId = (exception as any).legacy_queue_id || exception.id
+      const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
       await addProponowanyToClientOpisy(actionId)
       toast.success(`Opis "${exception.ai_proponowany_opis}" dodany do listy klienta. Możesz teraz zatwierdzić.`)
       router.refresh()

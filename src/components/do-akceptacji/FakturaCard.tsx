@@ -142,7 +142,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleApprove = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = (exception as any).legacy_queue_id || exception.id
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await approveFaktura(actionId)
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
@@ -156,7 +156,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleEditSave = async (opis: string, kwoty: Record<string, number>, zapisVat: ZapisVATData | null) => {
     setShowEditModal(false)
     setIsSubmitting(true)
-    const actionId = (exception as any).legacy_queue_id || exception.id
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await approveExceptionFull(actionId, kwoty, zapisVat, opis)
     if (res.success) {
       toast.success('Zapisano z edytowanymi kwotami')
@@ -174,7 +174,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     }
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = (exception as any).legacy_queue_id || exception.id
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await resolveException(actionId, selectedOpis)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
@@ -188,7 +188,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleIgnore = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = (exception as any).legacy_queue_id || exception.id
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await ignoreFaktura(actionId)
     if (res.success) {
       toast.success('Faktura pominięta')
@@ -202,7 +202,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleAddAiProposalToClient = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = (exception as any).legacy_queue_id || exception.id
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await addProponowanyToClientOpisy(actionId)
     if (res.success) {
       toast.success(res.message)

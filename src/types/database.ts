@@ -156,6 +156,8 @@ export interface WalidatorKupVatWarning {
 
 export interface ExceptionItem {
   id: number;
+  legacy_id?: number;
+  legacy_queue_id?: number;
   client_nip: string;
   zapis_id: number;
   ksiegowe_numer: string | null;
