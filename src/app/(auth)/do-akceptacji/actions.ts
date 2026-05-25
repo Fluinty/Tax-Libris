@@ -44,10 +44,14 @@ export async function approveFaktura(exceptionId: number) {
     .from('exceptions_queue')
     .select('*')
     .eq('id', exceptionId)
-    .single()
+    .maybeSingle()
 
-  if (fetchErr || !exception) {
-    return { success: false, error: 'Nie znaleziono faktury.' }
+  if (fetchErr) {
+    return { success: false, error: `Fetch error: ${fetchErr.message} (code: ${fetchErr.code}, details: ${fetchErr.details})` }
+  }
+
+  if (!exception) {
+    return { success: false, error: `Exception null dla id=${exceptionId}, supabase schema=${(supabase as any).rest?.schemaName || '?'}` }
   }
 
   // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
