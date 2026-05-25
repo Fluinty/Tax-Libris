@@ -42,7 +42,7 @@ export async function approveFaktura(exceptionId: number) {
 
   const { data: exception, error: fetchErr } = await supabase
     .from('exceptions_queue')
-    .select('*, clients!inner(platnik_vat)')
+    .select('*')
     .eq('id', exceptionId)
     .single()
 
