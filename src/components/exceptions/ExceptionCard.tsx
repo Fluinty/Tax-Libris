@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Check, ChevronsUpDown, X, Clock, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { resolveException, ignoreException, addProponowanyToClientOpisy } from '@/app/(auth)/wyjatki/actions'
@@ -73,6 +74,7 @@ export function ExceptionCard({
   const [isAddingOpis, setIsAddingOpis] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
 
   // Deduplicate rules by opis_zdarzenia
   const uniqueDescriptions = Array.from(
@@ -125,6 +127,7 @@ export function ExceptionCard({
       toast.success('Reguła utworzona', {
         description: `"${effectiveOpis}" dla ${exception.client_nazwa}`,
       })
+      router.refresh()
     } catch (err) {
       toast.error('Błąd', {
         description: err instanceof Error ? err.message : 'Nieznany błąd',
@@ -139,6 +142,7 @@ export function ExceptionCard({
     try {
       await ignoreException(exception.id)
       toast.info('Wyjątek pominięty')
+      router.refresh()
     } catch (err) {
       toast.error('Błąd', {
         description: err instanceof Error ? err.message : 'Nieznany błąd',
@@ -154,6 +158,7 @@ export function ExceptionCard({
     try {
       await addProponowanyToClientOpisy(exception.id)
       toast.success(`Opis "${exception.ai_proponowany_opis}" dodany do listy klienta. Możesz teraz zatwierdzić.`)
+      router.refresh()
       setSelectedOpis(exception.ai_proponowany_opis)
       setInputValue('')
     } catch (err) {

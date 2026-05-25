@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -94,6 +95,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
@@ -143,6 +145,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await approveFaktura(exception.id)
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
+      router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -155,6 +158,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await approveExceptionFull(exception.id, kwoty, zapisVat, opis)
     if (res.success) {
       toast.success('Zapisano z edytowanymi kwotami')
+      router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -171,6 +175,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await resolveException(exception.id, selectedOpis)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
+      router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -183,6 +188,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await ignoreFaktura(exception.id)
     if (res.success) {
       toast.success('Faktura pominięta')
+      router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -195,6 +201,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await addProponowanyToClientOpisy(exception.id)
     if (res.success) {
       toast.success(res.message)
+      router.refresh()
       setSelectedOpis(exception.ai_proponowany_opis || '')
     } else {
       toast.error(res.error || 'Błąd dodawania')
