@@ -54,8 +54,16 @@ export async function approveFaktura(exceptionId: number) {
     return { success: false, error: `Exception null dla id=${exceptionId}, supabase schema=${(supabase as any).rest?.schemaName || '?'}` }
   }
 
+  // Pobierz pozycje faktury (sesja 33: 3-wymiarowa klasyfikacja) dla auto-korekty rodzaj_odliczenia
+  const { data: pozycjeEditable } = faktura
+    ? await supabase
+        .from('faktury_pozycje')
+        .select('effective_vat_odliczalny')
+        .eq('faktura_id', faktura.id)
+    : { data: [] as any[] }
+
   // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
-  const scalonyVat = mergeInlineEditsVat(exception)
+  const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [])
   const scalonyPojazd = mergeInlineEditsPojazd(exception)
 
   // KLUCZ: użyj final_kwoty_per_kolumna z fluinty.faktury (po triggerze)
@@ -178,10 +186,18 @@ export async function approveExceptionFull(
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  // Pobierz pozycje faktury dla auto-korekty rodzaj_odliczenia
+  const { data: pozycjeEditable } = faktura
+    ? await supabase
+        .from('faktury_pozycje')
+        .select('effective_vat_odliczalny')
+        .eq('faktura_id', faktura.id)
+    : { data: [] as any[] }
+
   // Scalenie inline edits z modal edits
   // Modal daje finalKwotyPerKolumna + finalZapisVatData + finalOpis
   // Ale GTU/procedury/pojazd mogą być z inline sections — trzeba scalić
-  const baseVat = finalZapisVatData || mergeInlineEditsVat(exception)
+  const baseVat = finalZapisVatData || mergeInlineEditsVat(exception, pozycjeEditable ?? [])
   const scalonyPojazd = mergeInlineEditsPojazd(exception)
 
   const { error } = await supabase

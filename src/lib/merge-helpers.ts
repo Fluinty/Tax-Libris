@@ -10,7 +10,7 @@ import type { ZapisVATData } from '@/types/database'
  * (gtu_bitmask_final, procedura_jpk_final, etc.) but approveFaktura()
  * never merged them back into final_zapis_vat_data.
  */
-export function mergeInlineEditsVat(exception: any): ZapisVATData | null {
+export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[]): ZapisVATData | null {
   const base = exception.final_zapis_vat_data
     || exception.ai_zapis_vat_data
     || exception.zapis_vat_data
@@ -38,6 +38,17 @@ export function mergeInlineEditsVat(exception: any): ZapisVATData | null {
     merged.suma_netto = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.netto), 0)
     merged.suma_vat = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.vat), 0)
     merged.suma_brutto = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.brutto), 0)
+  }
+
+  // Auto-korekta rodzaj_odliczenia: jeśli jakieś pozycje mają częściowe odliczenie VAT
+  // a nagłówek mówi "Całkowite" (1), ustaw na "Proporcjonalne" (2)
+  if (pozycjeEditable && pozycjeEditable.length > 0) {
+    const hasCzesciowe = pozycjeEditable.some(
+      (p: any) => p.effective_vat_odliczalny === 'czesciowe_50' || p.effective_vat_odliczalny === 'czesciowe_25'
+    )
+    if (hasCzesciowe && Number(merged.rodzaj_odliczenia) === 1) {
+      merged.rodzaj_odliczenia = 2 // Proporcjonalne
+    }
   }
 
   return merged as ZapisVATData

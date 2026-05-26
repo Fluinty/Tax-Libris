@@ -438,6 +438,15 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const isZakup = exception.typ_dokumentu === 'zakup';
     const isBadTransakcja = isZakup ? (zapisVat.transakcja_id === 1) : (zapisVat.transakcja_id === 16 || zapisVat.transakcja_id === 15);
 
+    // Wykryj czy jakies pozycje maja czesciowe odliczenie VAT (50% / 25%)
+    const pozycjeEditable = exception.pozycje_editable ?? []
+    const hasCzesciowe50 = pozycjeEditable.some(p => p.effective_vat_odliczalny === 'czesciowe_50')
+    const hasCzesciowe25 = pozycjeEditable.some(p => p.effective_vat_odliczalny === 'czesciowe_25')
+    const hasCzescioweVat = hasCzesciowe50 || hasCzesciowe25
+    const czescioweProcent = hasCzesciowe50 ? '50%' : '25%'
+    // Niespojnosc: pozycje maja czesciowe, ale naglowek mowi "Calkowite" (1)
+    const isOdliczenieNiespojna = hasCzescioweVat && Number(zapisVat.rodzaj_odliczenia) === 1
+
     return (
       <div className="mt-4 mb-2 bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
         <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-[13px] font-semibold text-slate-700 flex items-center gap-2">
@@ -465,7 +474,18 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                 {zapisVat.rodzaj_odliczenia !== undefined && (
                   <>
                     <div className="text-slate-500">Rodzaj odliczenia:</div>
-                    <div className="font-medium text-slate-800">{getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia)}</div>
+                    <div className="font-medium text-slate-800 flex flex-wrap items-center gap-2">
+                      {hasCzescioweVat ? (
+                        <>
+                          <span className="text-amber-700 font-semibold">Częściowe ({czescioweProcent})</span>
+                          <Badge variant="outline" className="text-[9px] h-4 font-mono text-amber-600 border-amber-300 bg-amber-50">
+                            art. 86a VAT
+                          </Badge>
+                        </>
+                      ) : (
+                        getRodzajOdliczeniaLabel(zapisVat.rodzaj_odliczenia)
+                      )}
+                    </div>
                   </>
                 )}
                 {zapisVat.cel_zakupu !== undefined && (
@@ -500,7 +520,14 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           </div>
 
           <div className="mt-3">
-            <div className="text-slate-500 mb-1">Pozycje per stawka:</div>
+            <div className="text-slate-500 mb-1 flex items-center gap-2">
+              Pozycje per stawka:
+              {hasCzescioweVat && (
+                <Badge variant="outline" className="text-[9px] h-4 font-normal text-amber-600 border-amber-300 bg-amber-50">
+                  VAT {czescioweProcent} — Insert auto-rozdzieli na 2 pozycje przy księgowaniu
+                </Badge>
+              )}
+            </div>
             <div className="pl-2 border-l-2 border-slate-200 space-y-1">
               {zapisVat.pozycje_vat?.map((poz: PozycjaVAT, i: number) => (
                 <div key={i} className="font-mono text-xs flex items-center gap-1 mb-1">
@@ -523,6 +550,19 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               ))}
             </div>
           </div>
+
+          {isOdliczenieNiespojna && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2.5 rounded-md text-sm flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+              <div>
+                <span className="font-semibold">Niespójność VAT:</span>{' '}
+                Pozycja oznaczona jako odliczenie {czescioweProcent}, ale rodzaj odliczenia na poziomie zapisu VAT = Całkowite.
+                <span className="block text-xs text-amber-600 mt-1">
+                  Worker został zaktualizowany — następne faktury będą prawidłowo. Przy zatwierdzeniu zostanie auto-poprawione na „Częściowe".
+                </span>
+              </div>
+            </div>
+          )}
 
           {isSumInvalid && (
             <div className="mt-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2.5 rounded-md text-sm flex items-start gap-2">
