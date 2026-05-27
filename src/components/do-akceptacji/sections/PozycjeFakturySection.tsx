@@ -58,6 +58,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
   const [isPending, startTransition] = useTransition()
   const [similarModalPozycjaId, setSimilarModalPozycjaId] = useState<number | null>(null)
   const kolumny = getKolumnyForTyp(typDokumentu)
+  const isSprzedaz = typDokumentu === 'sprzedaz'
 
   const editedCount = pozycje.filter(p => p.edytowane_przez_monike).length
   const walidatorCount = pozycje.filter(p => p.walidator_zmiana).length
@@ -167,86 +168,90 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
             </Select>
           )}
 
-          {/* Dim 2: KUP/NKUP */}
-          {readOnly ? (
-            <TooltipProvider delay={300}>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Badge className={`${kupStyle.color} text-[11px] px-2 py-0.5 cursor-help`}>
-                    {kupStyle.label}
-                  </Badge>
-                </TooltipTrigger>
-                {podstawaPrawna && (
-                  <TooltipContent side="top" className="max-w-xs text-xs">
-                    <div className="flex items-center gap-1.5 mb-1 font-medium text-slate-700">
-                      <Scale className="w-3 h-3" />
-                      Podstawa prawna
-                    </div>
-                    <p className="text-slate-600">{podstawaPrawna}</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <div>
-              <Select
-                value={poz.effective_kup_status ?? 'kup'}
-                onValueChange={(v) => v && handleWymiarChange(poz.id, 'kup_status', v)}
-                disabled={isPending}
-              >
-                <SelectTrigger className={`h-7 text-xs w-[105px] border ${kupStyle.color}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {KUP_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Dim 2: KUP/NKUP — tylko dla zakupow */}
+          {!isSprzedaz && (
+            readOnly ? (
+              <TooltipProvider delay={300}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className={`${kupStyle.color} text-[11px] px-2 py-0.5 cursor-help`}>
+                      {kupStyle.label}
+                    </Badge>
+                  </TooltipTrigger>
+                  {podstawaPrawna && (
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      <div className="flex items-center gap-1.5 mb-1 font-medium text-slate-700">
+                        <Scale className="w-3 h-3" />
+                        Podstawa prawna
+                      </div>
+                      <p className="text-slate-600">{podstawaPrawna}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div>
+                <Select
+                  value={poz.effective_kup_status ?? 'kup'}
+                  onValueChange={(v) => v && handleWymiarChange(poz.id, 'kup_status', v)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger className={`h-7 text-xs w-[105px] border ${kupStyle.color}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {KUP_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
           )}
 
-          {/* Dim 3: VAT odliczalny */}
-          {readOnly ? (
-            <TooltipProvider delay={300}>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Badge className={`${vatStyle.color} text-[11px] px-2 py-0.5 cursor-help`}>
-                    VAT {vatStyle.label}
-                  </Badge>
-                </TooltipTrigger>
-                {podstawaPrawna && (
-                  <TooltipContent side="top" className="max-w-xs text-xs">
-                    <div className="flex items-center gap-1.5 mb-1 font-medium text-slate-700">
-                      <ShieldCheck className="w-3 h-3" />
-                      Podstawa prawna VAT
-                    </div>
-                    <p className="text-slate-600">{podstawaPrawna}</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <div>
-              <Select
-                value={poz.effective_vat_odliczalny ?? 'pelny'}
-                onValueChange={(v) => v && handleWymiarChange(poz.id, 'vat_odliczalny', v)}
-                disabled={isPending}
-              >
-                <SelectTrigger className={`h-7 text-xs w-[115px] border ${vatStyle.color}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VAT_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>
-                      VAT {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Dim 3: VAT odliczalny — tylko dla zakupow */}
+          {!isSprzedaz && (
+            readOnly ? (
+              <TooltipProvider delay={300}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className={`${vatStyle.color} text-[11px] px-2 py-0.5 cursor-help`}>
+                      VAT {vatStyle.label}
+                    </Badge>
+                  </TooltipTrigger>
+                  {podstawaPrawna && (
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      <div className="flex items-center gap-1.5 mb-1 font-medium text-slate-700">
+                        <ShieldCheck className="w-3 h-3" />
+                        Podstawa prawna VAT
+                      </div>
+                      <p className="text-slate-600">{podstawaPrawna}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div>
+                <Select
+                  value={poz.effective_vat_odliczalny ?? 'pelny'}
+                  onValueChange={(v) => v && handleWymiarChange(poz.id, 'vat_odliczalny', v)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger className={`h-7 text-xs w-[115px] border ${vatStyle.color}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VAT_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>
+                        VAT {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
           )}
         </div>
       </div>
@@ -271,7 +276,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
               {walidatorCount} przepięte
             </Badge>
           )}
-          {nkupCount > 0 && (
+          {!isSprzedaz && nkupCount > 0 && (
             <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">
               {nkupCount} NKUP
             </Badge>

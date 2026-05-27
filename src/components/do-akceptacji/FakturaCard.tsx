@@ -661,6 +661,25 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               (NIP: {exception.nip_dostawcy || 'brak'})
             </span>
           </div>
+          {/* Data sprzedazy vs data wystawienia — istotne dla sprzedazy */}
+          {mounted && exception.typ_dokumentu === 'sprzedaz' && exception.data_sprzedazy && exception.data_wystawienia && (() => {
+            const ds = exception.data_sprzedazy
+            const dw = exception.data_wystawienia
+            const areDifferent = ds !== dw
+            return (
+              <div className={`flex items-center gap-2 text-sm mt-1 ${areDifferent ? 'text-amber-700' : 'text-slate-500'}`}>
+                <FileText className="w-4 h-4 shrink-0" />
+                <span>Wystawienie: <span className="font-medium">{formatDate(dw)}</span></span>
+                <span className="text-slate-300">|</span>
+                <span>Sprzedaż: <span className="font-medium">{formatDate(ds)}</span></span>
+                {areDifferent && (
+                  <Badge variant="outline" className="text-[10px] h-4 text-amber-600 border-amber-300 bg-amber-50 font-normal">
+                    przychód wg daty sprzedaży
+                  </Badge>
+                )}
+              </div>
+            )
+          })()}
         </div>
         {stan === 'auto_created' && (
           <Badge className="bg-green-100 text-green-800 border-none">Zaksięgowane</Badge>
@@ -778,7 +797,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
               <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
             )}
-            {exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
+            {exception.typ_dokumentu !== 'sprzedaz' && exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
               <WalidatorKupVatBadge warnings={exception.walidator_kup_vat_warningi} />
             )}
             {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
@@ -876,7 +895,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
             <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
           )}
-          {exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
+          {exception.typ_dokumentu !== 'sprzedaz' && exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
             <WalidatorKupVatBadge warnings={exception.walidator_kup_vat_warningi} />
           )}
           {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
@@ -999,7 +1018,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               {exception.walidator_usluga_warningi && exception.walidator_usluga_warningi.length > 0 && (
                 <WalidatorBadge warnings={exception.walidator_usluga_warningi} />
               )}
-              {exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
+              {exception.typ_dokumentu !== 'sprzedaz' && exception.walidator_kup_vat_warningi && exception.walidator_kup_vat_warningi.length > 0 && (
                 <WalidatorKupVatBadge warnings={exception.walidator_kup_vat_warningi} />
               )}
               {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
