@@ -447,6 +447,59 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     // Niespojnosc: pozycje maja czesciowe, ale naglowek mowi "Calkowite" (1)
     const isOdliczenieNiespojna = hasCzescioweVat && Number(zapisVat.rodzaj_odliczenia) === 1
 
+    // Przelicz effective pozycje_vat na podstawie flag KUP/VAT per pozycja
+    // brak odliczenia (art.88) lub NKUP -> wyklucz z rejestru VAT
+    // czesciowe_50/25 -> pelna kwota (rozdzielenie robi system ksiegowy)
+    let effectivePozycjeVat = zapisVat.pozycje_vat ?? []
+    let excludedStawki: string[] = []
+    let effectiveSumaNetto = Number(zapisVat.suma_netto ?? 0)
+    let effectiveSumaVat = Number(zapisVat.suma_vat ?? 0)
+    let effectiveSumaBrutto = Number(zapisVat.suma_brutto ?? 0)
+    const hasExclusions = isZakup && pozycjeEditable.length > 0 && pozycjeEditable.some(
+      p => p.effective_vat_odliczalny === 'brak' || p.effective_kup_status === 'nkup'
+    )
+
+    if (hasExclusions) {
+      // Filtruj pozycje odliczalne
+      const deductible = pozycjeEditable.filter(p =>
+        p.effective_vat_odliczalny !== 'brak' && p.effective_kup_status !== 'nkup'
+      )
+
+      // Grupuj po stawce VAT
+      const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
+      for (const p of deductible) {
+        const stawka = p.stawka_vat || '0'
+        const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
+        const netto = Number(p.wartosc_netto || 0)
+        const brutto = Number(p.wartosc_brutto || 0)
+        existing.netto += netto
+        existing.vat += (brutto - netto)
+        existing.brutto += brutto
+        groups.set(stawka, existing)
+      }
+
+      // Zachowaj oryginalne stawka_id i pole_deklaracji z workerowego zapisVat
+      const origPozycje = zapisVat.pozycje_vat ?? []
+      effectivePozycjeVat = []
+      excludedStawki = []
+
+      for (const orig of origPozycje) {
+        const stawkaNum = orig.stawka_symbol.startsWith('Stawka')
+          ? orig.stawka_symbol.replace('Stawka', '')
+          : orig.stawka_symbol
+        const group = groups.get(stawkaNum)
+        if (group && (group.netto !== 0 || group.brutto !== 0)) {
+          effectivePozycjeVat.push({ ...orig, netto: group.netto, vat: group.vat, brutto: group.brutto })
+        } else {
+          excludedStawki.push(stawkaNum)
+        }
+      }
+
+      effectiveSumaNetto = effectivePozycjeVat.reduce((s, p) => s + Number(p.netto), 0)
+      effectiveSumaVat = effectivePozycjeVat.reduce((s, p) => s + Number(p.vat), 0)
+      effectiveSumaBrutto = effectivePozycjeVat.reduce((s, p) => s + Number(p.brutto), 0)
+    }
+
     return (
       <div className="mt-4 mb-2 bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
         <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-[13px] font-semibold text-slate-700 flex items-center gap-2">
@@ -529,7 +582,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               )}
             </div>
             <div className="pl-2 border-l-2 border-slate-200 space-y-1">
-              {zapisVat.pozycje_vat?.map((poz: PozycjaVAT, i: number) => (
+              {effectivePozycjeVat.map((poz: PozycjaVAT, i: number) => (
                 <div key={i} className="font-mono text-xs flex items-center gap-1 mb-1">
                   <span className="inline-block w-16 font-medium">
                     {poz.stawka_symbol.startsWith('Stawka') 
@@ -551,6 +604,16 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             </div>
           </div>
 
+          {/* Warning o wykluczonych stawkach */}
+          {excludedStawki.length > 0 && (
+            <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-md text-xs flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
+              <span>
+                Stawka {excludedStawki.map(s => ['zw','np','oo'].includes(s.toLowerCase()) ? s : `${s}%`).join(', ')} wyłączona z rejestru VAT (pozycja nieodliczalna — NKUP/art.88). VAT trafia w koszty KPiR.
+              </span>
+            </div>
+          )}
+
           {isOdliczenieNiespojna && (
             <div className="mt-3 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2.5 rounded-md text-sm flex items-start gap-2">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
@@ -564,7 +627,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             </div>
           )}
 
-          {isSumInvalid && (
+          {isSumInvalid && !hasExclusions && (
             <div className="mt-4 bg-red-50 border border-red-200 text-red-800 px-3 py-2.5 rounded-md text-sm flex items-start gap-2">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" />
               <span>
@@ -578,17 +641,18 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <div className="text-slate-500 text-xs">Razem netto</div>
-                <div className="font-medium tabular-nums">{Number(zapisVat.suma_netto).toFixed(2)} zł</div>
+                <div className="font-medium tabular-nums">{effectiveSumaNetto.toFixed(2)} zł</div>
               </div>
               <div>
                 <div className="text-slate-500 text-xs">Razem VAT</div>
-                <div className="font-medium tabular-nums">{Number(zapisVat.suma_vat).toFixed(2)} zł</div>
+                <div className="font-medium tabular-nums">{effectiveSumaVat.toFixed(2)} zł</div>
               </div>
               <div>
                 <div className="text-slate-500 text-xs">Razem brutto</div>
                 <div className="font-medium tabular-nums flex items-center">
-                  {Number(zapisVat.suma_brutto).toFixed(2)} zł
-                  {!isSumInvalid && <span className="ml-1 text-green-600">✓</span>}
+                  {effectiveSumaBrutto.toFixed(2)} zł
+                  {!hasExclusions && !isSumInvalid && <span className="ml-1 text-green-600">✓</span>}
+                  {hasExclusions && <span className="ml-1 text-amber-500 text-xs">(po wykluczeniach)</span>}
                 </div>
               </div>
             </div>

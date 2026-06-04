@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -57,6 +58,7 @@ interface Props {
 export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false }: Props) {
   const [isPending, startTransition] = useTransition()
   const [similarModalPozycjaId, setSimilarModalPozycjaId] = useState<number | null>(null)
+  const router = useRouter()
   const kolumny = getKolumnyForTyp(typDokumentu)
   const isSprzedaz = typDokumentu === 'sprzedaz'
 
@@ -75,6 +77,10 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
           vat_odliczalny: 'VAT odliczalny',
         }
         toast.success(`${labels[wymiar]} zaktualizowane`)
+        // Odśwież stronę po zmianie KUP/VAT żeby przeliczyć pozycje VAT
+        if (wymiar === 'kup_status' || wymiar === 'vat_odliczalny') {
+          router.refresh()
+        }
       } else {
         toast.error('Błąd', { description: result.error })
       }

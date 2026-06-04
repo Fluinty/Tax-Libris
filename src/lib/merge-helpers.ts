@@ -49,6 +49,44 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[]): Za
     if (hasCzesciowe && Number(merged.rodzaj_odliczenia) === 1) {
       merged.rodzaj_odliczenia = 2 // Proporcjonalne
     }
+
+    // Przelicz pozycje_vat: wyklucz pozycje z brak/nkup z rejestru VAT
+    const hasExclusions = pozycjeEditable.some(
+      (p: any) => p.effective_vat_odliczalny === 'brak' || p.effective_kup_status === 'nkup'
+    )
+    if (hasExclusions && merged.pozycje_vat) {
+      const deductible = pozycjeEditable.filter(
+        (p: any) => p.effective_vat_odliczalny !== 'brak' && p.effective_kup_status !== 'nkup'
+      )
+      // Grupuj po stawce VAT
+      const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
+      for (const p of deductible) {
+        const stawka = p.stawka_vat || '0'
+        const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
+        const netto = Number(p.wartosc_netto || 0)
+        const brutto = Number(p.wartosc_brutto || 0)
+        existing.netto += netto
+        existing.vat += (brutto - netto)
+        existing.brutto += brutto
+        groups.set(stawka, existing)
+      }
+      // Przelicz zachowując stawka_id i pole_deklaracji z oryginału
+      const newPozycje: any[] = []
+      for (const orig of merged.pozycje_vat) {
+        const stawkaNum = orig.stawka_symbol.startsWith('Stawka')
+          ? orig.stawka_symbol.replace('Stawka', '')
+          : orig.stawka_symbol
+        const group = groups.get(stawkaNum)
+        if (group && (group.netto !== 0 || group.brutto !== 0)) {
+          newPozycje.push({ ...orig, netto: group.netto, vat: group.vat, brutto: group.brutto })
+        }
+        // Stawki bez pozycji odliczalnych — pomijamy (nie trafiają do rejestru)
+      }
+      merged.pozycje_vat = newPozycje
+      merged.suma_netto = newPozycje.reduce((s: number, p: any) => s + Number(p.netto), 0)
+      merged.suma_vat = newPozycje.reduce((s: number, p: any) => s + Number(p.vat), 0)
+      merged.suma_brutto = newPozycje.reduce((s: number, p: any) => s + Number(p.brutto), 0)
+    }
   }
 
   return merged as ZapisVATData
