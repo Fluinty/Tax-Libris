@@ -468,7 +468,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       // Grupuj po stawce VAT
       const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
       for (const p of deductible) {
-        const stawka = p.stawka_vat || '0'
+        const rawStawka = p.stawka_vat || '0'
+        const stawka = rawStawka.startsWith('Stawka') ? rawStawka.replace('Stawka', '') : rawStawka
         const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
         const netto = Number(p.wartosc_netto || 0)
         const brutto = Number(p.wartosc_brutto || 0)

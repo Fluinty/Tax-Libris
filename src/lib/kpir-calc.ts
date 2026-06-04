@@ -10,8 +10,8 @@ import type { FakturaPozycja } from '@/types/database'
  * - NKUP positions → excluded (0 zł to KPiR)
  * - VAT odliczalny = 'brak' OR client not VAT payer → use brutto
  * - VAT odliczalny = 'pelny' AND client is VAT payer → use netto
- * - VAT odliczalny = 'czesciowe_50' → netto + 50% VAT (approximated as brutto for simplicity)
- * - VAT odliczalny = 'czesciowe_25' → netto + 75% VAT
+ * - VAT odliczalny = 'czesciowe_50' → 0.75 × (netto + 50% nieodliczony VAT)
+ *   (pojazd mieszany: art.86a VAT + art.23 ust.1 pkt 46a PIT)
  */
 export function kwotaReferencyjnaPozycje(
   pozycje: FakturaPozycja[],
@@ -29,13 +29,11 @@ export function kwotaReferencyjnaPozycje(
       // Brak odliczenia VAT → cała kwota brutto idzie do kosztu
       suma += brutto
     } else if (p.effective_vat_odliczalny === 'czesciowe_50') {
-      // 50% VAT odliczalne → koszt = netto + 50% VAT
+      // Pojazd mieszany (art.86a VAT + art.23 ust.1 pkt 46a PIT)
+      // 50% VAT nieodliczalne wchodzi do podstawy, całość × 75% reżimu
       const vat = brutto - netto
-      suma += netto + vat * 0.5
-    } else if (p.effective_vat_odliczalny === 'czesciowe_25') {
-      // 25% VAT odliczalne → koszt = netto + 75% VAT
-      const vat = brutto - netto
-      suma += netto + vat * 0.75
+      const vatNieodliczony = vat * 0.5
+      suma += 0.75 * (netto + vatNieodliczony)
     } else {
       // pelny → netto (VAT w pełni odliczony, nie idzie do kosztu)
       suma += netto

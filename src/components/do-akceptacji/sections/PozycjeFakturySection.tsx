@@ -36,7 +36,6 @@ const VAT_OPTIONS = [
   { value: 'pelny', label: '🟢 100%', color: 'bg-green-100 text-green-700 border-green-300' },
   { value: 'brak', label: '🔴 BRAK', color: 'bg-red-100 text-red-700 border-red-300' },
   { value: 'czesciowe_50', label: '🔶 50%', color: 'bg-amber-100 text-amber-700 border-amber-300' },
-  { value: 'czesciowe_25', label: '🔶 25%', color: 'bg-amber-100 text-amber-700 border-amber-300' },
 ] as const
 
 function getKupStyle(status: string | null) {
