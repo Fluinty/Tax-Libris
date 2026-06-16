@@ -22,7 +22,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const supabase = createSupabaseAdmin()
   const { nips } = await getAllowedNips()
 
-  // 1. Fetch all relevant exceptions (pending, pending_review, auto_created today)
+  // 1. Fetch all relevant exceptions (pending + pending_review only)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -31,7 +31,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     supabase
       .from('exceptions_queue_v2')
       .select(`*`)
-      .in('status', ['pending', 'pending_review', 'auto_created']),
+      .in('status', ['pending', 'pending_review']),
     nips
   )
 
@@ -127,9 +127,6 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   // Split into sections
   const pendingReview = typedExceptions.filter(e => e.status === 'pending_review')
   const pending = typedExceptions.filter(e => e.status === 'pending')
-  const autoCreated = typedExceptions.filter(e => 
-    e.status === 'auto_created' && new Date(e.created_at) >= today
-  )
 
   // 2. Fetch all client descriptions for the comboboxes
   // Collect unique NIPs
@@ -277,7 +274,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
           <FakturaListClient 
             pendingReview={pendingReview}
             pending={pending}
-            autoCreated={autoCreated}
+            autoCreated={[]}
             clientOpisyMap={new Map(clientOpisyMapAsArray) as any}
             clientPojazdyMap={clientPojazdyRecord}
           />
