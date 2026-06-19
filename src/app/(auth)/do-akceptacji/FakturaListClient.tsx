@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { FakturaCard } from '@/components/do-akceptacji/FakturaCard'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ListFilter } from 'lucide-react'
@@ -20,6 +21,39 @@ type FilterType = 'all' | 'zakup' | 'sprzedaz'
 
 export function FakturaListClient({ pendingReview, pending, autoCreated, clientOpisyMap, clientPojazdyMap = {} }: FakturaListClientProps) {
   const [filter, setFilter] = useState<FilterType>('all')
+  const router = useRouter()
+
+  // Auto-refresh co 30s — pobiera świeże dane z server component bez przeładowania strony
+  useEffect(() => {
+    const INTERVAL_MS = 30_000
+    let timerId: ReturnType<typeof setInterval> | null = null
+
+    const start = () => {
+      if (timerId) return
+      timerId = setInterval(() => router.refresh(), INTERVAL_MS)
+    }
+
+    const stop = () => {
+      if (timerId) { clearInterval(timerId); timerId = null }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stop()
+      } else {
+        router.refresh() // natychmiast po powrocie na kartę
+        start()
+      }
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [router])
 
   const filterFn = (e: any) => {
     if (filter === 'all') return true
