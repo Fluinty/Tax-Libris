@@ -516,3 +516,18 @@ export async function resetJpkSection(
   }
 }
 
+/**
+ * Pre-check: sprawdź aktualny status faktury w exceptions_queue
+ * PRZED zatwierdzeniem — wykrywa sytuację gdy ktoś zdążył zaksięgować/zatwierdzić.
+ */
+export async function checkExceptionStatus(exceptionId: number): Promise<{ status: string | null }> {
+  const supabase = createSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('exceptions_queue')
+    .select('status')
+    .eq('id', exceptionId)
+    .maybeSingle()
+
+  if (error) throw new Error(`Supabase error: ${error.message}`)
+  return { status: data?.status ?? null }
+}

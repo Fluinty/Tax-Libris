@@ -18,7 +18,8 @@ import {
   approveExceptionFull,
   resolveException,
   ignoreFaktura,
-  addProponowanyToClientOpisy
+  addProponowanyToClientOpisy,
+  checkExceptionStatus
 } from '@/app/(auth)/do-akceptacji/actions'
 import {
   getRodzajZakupuLabel,
@@ -143,32 +144,22 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     if (isSubmitting) return
     setIsSubmitting(true)
 
-    // Pre-check: czy DDK nadal czeka na zaksięgowanie w Rachmistrzu?
-    const nip = exception.client_nip
-    const ddkNr = exception.zapis_id
-    if (nip && ddkNr) {
-      try {
-        const checkRes = await fetch(`/api/check-ddk?nip=${encodeURIComponent(nip)}&ddk=${encodeURIComponent(ddkNr)}`)
-        if (!checkRes.ok) {
-          toast.error('Nie udało się zweryfikować statusu faktury w Rachmistrzu. Spróbuj ponownie.')
-          setIsSubmitting(false)
-          return
-        }
-        const { isPending } = await checkRes.json()
-        if (!isPending) {
-          toast.warning('Ta faktura została już zaksięgowana w Rachmistrzu przez kogoś innego. Odświeżam listę.', { duration: 5000 })
-          router.refresh()
-          setIsSubmitting(false)
-          return
-        }
-      } catch {
-        toast.error('Nie udało się połączyć z Rachmistrz Bridge. Spróbuj ponownie.')
+    // Pre-check: czy status w Supabase nadal pozwala na zatwierdzenie?
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    try {
+      const { status: currentStatus } = await checkExceptionStatus(actionId)
+      if (!currentStatus || !['pending', 'pending_review'].includes(currentStatus)) {
+        toast.warning('Ta faktura ma już inny status (ktoś ją zaksięgował lub zatwierdził). Odświeżam listę.', { duration: 5000 })
+        router.refresh()
         setIsSubmitting(false)
         return
       }
+    } catch {
+      toast.error('Nie udało się zweryfikować statusu faktury. Spróbuj ponownie.')
+      setIsSubmitting(false)
+      return
     }
 
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await approveFaktura(actionId)
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
@@ -183,32 +174,22 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     setShowEditModal(false)
     setIsSubmitting(true)
 
-    // Pre-check DDK (identyczny jak w handleApprove)
-    const nip = exception.client_nip
-    const ddkNr = exception.zapis_id
-    if (nip && ddkNr) {
-      try {
-        const checkRes = await fetch(`/api/check-ddk?nip=${encodeURIComponent(nip)}&ddk=${encodeURIComponent(ddkNr)}`)
-        if (!checkRes.ok) {
-          toast.error('Nie udało się zweryfikować statusu faktury w Rachmistrzu. Spróbuj ponownie.')
-          setIsSubmitting(false)
-          return
-        }
-        const { isPending } = await checkRes.json()
-        if (!isPending) {
-          toast.warning('Ta faktura została już zaksięgowana w Rachmistrzu przez kogoś innego. Odświeżam listę.', { duration: 5000 })
-          router.refresh()
-          setIsSubmitting(false)
-          return
-        }
-      } catch {
-        toast.error('Nie udało się połączyć z Rachmistrz Bridge. Spróbuj ponownie.')
+    // Pre-check status w Supabase
+    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    try {
+      const { status: currentStatus } = await checkExceptionStatus(actionId)
+      if (!currentStatus || !['pending', 'pending_review'].includes(currentStatus)) {
+        toast.warning('Ta faktura ma już inny status (ktoś ją zaksięgował lub zatwierdził). Odświeżam listę.', { duration: 5000 })
+        router.refresh()
         setIsSubmitting(false)
         return
       }
+    } catch {
+      toast.error('Nie udało się zweryfikować statusu faktury. Spróbuj ponownie.')
+      setIsSubmitting(false)
+      return
     }
 
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
     const res = await approveExceptionFull(actionId, kwoty, zapisVat, opis)
     if (res.success) {
       toast.success('Zapisano z edytowanymi kwotami')
