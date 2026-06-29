@@ -29,7 +29,7 @@ async function logAudit(
 }
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
-export async function approveFaktura(exceptionId: number) {
+export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -58,7 +58,7 @@ export async function approveFaktura(exceptionId: number) {
   const { data: pozycjeEditable } = faktura
     ? await supabase
         .from('faktury_pozycje')
-        .select('effective_vat_odliczalny')
+        .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
         .eq('faktura_id', faktura.id)
     : { data: [] as any[] }
 
@@ -70,12 +70,14 @@ export async function approveFaktura(exceptionId: number) {
   // Fallback do ai_kwoty jeśli Monika nie edytowała per-pozycja
   const kwotyDoZapisu = faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna
 
+  const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
+
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
   const { error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
-      resolved_opis: exception.ai_proponowany_opis,
+      resolved_opis: opisDoZapisu,
       final_kwoty_per_kolumna: kwotyDoZapisu,
       final_zapis_vat_data: scalonyVat,
       final_kpir_pojazdowe_data: scalonyPojazd,
@@ -94,7 +96,7 @@ export async function approveFaktura(exceptionId: number) {
       .from('faktury')
       .update({
         status: 'approved',
-        final_opis: exception.ai_proponowany_opis,
+        final_opis: opisDoZapisu,
         final_zapis_vat_data: scalonyVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
@@ -107,7 +109,7 @@ export async function approveFaktura(exceptionId: number) {
     exception_id: exceptionId,
     faktura_id: faktura?.id,
     resolved_by: userEmail,
-    opis: exception.ai_proponowany_opis,
+    opis: opisDoZapisu,
     kwoty: kwotyDoZapisu,
     zapis_vat: scalonyVat,
     source: faktura && 'final_kwoty_per_kolumna' in faktura && faktura.final_kwoty_per_kolumna ? 'monika_edits' : 'ai_default',
@@ -190,7 +192,7 @@ export async function approveExceptionFull(
   const { data: pozycjeEditable } = faktura
     ? await supabase
         .from('faktury_pozycje')
-        .select('effective_vat_odliczalny')
+        .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
         .eq('faktura_id', faktura.id)
     : { data: [] as any[] }
 

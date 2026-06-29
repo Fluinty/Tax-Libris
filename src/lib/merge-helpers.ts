@@ -111,6 +111,16 @@ export function mergeInlineEditsPojazd(exception: any): any {
     }
   }
 
+  // KRYTYCZNE: jeśli Monika jawnie WYŁĄCZYŁA suwak pojazdu (rezim_edited=true,
+  // ale oba final pola = null) → jawne false, NIE fallback na AI
+  if (exception.rezim_edited === true) {
+    return {
+      wydatki_dotycza_pojazdu: false,
+      procent_do_ujecia_w_kosztach: 1,
+      wydatki_pozostale_wartosc_faktury: 0,
+    }
+  }
+
   return aiPojazd || null
 }
 

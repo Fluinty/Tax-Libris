@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -106,6 +107,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [selectedOpis, setSelectedOpis] = useState('')
   const [openCombobox, setOpenCombobox] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  // Pending_review — edytowalny opis (inicjalizowany z AI)
+  const [editableOpis, setEditableOpis] = useState(exception.ai_proponowany_opis || '')
   
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -160,7 +163,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       return
     }
 
-    const res = await approveFaktura(actionId)
+    const res = await approveFaktura(actionId, editableOpis || undefined)
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
       router.refresh()
@@ -813,8 +816,13 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           
           <div className="space-y-3">
             <div>
-              <span className="text-sm font-medium text-[#475569]">Opis księgowy: </span>
-              <span className="text-[#1E293B] font-medium">"{exception.ai_proponowany_opis}"</span>
+              <span className="text-sm font-medium text-[#475569] block mb-1">Opis księgowy:</span>
+              <Input
+                value={editableOpis}
+                onChange={(e) => setEditableOpis(e.target.value)}
+                className="h-9 text-sm font-medium text-[#1E293B] border-slate-200 focus:border-[#4A90E2] focus:ring-[#4A90E2]/20"
+                placeholder="Wpisz opis księgowy..."
+              />
             </div>
             
             <div>
