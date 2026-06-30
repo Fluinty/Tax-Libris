@@ -63,8 +63,8 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     : { data: [] as any[] }
 
   // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
-  const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [])
   const scalonyPojazd = mergeInlineEditsPojazd(exception)
+  const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
   // KLUCZ: użyj final_kwoty_per_kolumna z fluinty.faktury (po triggerze)
   // Fallback do ai_kwoty jeśli Monika nie edytowała per-pozycja
@@ -199,8 +199,10 @@ export async function approveExceptionFull(
   // Scalenie inline edits z modal edits
   // Modal daje finalKwotyPerKolumna + finalZapisVatData + finalOpis
   // Ale GTU/procedury/pojazd mogą być z inline sections — trzeba scalić
-  const baseVat = finalZapisVatData || mergeInlineEditsVat(exception, pozycjeEditable ?? [])
   const scalonyPojazd = mergeInlineEditsPojazd(exception)
+  const baseVat = finalZapisVatData
+    ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
+    : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
   const { error } = await supabase
     .from('exceptions_queue')

@@ -31,6 +31,7 @@ import {
   REZIM_KPIR_LABELS
 } from '@/lib/vat'
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
+import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
 import { PozycjeVatSection } from './sections/PozycjeVatSection'
 import { PojazdRezimSection } from './sections/PojazdRezimSection'
@@ -1163,7 +1164,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           onOpenChange={setShowEditModal}
           initialOpis={exception.ai_proponowany_opis || ''}
           initialKwoty={exception.final_kwoty_per_kolumna || exception.ai_kwoty_per_kolumna || {}}
-          initialZapisVatData={exception.final_zapis_vat_data || exception.zapis_vat_data || null}
+          initialZapisVatData={mergeInlineEditsVat(exception, exception.pozycje_editable, mergeInlineEditsPojazd(exception)) || exception.zapis_vat_data || null}
           kwotaBrutto={exception.kwota_brutto}
           kwotaNetto={exception.zapis_vat_data?.suma_netto ?? null}
           isVatPayer={exception.client?.platnik_vat !== false}

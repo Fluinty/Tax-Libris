@@ -10,7 +10,7 @@ import type { ZapisVATData } from '@/types/database'
  * (gtu_bitmask_final, procedura_jpk_final, etc.) but approveFaktura()
  * never merged them back into final_zapis_vat_data.
  */
-export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[]): ZapisVATData | null {
+export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], scalonyPojazd?: any): ZapisVATData | null {
   const base = exception.final_zapis_vat_data
     || exception.ai_zapis_vat_data
     || exception.zapis_vat_data
@@ -90,34 +90,61 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[]): Za
     }
   }
 
+  // Synchronizacja rodzaj_odliczenia ze scalonym reżimem pojazdu
+  if (scalonyPojazd) {
+    if (scalonyPojazd.wydatki_dotycza_pojazdu === false) {
+      // Jeśli odznaczono pojazd, a wcześniej było odliczenie proporcjonalne (2) dla auta, przywróć całkowite (1)
+      if (Number(merged.rodzaj_odliczenia) === 2) {
+        merged.rodzaj_odliczenia = 1
+      }
+    } else if (scalonyPojazd.wydatki_dotycza_pojazdu === true) {
+      const strat = scalonyPojazd.strategia
+      const rezProc = scalonyPojazd.rezim_proc
+      if (strat === 'pelne_100' || rezProc === '100') {
+        merged.rodzaj_odliczenia = 1 // Całkowite
+      } else if (strat === 'mieszany_50_75' || rezProc === '50_75') {
+        merged.rodzaj_odliczenia = 2 // Proporcjonalne
+      } else if (strat === 'prywatne_20' || rezProc === '20') {
+        merged.rodzaj_odliczenia = 0 // Brak
+      }
+    }
+  }
+
   return merged as ZapisVATData
 }
 
 /**
  * Build final_kpir_pojazdowe_data from inline PojazdRezimSection edits.
- * Previously this was ALWAYS null because approve actions never populated it.
  */
 export function mergeInlineEditsPojazd(exception: any): any {
   const aiPojazd = exception.ai_kpir_pojazdowe_data || exception.kpir_pojazdowe_data
 
-  // If Monika edited inline (pojazd_id_final or rezim_paliwowy_final)
-  if (exception.pojazd_id_final != null || exception.rezim_paliwowy_final != null) {
-    return {
-      ...(aiPojazd || {}),
-      wydatki_dotycza_pojazdu: exception.pojazd_id_final != null,
-      procent_do_ujecia_w_kosztach: mapRezimToProcentEnum(exception.rezim_paliwowy_final),
-      pojazd_id: exception.pojazd_id_final,
-      rezim_proc: exception.rezim_paliwowy_final || '100',
-    }
-  }
-
   // KRYTYCZNE: jeśli Monika jawnie WYŁĄCZYŁA suwak pojazdu (rezim_edited=true,
-  // ale oba final pola = null) → jawne false, NIE fallback na AI
-  if (exception.rezim_edited === true) {
+  // ale oba final pola = null) → jawne false, wyczyszczone pole, NIE fallback na AI
+  if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
     return {
       wydatki_dotycza_pojazdu: false,
       procent_do_ujecia_w_kosztach: 1,
       wydatki_pozostale_wartosc_faktury: 0,
+      strategia: null,
+      pojazd_id: null,
+      rezim_proc: null,
+    }
+  }
+
+  // If Monika edited inline (pojazd_id_final or rezim_paliwowy_final or rezim_edited is true with a regime)
+  if (exception.pojazd_id_final != null || exception.rezim_paliwowy_final != null) {
+    const rezim = exception.rezim_paliwowy_final || (aiPojazd?.strategia === 'pelne_100' ? '100' : aiPojazd?.strategia === 'prywatne_20' ? '20' : '50_75')
+    const procent = mapRezimToProcentEnum(rezim)
+    const strategia = rezim === '100' ? 'pelne_100' : rezim === '20' ? 'prywatne_20' : 'mieszany_50_75'
+
+    return {
+      ...(aiPojazd || {}),
+      wydatki_dotycza_pojazdu: true,
+      procent_do_ujecia_w_kosztach: procent,
+      strategia: strategia,
+      pojazd_id: exception.pojazd_id_final ?? aiPojazd?.pojazd_id ?? null,
+      rezim_proc: rezim,
     }
   }
 

@@ -63,9 +63,10 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   // BUG 2 fix: initialize from kpirPojazdoweData if available
   const workerSaysVehicle = kpirPojazdoweData?.wydatki_dotycza_pojazdu === true
 
-  const effectiveId = pojazdIdFinal ?? aiPojazdId ?? null
-  const effectiveRezim = rezimFinal ?? aiRezim ?? (workerSaysVehicle ? (PROCENT_ENUM_TO_REZIM[kpirPojazdoweData!.procent_do_ujecia_w_kosztach] ?? '50_75') : '50_75')
-  const [enabled, setEnabled] = useState(effectiveId !== null || workerSaysVehicle)
+  const isExplicitFalse = isEdited && pojazdIdFinal === null && rezimFinal === null
+  const effectiveId = isEdited ? (pojazdIdFinal ?? null) : (pojazdIdFinal ?? aiPojazdId ?? null)
+  const effectiveRezim = isEdited ? (rezimFinal ?? '50_75') : (rezimFinal ?? aiRezim ?? (workerSaysVehicle ? (PROCENT_ENUM_TO_REZIM[kpirPojazdoweData!.procent_do_ujecia_w_kosztach] ?? '50_75') : '50_75'))
+  const [enabled, setEnabled] = useState(isExplicitFalse ? false : (isEdited ? true : (effectiveId !== null || workerSaysVehicle)))
   const [selId, setSelId] = useState<number | null>(effectiveId)
   const [selRezim, setSelRezim] = useState(effectiveRezim)
   const [saving, setSaving] = useState(false)
@@ -74,6 +75,45 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   const active = clientPojazdy.filter(p => p.aktywny)
   const archived = clientPojazdy.filter(p => !p.aktywny)
   const selPojazd = clientPojazdy.find(p => p.id === selId)
+
+  const handleSwitchChange = async (v: boolean) => {
+    setEnabled(v)
+    if (!v) setSelId(null)
+    setDirty(true)
+    setSaving(true)
+    await updateJpkSection(exceptionId, {
+      pojazd_id_final: v ? selId : null,
+      rezim_paliwowy_final: v ? selRezim : null,
+      rezim_edited: true
+    })
+    setSaving(false)
+  }
+
+  const handleVehicleChange = async (p: ClientPojazd) => {
+    const newRezim = mapSposobToRezim(p.sposob_rozliczenia)
+    setSelId(p.id)
+    setSelRezim(newRezim)
+    setDirty(true)
+    setSaving(true)
+    await updateJpkSection(exceptionId, {
+      pojazd_id_final: p.id,
+      rezim_paliwowy_final: newRezim,
+      rezim_edited: true
+    })
+    setSaving(false)
+  }
+
+  const handleRezimChange = async (val: string) => {
+    setSelRezim(val)
+    setDirty(true)
+    setSaving(true)
+    await updateJpkSection(exceptionId, {
+      pojazd_id_final: selId,
+      rezim_paliwowy_final: val,
+      rezim_edited: true
+    })
+    setSaving(false)
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -102,7 +142,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
     <CollapsibleJpkSection title="Pojazd i reżim paliwowy" badge={badge} defaultOpen={isEdited || effectiveId !== null || workerSaysVehicle} icon={<Car className="w-4 h-4" />}>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-sm text-slate-700">Faktura dotyczy pojazdu?</span>
-        <Switch checked={enabled} onCheckedChange={v => { setEnabled(v); if (!v) setSelId(null); setDirty(true) }} disabled={readOnly} size="sm" />
+        <Switch checked={enabled} onCheckedChange={handleSwitchChange} disabled={readOnly || saving} size="sm" />
       </div>
       {enabled && (
         <div className="space-y-4">
@@ -153,7 +193,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
               <div className="space-y-1">
                 {[...active, ...archived].map(p => (
                   <label key={p.id} className={cn("flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors", selId === p.id ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300", !p.aktywny && "opacity-60")}>
-                    <input type="radio" name={`pojazd-${exceptionId}`} checked={selId === p.id} onChange={() => { setSelId(p.id); setSelRezim(mapSposobToRezim(p.sposob_rozliczenia)); setDirty(true) }} disabled={readOnly} className="accent-[#4A90E2]" />
+                    <input type="radio" name={`pojazd-${exceptionId}`} checked={selId === p.id} onChange={() => handleVehicleChange(p)} disabled={readOnly || saving} className="accent-[#4A90E2]" />
                     <div className="text-sm">
                       <span className="font-medium text-slate-800">{p.marka_model || 'Pojazd'}</span>
                       <span className="text-slate-500 ml-2">{p.nr_rejestracyjny}</span>
@@ -171,7 +211,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
             <div className="space-y-1">
               {REZIM_OPTIONS.map(o => (
                 <label key={o.value} className={cn("flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors", selRezim === o.value ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300")}>
-                  <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => { setSelRezim(o.value); setDirty(true) }} disabled={readOnly} className="accent-[#4A90E2] mt-0.5" />
+                  <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => handleRezimChange(o.value)} disabled={readOnly || saving} className="accent-[#4A90E2] mt-0.5" />
                   <div><div className="text-sm font-medium text-slate-800">{o.label}</div><div className="text-xs text-slate-500">{o.desc}</div></div>
                 </label>
               ))}
