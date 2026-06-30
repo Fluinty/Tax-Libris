@@ -12,11 +12,19 @@ export interface SearchData {
 export async function getGlobalSearchData(): Promise<SearchData> {
   const supabase = createSupabaseAdmin()
 
-  // Klienci
+  // Pobierz NIP-y ryczałtowców do wykluczenia
+  const { data: ryczaltData } = await supabase
+    .from('clients')
+    .select('nip')
+    .eq('forma_opodatkowania', 'ryczalt')
+  const ryczaltNips = new Set((ryczaltData ?? []).map(c => c.nip))
+
+  // Klienci (bez ryczałtowców)
   const { data: clientsData } = await supabase
     .from('clients')
     .select('nip, nazwa')
     .eq('aktywny', true)
+    .neq('forma_opodatkowania', 'ryczalt')
 
   const clients = clientsData || []
   const clientMap = new Map(clients.map(c => [c.nip, c.nazwa]))
@@ -27,12 +35,14 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .select('id, opis, client_nip')
     .eq('aktywny', true)
 
-  const opisy = (opisyData || []).map(o => ({
-    id: o.id,
-    opis: o.opis,
-    client_nip: o.client_nip,
-    client_nazwa: clientMap.get(o.client_nip) || 'Nieznany',
-  }))
+  const opisy = (opisyData || [])
+    .filter(o => !ryczaltNips.has(o.client_nip))
+    .map(o => ({
+      id: o.id,
+      opis: o.opis,
+      client_nip: o.client_nip,
+      client_nazwa: clientMap.get(o.client_nip) || 'Nieznany',
+    }))
 
   // Pojazdy
   const { data: pojazdyData } = await supabase
@@ -40,12 +50,14 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .select('id, nr_rejestracyjny, client_nip')
     .eq('aktywny', true)
 
-  const pojazdy = (pojazdyData || []).map(p => ({
-    id: p.id,
-    nr_rejestracyjny: p.nr_rejestracyjny,
-    client_nip: p.client_nip,
-    client_nazwa: clientMap.get(p.client_nip) || 'Nieznany',
-  }))
+  const pojazdy = (pojazdyData || [])
+    .filter(p => !ryczaltNips.has(p.client_nip))
+    .map(p => ({
+      id: p.id,
+      nr_rejestracyjny: p.nr_rejestracyjny,
+      client_nip: p.client_nip,
+      client_nazwa: clientMap.get(p.client_nip) || 'Nieznany',
+    }))
 
   // KSeF (distinct z wyjątków, żeby nie przeciążać bierzemy najnowsze np. 1000)
   const { data: ksefData } = await supabase
@@ -58,7 +70,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
   // deduplikacja po numer_ksef
   const ksefMap = new Map()
   for (const row of ksefData || []) {
-    if (row.numer_ksef && !ksefMap.has(row.numer_ksef)) {
+    if (row.numer_ksef && !ksefMap.has(row.numer_ksef) && !ryczaltNips.has(row.client_nip)) {
       ksefMap.set(row.numer_ksef, {
         numer_ksef: row.numer_ksef,
         client_nip: row.client_nip,

@@ -5,7 +5,7 @@ import type { ClientWithCounts } from '@/types/database'
 
 export default async function KlienciPage() {
   const supabase = createSupabaseAdmin()
-  const { nips, isAdmin } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips } = await getAllowedNips()
 
   // Fetch active clients (filtered by allowed NIPs)
   let clientsQuery = supabase
@@ -13,13 +13,13 @@ export default async function KlienciPage() {
     .select('*')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip')
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
 
   const { data: clients } = await clientsQuery
 
   // Fetch rules count per client
   let rulesCountQuery = supabase.from('rules').select('client_nip')
-  rulesCountQuery = applyNipFilter(rulesCountQuery, nips)
+  rulesCountQuery = applyNipFilter(rulesCountQuery, nips, 'client_nip', ryczaltNips)
   const { data: rulesCounts } = await rulesCountQuery
 
   // Fetch pending exceptions count per client
@@ -27,7 +27,7 @@ export default async function KlienciPage() {
     .from('exceptions_queue')
     .select('client_nip')
     .in('status', ['pending', 'pending_review'])
-  excCountQuery = applyNipFilter(excCountQuery, nips)
+  excCountQuery = applyNipFilter(excCountQuery, nips, 'client_nip', ryczaltNips)
   const { data: exceptionsCounts } = await excCountQuery
 
   // Aggregate counts

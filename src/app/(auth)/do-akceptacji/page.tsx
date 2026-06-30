@@ -20,7 +20,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const params = await searchParams
   const typFilter = params.typ ?? 'all'
   const supabase = createSupabaseAdmin()
-  const { nips } = await getAllowedNips()
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // 1. Fetch all relevant exceptions (pending + pending_review only)
   const today = new Date()
@@ -32,7 +32,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .from('exceptions_queue_v2')
       .select(`*`)
       .in('status', ['pending', 'pending_review']),
-    nips
+    nips,
+    'client_nip',
+    ryczaltNips
   )
 
   if (typFilter === 'zakup' || typFilter === 'sprzedaz') {
@@ -169,7 +171,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .from('exceptions_queue_v2')
       .select('status, ai_confidence, created_at')
       .gte('created_at', today.toISOString()),
-    nips
+    nips,
+    'client_nip',
+    ryczaltNips
   )
 
   const todayStats = todayStatsData ?? []
@@ -188,7 +192,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .from('exceptions_queue_v2')
       .select('client_nip, typ_dokumentu, ai_proponowany_opis')
       .in('status', ['pending', 'pending_review']),
-    nips
+    nips,
+    'client_nip',
+    ryczaltNips
   )
 
   const filteredItemsForSidebar = allPendingItems ?? []

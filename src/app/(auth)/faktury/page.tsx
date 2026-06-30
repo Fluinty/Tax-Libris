@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function FakturyPage() {
   const adminSupabase = createSupabaseAdmin()
-  const { nips } = await getAllowedNips()
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // Pobierz ostatnie 100 operacji związanych z fakturami (filtered by allowed NIPs)
   let logsQuery = adminSupabase
@@ -17,7 +17,7 @@ export default async function FakturyPage() {
     .in('action', ['auto_create_full', 'set_opis', 'exception', 'error'])
     .order('timestamp', { ascending: false })
     .limit(100)
-  logsQuery = applyNipFilter(logsQuery, nips)
+  logsQuery = applyNipFilter(logsQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: logs } = await logsQuery
 

@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const selectedPeriod = params.period ?? '7d'
   const days = periodToDays(selectedPeriod)
   const supabase = createSupabaseAdmin()
-  const { nips } = await getAllowedNips()
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // ========== METRICS ==========
 
@@ -51,7 +51,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (selectedClient) auditQuery = auditQuery.eq('client_nip', selectedClient)
   if (days) auditQuery = auditQuery.gte('timestamp', formatDateSQL(days))
   auditQuery = auditQuery.in('action', ['set_opis', 'exception'])
-  auditQuery = applyNipFilter(auditQuery, nips)
+  auditQuery = applyNipFilter(auditQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: auditActions } = await auditQuery
 
@@ -74,7 +74,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .gte('timestamp', formatDateSQL(days * 2))
       .lt('timestamp', formatDateSQL(days))
       .in('action', ['set_opis', 'exception'])
-    prevQuery = applyNipFilter(prevQuery, nips)
+    prevQuery = applyNipFilter(prevQuery, nips, 'client_nip', ryczaltNips)
 
     const { data: prevActions } = await prevQuery
     const prevSetOpis = (prevActions ?? []).filter(a => a.action === 'set_opis').length
@@ -91,7 +91,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .from('rules')
     .select('id', { count: 'exact' })
   if (selectedClient) rulesQuery = rulesQuery.eq('client_nip', selectedClient)
-  rulesQuery = applyNipFilter(rulesQuery, nips)
+  rulesQuery = applyNipFilter(rulesQuery, nips, 'client_nip', ryczaltNips)
   const { count: activeRules } = await rulesQuery
 
   // Rules trend (created in this period)
@@ -102,7 +102,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .select('id', { count: 'exact' })
       .gte('created_at', formatDateSQL(days))
     if (selectedClient) newRulesQuery = newRulesQuery.eq('client_nip', selectedClient)
-    newRulesQuery = applyNipFilter(newRulesQuery, nips)
+    newRulesQuery = applyNipFilter(newRulesQuery, nips, 'client_nip', ryczaltNips)
     const { count: newRules } = await newRulesQuery
     rulesTrend = newRules ?? 0
   }
@@ -113,7 +113,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('id', { count: 'exact' })
     .in('status', ['pending', 'pending_review'])
   if (selectedClient) pendingQuery = pendingQuery.eq('client_nip', selectedClient)
-  pendingQuery = applyNipFilter(pendingQuery, nips)
+  pendingQuery = applyNipFilter(pendingQuery, nips, 'client_nip', ryczaltNips)
   const { count: pendingExceptions } = await pendingQuery
 
   // Pending trend
@@ -125,7 +125,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .eq('status', 'pending')
       .lte('created_at', formatDateSQL(days))
     if (selectedClient) prevPendingQuery = prevPendingQuery.eq('client_nip', selectedClient)
-    prevPendingQuery = applyNipFilter(prevPendingQuery, nips)
+    prevPendingQuery = applyNipFilter(prevPendingQuery, nips, 'client_nip', ryczaltNips)
     const { count: prevPending } = await prevPendingQuery
     exceptionsTrend = (pendingExceptions ?? 0) - (prevPending ?? 0)
   }
@@ -149,7 +149,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (days) chartQuery = chartQuery.gte('timestamp', formatDateSQL(days))
   chartQuery = chartQuery.in('action', ['set_opis', 'exception'])
   chartQuery = chartQuery.order('timestamp', { ascending: true })
-  chartQuery = applyNipFilter(chartQuery, nips)
+  chartQuery = applyNipFilter(chartQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: chartRaw } = await chartQuery
 
@@ -176,7 +176,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('client_nip, action')
   if (days) topClientsQuery = topClientsQuery.gte('timestamp', formatDateSQL(days))
   topClientsQuery = topClientsQuery.in('action', ['set_opis', 'exception'])
-  topClientsQuery = applyNipFilter(topClientsQuery, nips)
+  topClientsQuery = applyNipFilter(topClientsQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: topClientsRaw } = await topClientsQuery
 
@@ -186,7 +186,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('nip, nazwa')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip')
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
 
   const { data: allClients } = await clientsQuery
 
@@ -218,7 +218,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .order('hit_count', { ascending: false })
     .limit(10)
   if (selectedClient) topRulesQuery = topRulesQuery.eq('client_nip', selectedClient)
-  topRulesQuery = applyNipFilter(topRulesQuery, nips)
+  topRulesQuery = applyNipFilter(topRulesQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: topRulesRaw } = await topRulesQuery
 
@@ -238,7 +238,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .limit(20)
   if (selectedClient) recentQuery = recentQuery.eq('client_nip', selectedClient)
   if (days) recentQuery = recentQuery.gte('timestamp', formatDateSQL(days))
-  recentQuery = applyNipFilter(recentQuery, nips)
+  recentQuery = applyNipFilter(recentQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: recentRaw } = await recentQuery
 

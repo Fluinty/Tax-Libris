@@ -20,7 +20,7 @@ export default async function RegulyPage({ searchParams }: PageProps) {
   const currentPage = Math.max(1, parseInt(params.page ?? '1', 10))
   const typFilter = params.typ ?? 'zakup'
   const supabase = createSupabaseAdmin()
-  const { nips } = await getAllowedNips()
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // Build query
   let query = supabase
@@ -54,7 +54,7 @@ export default async function RegulyPage({ searchParams }: PageProps) {
   }
 
   // NIP filter
-  query = applyNipFilter(query, nips)
+  query = applyNipFilter(query, nips, 'client_nip', ryczaltNips)
 
   // Sort by hit_count DESC, then created_at DESC
   query = query
@@ -82,14 +82,14 @@ export default async function RegulyPage({ searchParams }: PageProps) {
     .from('rules')
     .select('id', { count: 'exact', head: true })
     .or('typ_dokumentu.eq.zakup,typ_dokumentu.is.null')
-  zakupCountQuery = applyNipFilter(zakupCountQuery, nips)
+  zakupCountQuery = applyNipFilter(zakupCountQuery, nips, 'client_nip', ryczaltNips)
   const { count: zakupCount } = await zakupCountQuery
 
   let sprzedazCountQuery = supabase
     .from('rules')
     .select('id', { count: 'exact', head: true })
     .eq('typ_dokumentu', 'sprzedaz')
-  sprzedazCountQuery = applyNipFilter(sprzedazCountQuery, nips)
+  sprzedazCountQuery = applyNipFilter(sprzedazCountQuery, nips, 'client_nip', ryczaltNips)
   const { count: sprzedazCount } = await sprzedazCountQuery
 
   // Fetch all active clients for dropdown filter (filtered by NIP)
@@ -98,7 +98,7 @@ export default async function RegulyPage({ searchParams }: PageProps) {
     .select('nip, nazwa')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip')
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
   const { data: clients } = await clientsQuery
 
   // Fetch unique rule descriptions for autocomplete (for edit modal)
@@ -106,7 +106,7 @@ export default async function RegulyPage({ searchParams }: PageProps) {
     .from('rules')
     .select('opis_zdarzenia, hit_count')
     .order('hit_count', { ascending: false })
-  descQuery = applyNipFilter(descQuery, nips)
+  descQuery = applyNipFilter(descQuery, nips, 'client_nip', ryczaltNips)
   const { data: allDescriptions } = await descQuery
 
   const uniqueDescriptions = Array.from(

@@ -12,9 +12,13 @@ import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ nip: string }> }) {
   const { nip } = await params
-  const { nips, isAdmin } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips } = await getAllowedNips()
 
   // Authorization check: non-admin can only view their assigned NIPs
+  // Also block ryczalt clients for everyone
+  if (ryczaltNips.includes(nip)) {
+    notFound()
+  }
   if (!isAdmin && nips && !nips.includes(nip)) {
     notFound()
   }

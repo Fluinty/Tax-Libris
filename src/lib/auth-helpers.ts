@@ -9,12 +9,16 @@ import type { PanelUser } from '@/types/database'
  * - Admin (biuro_klienci_nipy IS NULL) → returns { nips: null, isAdmin: true }
  * - Ksiegowa/klient → returns { nips: [...], isAdmin: false }
  * - Not authenticated → redirects to /login
+ * 
+ * Also fetches NIP-y klientów na ryczałcie (forma_opodatkowania='ryczalt')
+ * do wykluczenia z UI — ryczałtowcy nie są obsługiwani przez system.
  */
 export async function getAllowedNips(): Promise<{
   nips: string[] | null
   isAdmin: boolean
   email: string
   panelUser: PanelUser
+  ryczaltNips: string[]
 }> {
   const supabase = await createSupabaseServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -37,31 +41,53 @@ export async function getAllowedNips(): Promise<{
     redirect('/login')
   }
 
+  // Pobierz NIP-y klientów na ryczałcie — wykluczani z całego panelu
+  const { data: ryczaltClients } = await admin
+    .from('clients')
+    .select('nip')
+    .eq('forma_opodatkowania', 'ryczalt')
+  const ryczaltNips = (ryczaltClients ?? []).map(c => c.nip)
+
   const isAdmin = panelUser.biuro_klienci_nipy === null
+
+  // Dla nie-adminów: usuń ryczałtowców z listy dozwolonych NIP-ów
+  let finalNips = panelUser.biuro_klienci_nipy
+  if (finalNips && ryczaltNips.length > 0) {
+    finalNips = finalNips.filter((n: string) => !ryczaltNips.includes(n))
+  }
   
   return {
-    nips: panelUser.biuro_klienci_nipy,
+    nips: finalNips,
     isAdmin,
     email: user.email,
     panelUser: panelUser as PanelUser,
+    ryczaltNips,
   }
 }
 
 /**
  * Apply NIP filter to a Supabase query builder.
- * If admin (nips === null), does nothing (shows all).
- * If non-admin, adds .in('client_nip', nips) filter.
+ * If admin (nips === null), only excludes ryczalt clients.
+ * If non-admin, adds .in('client_nip', nips) filter (ryczalt already removed from nips).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function applyNipFilter<T extends any>(
   query: T,
   nips: string[] | null,
-  column: string = 'client_nip'
+  column: string = 'client_nip',
+  ryczaltNips: string[] = []
 ): T {
-  if (nips === null) return query // admin sees all
+  if (nips === null) {
+    // Admin sees all EXCEPT ryczałtowców
+    if (ryczaltNips.length > 0) {
+      return (query as any).not(column, 'in', `(${ryczaltNips.join(',')})`)
+    }
+    return query
+  }
   if (nips.length === 0) {
     // Edge case: user has no NIPs assigned — show nothing
     return (query as any).in(column, ['__no_access__'])
   }
+  // Non-admin: ryczalt already filtered out of nips in getAllowedNips
   return (query as any).in(column, nips)
 }

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function LogsPage() {
   const adminSupabase = createSupabaseAdmin()
-  const { nips } = await getAllowedNips()
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // Pobierz ostatnie logi globalnie (filtered by allowed NIPs)
   let logsQuery = adminSupabase
@@ -14,7 +14,7 @@ export default async function LogsPage() {
     .select('*, clients(nazwa)')
     .order('changed_at', { ascending: false })
     .limit(100)
-  logsQuery = applyNipFilter(logsQuery, nips)
+  logsQuery = applyNipFilter(logsQuery, nips, 'client_nip', ryczaltNips)
 
   const { data: logs } = await logsQuery
 
