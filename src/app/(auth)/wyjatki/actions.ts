@@ -3,15 +3,22 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { assertCanWrite } from '@/lib/auth-helpers'
 
 export async function resolveException(
   exceptionId: number,
   opis: string,
   isPattern: boolean
 ) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const supabaseAuth = await createSupabaseServerClient()
   const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) throw new Error('Nie jesteś zalogowany')
+  if (!user) return { success: false, error: 'Nie jesteś zalogowany' }
 
   const supabase = createSupabaseAdmin()
 
@@ -23,7 +30,7 @@ export async function resolveException(
     .single()
 
   if (excError || !exc) {
-    throw new Error('Nie znaleziono wyjątku')
+    return { success: false, error: 'Nie znaleziono wyjątku' }
   }
 
   // 2. Stwórz regułę (lub UPDATE jeśli istnieje)
@@ -47,11 +54,11 @@ export async function resolveException(
     .single()
 
   if (ruleError || !rule) {
-    throw new Error(`Błąd tworzenia reguły: ${ruleError?.message}`)
+    return { success: false, error: `Błąd tworzenia reguły: ${ruleError?.message}` }
   }
 
   // 3. Update exception
-  const { error: updateError } = await supabase
+  const { data: updatedQueue, error: updateError } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'resolved',
@@ -61,9 +68,14 @@ export async function resolveException(
       rule_created_id: rule.id,
     })
     .eq('id', exceptionId)
+    .in('status', ['pending_review', 'pending'])
+    .select('id')
 
   if (updateError) {
-    throw new Error(`Błąd aktualizacji wyjątku: ${updateError.message}`)
+    return { success: false, error: `Błąd aktualizacji wyjątku: ${updateError.message}` }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
   // 4. Audit log
@@ -87,9 +99,15 @@ export async function resolveException(
 }
 
 export async function ignoreException(exceptionId: number) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const supabaseAuth = await createSupabaseServerClient()
   const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) throw new Error('Nie jesteś zalogowany')
+  if (!user) return { success: false, error: 'Nie jesteś zalogowany' }
 
   const supabase = createSupabaseAdmin()
 
@@ -110,7 +128,7 @@ export async function ignoreException(exceptionId: number) {
     .eq('id', exceptionId)
 
   if (error) {
-    throw new Error(`Błąd pomijania wyjątku: ${error.message}`)
+    return { success: false, error: `Błąd pomijania wyjątku: ${error.message}` }
   }
 
   // Audit log
@@ -166,9 +184,15 @@ export async function toggleAutoWrite(clientNip: string, enabled: boolean) {
 export async function addProponowanyToClientOpisy(
   exceptionId: number
 ) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const supabaseAuth = await createSupabaseServerClient()
   const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) throw new Error('Nie jesteś zalogowany')
+  if (!user) return { success: false, error: 'Nie jesteś zalogowany' }
   const userEmail = user.email ?? 'unknown'
 
   const supabase = createSupabaseAdmin()

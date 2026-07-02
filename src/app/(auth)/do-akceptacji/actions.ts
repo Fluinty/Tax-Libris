@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
+import { assertCanWrite } from '@/lib/auth-helpers'
 
 // Helper to get authenticated user email
 async function getUserEmail(): Promise<string> {
@@ -30,6 +31,12 @@ async function logAudit(
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -73,7 +80,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
 
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
-  const { error } = await supabase
+  const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
@@ -85,9 +92,14 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
       resolved_at: new Date().toISOString()
     })
     .eq('id', exceptionId)
+    .in('status', ['pending_review', 'pending'])
+    .select('id')
 
   if (error) {
     return { success: false, error: error.message }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
   // Sync też do fluinty.faktury (audit + future migration off exceptions_queue)
@@ -122,6 +134,12 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
 
 // ZATWIERDŹ Z EDYCJĄ (dla pending_review - gdy księgowa zmieni kwoty lub opis - WERSJA LEGACY)
 export async function approveWithEdit(exceptionId: number, opis: string, kwoty: Record<string, number>) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -135,7 +153,7 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { error } = await supabase
+  const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
@@ -145,9 +163,14 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
       resolved_at: new Date().toISOString()
     })
     .eq('id', exceptionId)
+    .in('status', ['pending_review', 'pending'])
+    .select('id')
 
   if (error) {
     return { success: false, error: error.message }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
   await logAudit(supabase, 'approved_with_edit', exception.client_nip, exception.zapis_id, {
@@ -169,6 +192,12 @@ export async function approveExceptionFull(
   finalZapisVatData: any,
   finalOpis: string
 ) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -204,7 +233,7 @@ export async function approveExceptionFull(
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
-  const { error } = await supabase
+  const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'approved',
@@ -216,9 +245,14 @@ export async function approveExceptionFull(
       resolved_at: new Date().toISOString()
     })
     .eq('id', exceptionId)
+    .in('status', ['pending_review', 'pending'])
+    .select('id')
 
   if (error) {
     return { success: false, error: error.message }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
   // Sync też do fluinty.faktury
@@ -255,6 +289,12 @@ export async function updateFinalZapisVAT(
   exceptionId: number,
   zapisVatData: any
 ) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
   
@@ -289,6 +329,12 @@ export async function updateFinalZapisVAT(
 
 // ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
 export async function resolveException(exceptionId: number, opis: string) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -302,7 +348,7 @@ export async function resolveException(exceptionId: number, opis: string) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { error } = await supabase
+  const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
       status: 'resolved',
@@ -311,9 +357,14 @@ export async function resolveException(exceptionId: number, opis: string) {
       resolved_at: new Date().toISOString()
     })
     .eq('id', exceptionId)
+    .in('status', ['pending_review', 'pending'])
+    .select('id')
 
   if (error) {
     return { success: false, error: error.message }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
   await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id, {
@@ -329,6 +380,12 @@ export async function resolveException(exceptionId: number, opis: string) {
 
 // POMIŃ
 export async function ignoreFaktura(exceptionId: number) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -366,6 +423,12 @@ export async function ignoreFaktura(exceptionId: number) {
 
 // DODAJ PROPOZYCJĘ DO LISTY KLIENTA (reuse z sesji 5)
 export async function addProponowanyToClientOpisy(exceptionId: number) {
+  try {
+    await assertCanWrite(exceptionId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -442,12 +505,26 @@ const RESET_FIELDS: Record<string, Record<string, unknown>> = {
   gtu: { gtu_bitmask_final: null, gtu_edited_by_user: false },
 }
 
+const ALLOWED_JPK_KEYS = [
+  'gtu_bitmask_final', 'gtu_edited_by_user',
+  'procedura_jpk_final', 'typ_dokumentu_jpk_final', 'jpk_procedury_edited',
+  'pozycje_vat_final', 'pozycje_vat_edited',
+  'pojazd_id_final', 'rezim_paliwowy_final', 'rezim_edited'
+]
+
 // Generic update for any JPK section — pass the exact columns to SET
 export async function updateJpkSection(
   exceptionId: number,
   data: Record<string, unknown>
 ) {
   try {
+    await assertCanWrite(exceptionId)
+    for (const key of Object.keys(data)) {
+      if (!ALLOWED_JPK_KEYS.includes(key)) {
+        return { success: false, error: `Niedozwolony klucz: ${key}` }
+      }
+    }
+
     const userEmail = await getUserEmail()
     const supabase = createSupabaseAdmin()
 
@@ -486,6 +563,7 @@ export async function resetJpkSection(
   section: 'vat' | 'rezim' | 'procedury' | 'gtu'
 ) {
   try {
+    await assertCanWrite(exceptionId)
     const fields = RESET_FIELDS[section]
     if (!fields) return { success: false, error: `Nieznana sekcja: ${section}` }
 

@@ -91,3 +91,29 @@ export function applyNipFilter<T extends any>(
   // Non-admin: ryczalt already filtered out of nips in getAllowedNips
   return (query as any).in(column, nips)
 }
+
+/**
+ * Verify that the currently authenticated user has write permission for the given exceptionId.
+ */
+export async function assertCanWrite(exceptionId: number) {
+  const { nips, isAdmin, panelUser } = await getAllowedNips()
+  if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
+  const admin = createSupabaseAdmin()
+  const { data } = await admin.from('exceptions_queue').select('client_nip,status').eq('id', exceptionId).single()
+  if (!data) throw new Error('Nie znaleziono faktury')
+  if (!isAdmin && !nips?.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  return data
+}
+
+/**
+ * Verify that the currently authenticated user has write permission for the given pozycjaId.
+ */
+export async function assertCanWritePozycja(pozycjaId: number) {
+  const { nips, isAdmin, panelUser } = await getAllowedNips()
+  if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
+  const admin = createSupabaseAdmin()
+  const { data } = await admin.from('faktury_pozycje').select('client_nip, faktura_id').eq('id', pozycjaId).single()
+  if (!data) throw new Error('Nie znaleziono pozycji')
+  if (!isAdmin && !nips?.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  return data
+}

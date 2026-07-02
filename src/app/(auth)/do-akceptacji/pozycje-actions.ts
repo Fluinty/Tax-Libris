@@ -3,6 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { assertCanWritePozycja } from '@/lib/auth-helpers'
 
 async function getUserEmail(): Promise<string> {
   const supabase = await createSupabaseServerClient()
@@ -30,6 +31,13 @@ export async function updatePozycjaWymiar(
   nowaWartosc: string | number,
   podstawaPrawna?: string
 ) {
+  let poz: { client_nip: string; faktura_id: number | null }
+  try {
+    poz = await assertCanWritePozycja(pozycjaId)
+  } catch (e: unknown) {
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
@@ -39,15 +47,6 @@ export async function updatePozycjaWymiar(
   if (podstawaPrawna !== undefined) {
     updates.final_podstawa_prawna = podstawaPrawna
   }
-
-  // Fetch client_nip and faktura_id to use in audit log
-  const { data: poz } = await supabase
-    .from('faktury_pozycje')
-    .select('client_nip, faktura_id')
-    .eq('id', pozycjaId)
-    .single()
-
-  if (!poz) return { success: false, error: 'Pozycja nie istnieje' }
 
   const { error } = await supabase
     .from('faktury_pozycje')
