@@ -98,19 +98,30 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
         merged.rodzaj_odliczenia = 1
       }
     } else if (scalonyPojazd.wydatki_dotycza_pojazdu === true) {
-      const strat = scalonyPojazd.strategia
-      const rezProc = scalonyPojazd.rezim_proc
-      if (strat === 'pelne_100' || rezProc === '100') {
+      const inputRezim = scalonyPojazd.rezim_proc ?? scalonyPojazd.strategia
+      const norm = normalizujRezim(inputRezim)
+      if (norm === '100') {
         merged.rodzaj_odliczenia = 1 // Całkowite
-      } else if (strat === 'mieszany_50_75' || rezProc === '50_75') {
+        merged.sposob_naliczania_kwoty_do_odliczenia = 0
+      } else if (norm === '50_75' || norm === '20') {
         merged.rodzaj_odliczenia = 2 // Proporcjonalne
-      } else if (strat === 'prywatne_20' || rezProc === '20') {
-        merged.rodzaj_odliczenia = 0 // Brak
+        merged.sposob_naliczania_kwoty_do_odliczenia = 1
+      } else if (norm === null) {
+        console.warn('Nieznana wartość reżimu w mergeInlineEditsVat:', inputRezim)
       }
     }
   }
 
   return merged as ZapisVATData
+}
+
+export function normalizujRezim(v: string | null | undefined): '100' | '50_75' | '20' | null {
+  if (!v) return null
+  const s = String(v).toLowerCase().trim()
+  if (['100', '100%', 'pelne_100', 'sluzbowy_100_100', 'ciezarowy_100_100'].includes(s)) return '100'
+  if (['50_75', '75%', '75', 'mieszany_50_75'].includes(s)) return '50_75'
+  if (['20', '20%', 'prywatne_20', 'prywatny_50_20'].includes(s)) return '20'
+  return null
 }
 
 /**
@@ -123,6 +134,7 @@ export function mergeInlineEditsPojazd(exception: any): any {
   // ale oba final pola = null) → jawne false, wyczyszczone pole, NIE fallback na AI
   if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
     return {
+      ...(aiPojazd || {}),
       wydatki_dotycza_pojazdu: false,
       procent_do_ujecia_w_kosztach: 1,
       wydatki_pozostale_wartosc_faktury: 0,
@@ -134,9 +146,14 @@ export function mergeInlineEditsPojazd(exception: any): any {
 
   // If Monika edited inline (pojazd_id_final or rezim_paliwowy_final or rezim_edited is true with a regime)
   if (exception.pojazd_id_final != null || exception.rezim_paliwowy_final != null) {
-    const rezim = exception.rezim_paliwowy_final || (aiPojazd?.strategia === 'pelne_100' ? '100' : aiPojazd?.strategia === 'prywatne_20' ? '20' : '50_75')
-    const procent = mapRezimToProcentEnum(rezim)
-    const strategia = rezim === '100' ? 'pelne_100' : rezim === '20' ? 'prywatne_20' : 'mieszany_50_75'
+    const inputRezim = exception.rezim_paliwowy_final !== null ? exception.rezim_paliwowy_final : (aiPojazd?.rezim_proc ?? aiPojazd?.strategia)
+    const norm = normalizujRezim(inputRezim)
+    if (norm === null) {
+      console.warn('Nieznana wartość reżimu w mergeInlineEditsPojazd (inline edit):', inputRezim)
+      return aiPojazd || null
+    }
+    const procent = mapRezimToProcentEnum(norm)
+    const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatne_20' : 'mieszany_50_75'
 
     return {
       ...(aiPojazd || {}),
@@ -144,14 +161,33 @@ export function mergeInlineEditsPojazd(exception: any): any {
       procent_do_ujecia_w_kosztach: procent,
       strategia: strategia,
       pojazd_id: exception.pojazd_id_final ?? aiPojazd?.pojazd_id ?? null,
-      rezim_proc: rezim,
+      rezim_proc: norm,
+    }
+  }
+
+  if (aiPojazd && aiPojazd.wydatki_dotycza_pojazdu === true) {
+    const inputRezim = aiPojazd.rezim_proc ?? aiPojazd.strategia
+    if (inputRezim) {
+      const norm = normalizujRezim(inputRezim)
+      if (norm === null) {
+        console.warn('Nieznana wartość reżimu w mergeInlineEditsPojazd (AI fallback):', inputRezim)
+        return aiPojazd
+      }
+      const procent = mapRezimToProcentEnum(norm)
+      const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatne_20' : 'mieszany_50_75'
+      return {
+        ...aiPojazd,
+        procent_do_ujecia_w_kosztach: procent,
+        strategia: strategia,
+        rezim_proc: norm,
+      }
     }
   }
 
   return aiPojazd || null
 }
 
-function mapRezimToProcentEnum(rezim: string | null): number {
+function mapRezimToProcentEnum(rezim: '100' | '50_75' | '20'): number {
   if (rezim === '100') return 0
   if (rezim === '20') return 2
   return 1 // default '50_75'

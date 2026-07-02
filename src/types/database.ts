@@ -392,11 +392,18 @@ export interface ClientPojazd {
   nr_rejestracyjny: string;
   marka_model: string | null;
   nr_umowy_leasingu: string | null;
-  sposob_rozliczenia: 'pelne_100' | 'mieszane_50' | 'mieszane_75_50' | 'wynajem_75' | 'inne';
+  sposob_rozliczenia: string;
   aktywny: boolean;
   data_dodania: string;
   data_zakonczenia: string | null;
   notatki: string | null;
+  sposob_rozliczenia_enum: 0 | 1 | 2 | null;
+  forma_wlasnosci: 'firmowy_st' | 'leasing' | 'najem_dlugoterminowy' | 'najem_krotkoterminowy' | 'prywatny_wspolnika' | 'uzyczenie' | null;
+  typ_pojazdu: 'osobowy' | 'ciezarowy' | 'motocykl' | 'inny' | null;
+  zastosowanie: 'mieszane' | 'tylko_firmowe' | null;
+  ewidencja_przebiegu: boolean | null;
+  wartosc_netto_zakupu: number | null;
+  data_rozpoczecia_uzytkowania: string | null;
 }
 
 
