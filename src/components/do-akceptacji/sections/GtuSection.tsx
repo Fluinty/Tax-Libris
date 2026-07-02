@@ -23,6 +23,7 @@ interface Props {
 export function GtuSection({ exceptionId, gtuBitmask, gtuSources, gtuBitmaskFinal, isEdited, readOnly = false }: Props) {
   const effectiveBitmask = gtuBitmaskFinal ?? gtuBitmask ?? 0
   const [bitmask, setBitmask] = useState(effectiveBitmask)
+  const [savedBitmask, setSavedBitmask] = useState(effectiveBitmask)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [localEdited, setLocalEdited] = useState(false)
@@ -42,18 +43,62 @@ export function GtuSection({ exceptionId, gtuBitmask, gtuSources, gtuBitmaskFina
   }
 
   const handleSave = async () => {
+    const prev = savedBitmask
+    const prevEdited = localEdited
     setSaving(true)
-    const res = await updateJpkSection(exceptionId, { gtu_bitmask_final: bitmask, gtu_edited_by_user: true })
-    res.success ? (toast.success('GTU zapisane'), setDirty(false)) : toast.error(res.error || 'Błąd')
-    setSaving(false)
+    try {
+      const res = await updateJpkSection(exceptionId, { gtu_bitmask_final: bitmask, gtu_edited_by_user: true })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setBitmask(prev)
+        setLocalEdited(prevEdited)
+        setDirty(false)
+      } else {
+        toast.success('GTU zapisane')
+        setSavedBitmask(bitmask)
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setBitmask(prev)
+      setLocalEdited(prevEdited)
+      setDirty(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleReset = async () => {
+    const prev = bitmask
+    const prevSaved = savedBitmask
+    const prevEdited = localEdited
+    const prevDirty = dirty
     setSaving(true)
-    const res = await resetJpkSection(exceptionId, 'gtu')
-    if (res.success) { setBitmask(gtuBitmask ?? 0); setDirty(false); setLocalEdited(false); toast.success('Przywrócono AI') }
-    else toast.error(res.error || 'Błąd')
-    setSaving(false)
+    try {
+      const res = await resetJpkSection(exceptionId, 'gtu')
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd resetu'}`)
+        setBitmask(prev)
+        setSavedBitmask(prevSaved)
+        setLocalEdited(prevEdited)
+        setDirty(prevDirty)
+      } else {
+        const aiVal = gtuBitmask ?? 0
+        setBitmask(aiVal)
+        setSavedBitmask(aiVal)
+        setDirty(false)
+        setLocalEdited(false)
+        toast.success('Przywrócono AI')
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)
+      setBitmask(prev)
+      setSavedBitmask(prevSaved)
+      setLocalEdited(prevEdited)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const badge = activeGtus.length > 0

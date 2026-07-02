@@ -30,6 +30,8 @@ export function ProceduryJpkSection({ exceptionId, proceduraJpk, typDokumentuJpk
 
   const [bitmask, setBitmask] = useState(effectiveBitmask)
   const [typDok, setTypDok] = useState(effectiveTyp)
+  const [savedBitmask, setSavedBitmask] = useState(effectiveBitmask)
+  const [savedTypDok, setSavedTypDok] = useState(effectiveTyp)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [showMore, setShowMore] = useState(false)
@@ -49,18 +51,68 @@ export function ProceduryJpkSection({ exceptionId, proceduraJpk, typDokumentuJpk
   }
 
   const handleSave = async () => {
+    const prevBitmask = savedBitmask
+    const prevTypDok = savedTypDok
     setSaving(true)
-    const res = await updateJpkSection(exceptionId, { procedura_jpk_final: bitmask, typ_dokumentu_jpk_final: typDok, jpk_procedury_edited: true })
-    res.success ? (toast.success('Procedury JPK zapisane'), setDirty(false)) : toast.error(res.error || 'Błąd')
-    setSaving(false)
+    try {
+      const res = await updateJpkSection(exceptionId, { procedura_jpk_final: bitmask, typ_dokumentu_jpk_final: typDok, jpk_procedury_edited: true })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setBitmask(prevBitmask)
+        setTypDok(prevTypDok)
+        setDirty(false)
+      } else {
+        toast.success('Procedury JPK zapisane')
+        setSavedBitmask(bitmask)
+        setSavedTypDok(typDok)
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setBitmask(prevBitmask)
+      setTypDok(prevTypDok)
+      setDirty(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleReset = async () => {
+    const prevBitmask = bitmask
+    const prevTypDok = typDok
+    const prevSavedBitmask = savedBitmask
+    const prevSavedTypDok = savedTypDok
+    const prevDirty = dirty
     setSaving(true)
-    const res = await resetJpkSection(exceptionId, 'procedury')
-    if (res.success) { setBitmask(proceduraJpk ?? 0); setTypDok(typDokumentuJpk ?? 0); setDirty(false); toast.success('Przywrócono AI') }
-    else toast.error(res.error || 'Błąd')
-    setSaving(false)
+    try {
+      const res = await resetJpkSection(exceptionId, 'procedury')
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd resetu'}`)
+        setBitmask(prevBitmask)
+        setTypDok(prevTypDok)
+        setSavedBitmask(prevSavedBitmask)
+        setSavedTypDok(prevSavedTypDok)
+        setDirty(prevDirty)
+      } else {
+        const aiBitmask = proceduraJpk ?? 0
+        const aiTyp = typDokumentuJpk ?? 0
+        setBitmask(aiBitmask)
+        setTypDok(aiTyp)
+        setSavedBitmask(aiBitmask)
+        setSavedTypDok(aiTyp)
+        setDirty(false)
+        toast.success('Przywrócono AI')
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)
+      setBitmask(prevBitmask)
+      setTypDok(prevTypDok)
+      setSavedBitmask(prevSavedBitmask)
+      setSavedTypDok(prevSavedTypDok)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const badge = activeCodes.length > 0

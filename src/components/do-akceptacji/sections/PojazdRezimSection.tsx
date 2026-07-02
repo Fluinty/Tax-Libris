@@ -77,62 +77,160 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   const selPojazd = clientPojazdy.find(p => p.id === selId)
 
   const handleSwitchChange = async (v: boolean) => {
+    const prevEnabled = enabled
+    const prevSelId = selId
+    const prevDirty = dirty
     setEnabled(v)
     if (!v) setSelId(null)
     setDirty(true)
     setSaving(true)
-    await updateJpkSection(exceptionId, {
-      pojazd_id_final: v ? selId : null,
-      rezim_paliwowy_final: v ? selRezim : null,
-      rezim_edited: true
-    })
-    setSaving(false)
+    try {
+      const res = await updateJpkSection(exceptionId, {
+        pojazd_id_final: v ? selId : null,
+        rezim_paliwowy_final: v ? selRezim : null,
+        rezim_edited: true
+      })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setEnabled(prevEnabled)
+        setSelId(prevSelId)
+        setDirty(prevDirty)
+      } else {
+        toast.success('Zapisano')
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setEnabled(prevEnabled)
+      setSelId(prevSelId)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleVehicleChange = async (p: ClientPojazd) => {
+    const prevSelId = selId
+    const prevSelRezim = selRezim
+    const prevDirty = dirty
     const newRezim = mapSposobToRezim(p.sposob_rozliczenia)
     setSelId(p.id)
     setSelRezim(newRezim)
     setDirty(true)
     setSaving(true)
-    await updateJpkSection(exceptionId, {
-      pojazd_id_final: p.id,
-      rezim_paliwowy_final: newRezim,
-      rezim_edited: true
-    })
-    setSaving(false)
+    try {
+      const res = await updateJpkSection(exceptionId, {
+        pojazd_id_final: p.id,
+        rezim_paliwowy_final: newRezim,
+        rezim_edited: true
+      })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setSelId(prevSelId)
+        setSelRezim(prevSelRezim)
+        setDirty(prevDirty)
+      } else {
+        toast.success('Zapisano')
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setSelId(prevSelId)
+      setSelRezim(prevSelRezim)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleRezimChange = async (val: string) => {
+    const prevSelRezim = selRezim
+    const prevDirty = dirty
     setSelRezim(val)
     setDirty(true)
     setSaving(true)
-    await updateJpkSection(exceptionId, {
-      pojazd_id_final: selId,
-      rezim_paliwowy_final: val,
-      rezim_edited: true
-    })
-    setSaving(false)
+    try {
+      const res = await updateJpkSection(exceptionId, {
+        pojazd_id_final: selId,
+        rezim_paliwowy_final: val,
+        rezim_edited: true
+      })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setSelRezim(prevSelRezim)
+        setDirty(prevDirty)
+      } else {
+        toast.success('Zapisano')
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setSelRezim(prevSelRezim)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleSave = async () => {
+    const prevEnabled = enabled
+    const prevSelId = selId
+    const prevSelRezim = selRezim
+    const prevDirty = dirty
     setSaving(true)
-    const res = await updateJpkSection(exceptionId, { pojazd_id_final: enabled ? selId : null, rezim_paliwowy_final: enabled ? selRezim : null, rezim_edited: true })
-    res.success ? (toast.success('Reżim zapisany'), setDirty(false)) : toast.error(res.error || 'Błąd')
-    setSaving(false)
-  }
-  const handleReset = async () => {
-    setSaving(true)
-    const res = await resetJpkSection(exceptionId, 'rezim')
-    if (res.success) {
-      setEnabled(aiPojazdId != null || workerSaysVehicle)
-      setSelId(aiPojazdId ?? null)
-      setSelRezim(aiRezim ?? (workerSaysVehicle ? (PROCENT_ENUM_TO_REZIM[kpirPojazdoweData!.procent_do_ujecia_w_kosztach] ?? '50_75') : '50_75'))
-      setDirty(false)
-      toast.success('Przywrócono AI')
+    try {
+      const res = await updateJpkSection(exceptionId, { pojazd_id_final: enabled ? selId : null, rezim_paliwowy_final: enabled ? selRezim : null, rezim_edited: true })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setEnabled(prevEnabled)
+        setSelId(prevSelId)
+        setSelRezim(prevSelRezim)
+        setDirty(prevDirty)
+      } else {
+        toast.success('Reżim zapisany')
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setEnabled(prevEnabled)
+      setSelId(prevSelId)
+      setSelRezim(prevSelRezim)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
     }
-    else toast.error(res.error || 'Błąd')
-    setSaving(false)
+  }
+
+  const handleReset = async () => {
+    const prevEnabled = enabled
+    const prevSelId = selId
+    const prevSelRezim = selRezim
+    const prevDirty = dirty
+    setSaving(true)
+    try {
+      const res = await resetJpkSection(exceptionId, 'rezim')
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd resetu'}`)
+        setEnabled(prevEnabled)
+        setSelId(prevSelId)
+        setSelRezim(prevSelRezim)
+        setDirty(prevDirty)
+      } else {
+        setEnabled(aiPojazdId != null || workerSaysVehicle)
+        setSelId(aiPojazdId ?? null)
+        setSelRezim(aiRezim ?? (workerSaysVehicle ? (PROCENT_ENUM_TO_REZIM[kpirPojazdoweData!.procent_do_ujecia_w_kosztach] ?? '50_75') : '50_75'))
+        setDirty(false)
+        toast.success('Przywrócono AI')
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)
+      setEnabled(prevEnabled)
+      setSelId(prevSelId)
+      setSelRezim(prevSelRezim)
+      setDirty(prevDirty)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const badgeText = enabled && selPojazd ? `${selPojazd.marka_model || selPojazd.nr_rejestracyjny} • ${selRezim === '100' ? '100%' : selRezim === '50_75' ? '50/75' : '20%'}` : (enabled && workerSaysVehicle) ? `Pojazd • ${selRezim === '100' ? '100%' : selRezim === '50_75' ? '50/75' : '20%'}` : null

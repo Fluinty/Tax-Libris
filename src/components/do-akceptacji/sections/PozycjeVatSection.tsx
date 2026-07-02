@@ -49,6 +49,7 @@ export function PozycjeVatSection({
 }: PozycjeVatSectionProps) {
   const initial: PozycjaVatRow[] = pozycjeVatFinal ?? pozycjeVatAi ?? []
   const [rows, setRows] = useState<PozycjaVatRow[]>(initial.length > 0 ? initial : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
+  const [savedRows, setSavedRows] = useState<PozycjaVatRow[]>(initial.length > 0 ? initial : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
   const [isSaving, setIsSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
@@ -94,34 +95,61 @@ export function PozycjeVatSection({
   }
 
   const handleSave = async () => {
+    const prevRows = savedRows
     setIsSaving(true)
     if (!isMatchingBrutto) {
       toast.warning(`Suma pozycji (${sumBrutto.toFixed(2)}) nie zgadza się z brutto faktury (${kwotaBrutto.toFixed(2)}). Różnica: ${diff.toFixed(2)} zł`)
     }
-    const res = await updateJpkSection(exceptionId, {
-      pozycje_vat_final: rows,
-      pozycje_vat_edited: true,
-    })
-    if (res.success) {
-      toast.success('Pozycje VAT zapisane')
+    try {
+      const res = await updateJpkSection(exceptionId, {
+        pozycje_vat_final: rows,
+        pozycje_vat_edited: true,
+      })
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
+        setRows(prevRows)
+        setDirty(false)
+      } else {
+        toast.success('Pozycje VAT zapisane')
+        setSavedRows(rows)
+        setDirty(false)
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd zapisu'}`)
+      setRows(prevRows)
       setDirty(false)
-    } else {
-      toast.error(res.error || 'Błąd zapisu')
+    } finally {
+      setIsSaving(false)
     }
-    setIsSaving(false)
   }
 
   const handleReset = async () => {
+    const prevRows = rows
+    const prevSavedRows = savedRows
+    const prevDirty = dirty
     setIsSaving(true)
-    const res = await resetJpkSection(exceptionId, 'vat')
-    if (res.success) {
-      setRows(pozycjeVatAi ?? [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
-      setDirty(false)
-      toast.success('Przywrócono propozycję AI')
-    } else {
-      toast.error(res.error || 'Błąd resetu')
+    try {
+      const res = await resetJpkSection(exceptionId, 'vat')
+      if (!res?.success) {
+        toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd resetu'}`)
+        setRows(prevRows)
+        setSavedRows(prevSavedRows)
+        setDirty(prevDirty)
+      } else {
+        const aiRows = pozycjeVatAi ?? [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }]
+        setRows(aiRows)
+        setSavedRows(aiRows)
+        setDirty(false)
+        toast.success('Przywrócono propozycję AI')
+      }
+    } catch (e: unknown) {
+      toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)
+      setRows(prevRows)
+      setSavedRows(prevSavedRows)
+      setDirty(prevDirty)
+    } finally {
+      setIsSaving(false)
     }
-    setIsSaving(false)
   }
 
   // Badge content
