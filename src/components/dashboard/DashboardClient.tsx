@@ -5,10 +5,7 @@ import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
-  FileCheck,
-  BookOpen,
   AlertTriangle,
-  Activity,
   Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,15 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ActivityChart } from './ActivityChart'
 import { RecentActivityList } from './RecentActivityList'
 import { WolumenKpirSection } from './WolumenKpirSection'
 import { refreshDashboard } from '@/app/(auth)/dashboard/actions'
 import type {
   DashboardMetrics,
-  ActivityChartData,
-  TopClient,
-  TopRule,
   RecentActivity,
   Client,
   AutomationRateClient,
@@ -37,9 +30,6 @@ import type {
 
 interface Props {
   metrics: DashboardMetrics
-  chartData: ActivityChartData[]
-  topClients: TopClient[]
-  topRules: TopRule[]
   recentActivity: RecentActivity[]
   topAutomationClients?: AutomationRateClient[]
   wolumenRecords?: WolumenInvoiceRecord[]
@@ -58,9 +48,6 @@ const periodOptions = [
 
 export function DashboardClient({
   metrics,
-  chartData,
-  topClients,
-  topRules,
   recentActivity,
   topAutomationClients = [],
   wolumenRecords = [],
@@ -87,10 +74,6 @@ export function DashboardClient({
   const handleRefresh = async () => {
     await refreshDashboard()
     router.refresh()
-  }
-
-  function truncate(text: string, maxLen: number): string {
-    return text.length > maxLen ? text.slice(0, maxLen) + '…' : text
   }
 
   const showTrends = selectedPeriod !== 'all'
@@ -148,33 +131,12 @@ export function DashboardClient({
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <MetricCard
-          label="Hit rate"
-          value={`${metrics.hitRate}%`}
-          trend={showTrends ? metrics.hitRateTrend : null}
-          trendSuffix="pp"
-          icon={<Activity className="w-5 h-5 text-[#4A90E2]" />}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <MetricCard
           label="Automatyzacja (bm)"
           value={`${metrics.automationRate || 0}%`}
           trend={null}
           icon={<Sparkles className="w-5 h-5 text-purple-600" />}
-        />
-        <MetricCard
-          label="Faktury obsłużone"
-          value={metrics.invoicesProcessed.toLocaleString('pl-PL')}
-          trend={showTrends ? metrics.invoicesTrend : null}
-          icon={<FileCheck className="w-5 h-5 text-[#22C55E]" />}
-        />
-        <MetricCard
-          label="Reguły aktywne"
-          value={metrics.activeRules.toLocaleString('pl-PL')}
-          trend={showTrends ? metrics.rulesTrend : null}
-          trendPrefix="+"
-          trendLabel="nowych"
-          icon={<BookOpen className="w-5 h-5 text-[#1F3A5F]" />}
         />
         <MetricCard
           label="Wyjątki pending"
@@ -223,128 +185,6 @@ export function DashboardClient({
 
       {/* Wolumen faktur (KPiR) */}
       <WolumenKpirSection records={wolumenRecords} clientNames={kpirClientNames} />
-
-      {/* Chart */}
-      {chartData.length > 0 ? (
-        <Card className="p-6 mb-8 border-[#E2E8F0]">
-          <h2 className="text-sm font-semibold text-[#1E293B] mb-4 flex items-center gap-2">
-            📈 Aktywność w czasie
-          </h2>
-          <ActivityChart data={chartData} />
-        </Card>
-      ) : (
-        <Card className="p-6 mb-8 border-[#E2E8F0] flex items-center justify-center text-[#94A3B8] text-sm h-[200px]">
-          Brak danych do wykresu dla wybranego okresu
-        </Card>
-      )}
-
-      {/* Top clients + Top rules */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Top Clients */}
-        <Card className="p-6 border-[#E2E8F0]">
-          <h2 className="text-sm font-semibold text-[#1E293B] mb-4">
-            Top klienci
-          </h2>
-          {topClients.length === 0 ? (
-            <p className="text-sm text-[#94A3B8] text-center py-8">
-              Brak danych
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#F1F5F9]">
-                    <th className="text-left py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Klient
-                    </th>
-                    <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Faktury
-                    </th>
-                    <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Hit rate
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topClients.map((c, i) => (
-                    <tr key={i} className="border-b border-[#F8FAFC] last:border-0">
-                      <td className="py-2 text-[#1E293B] font-medium">{c.klient}</td>
-                      <td className="py-2 text-right tabular-nums font-semibold text-[#1E293B]">
-                        {c.obsluzone.toLocaleString('pl-PL')}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">
-                        <span
-                          className={
-                            c.hit_rate >= 80
-                              ? 'text-[#22C55E] font-semibold'
-                              : c.hit_rate >= 50
-                              ? 'text-[#F59E0B] font-medium'
-                              : 'text-[#EF4444] font-medium'
-                          }
-                        >
-                          {c.hit_rate}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        {/* Top Rules */}
-        <Card className="p-6 border-[#E2E8F0]">
-          <h2 className="text-sm font-semibold text-[#1E293B] mb-4">
-            Top reguły
-          </h2>
-          {topRules.length === 0 ? (
-            <p className="text-sm text-[#94A3B8] text-center py-8">
-              Brak danych
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#F1F5F9]">
-                    <th className="text-left py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Pattern
-                    </th>
-                    <th className="text-left py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Opis
-                    </th>
-                    <th className="text-left py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Klient
-                    </th>
-                    <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">
-                      Hits
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topRules.map((r) => (
-                    <tr key={r.id} className="border-b border-[#F8FAFC] last:border-0">
-                      <td
-                        className="py-2 text-[#1E293B] font-mono text-xs max-w-[200px] truncate"
-                        title={r.pattern_pozycji}
-                      >
-                        {truncate(r.pattern_pozycji, 40)}
-                      </td>
-                      <td className="py-2 text-[#64748B]" title={r.opis_zdarzenia}>
-                        {truncate(r.opis_zdarzenia, 30)}
-                      </td>
-                      <td className="py-2 text-[#1E293B]">{r.klient}</td>
-                      <td className="py-2 text-right font-bold tabular-nums text-[#1E293B]">
-                        {r.hit_count.toLocaleString('pl-PL')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
 
       {/* Recent Activity */}
       <Card className="p-6 border-[#E2E8F0]">

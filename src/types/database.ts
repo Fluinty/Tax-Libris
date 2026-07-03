@@ -56,21 +56,6 @@ export interface Client {
   platnik_vat?: boolean;
 }
 
-export interface Rule {
-  id: number;
-  client_nip: string;
-  pattern_pozycji: string;
-  is_pattern: boolean;
-  opis_zdarzenia: string;
-  typ_dokumentu: TypDokumentu | null;
-  confidence: number;
-  hit_count: number;
-  last_used_at: string | null;
-  source: string;
-  created_by: string;
-  created_at: string;
-}
-
 export interface PozycjaXml {
   lp: string;
   nazwaTowaru: string;
@@ -292,7 +277,6 @@ export interface UserProfile {
 
 // Typ dla klienta z agregowanymi danymi
 export interface ClientWithCounts extends Client {
-  rules_count: number;
   exceptions_count: number;
 }
 
@@ -333,19 +317,8 @@ export interface ClientExceptionCount {
   has_ai_proposal?: boolean;
 }
 
-// Typ dla reguły z nazwą klienta (strona Reguły)
-export interface RuleWithClient extends Rule {
-  client_nazwa: string;
-}
-
 // Typ dla metryki dashboardu
 export interface DashboardMetrics {
-  hitRate: number;
-  hitRateTrend: number | null;
-  invoicesProcessed: number;
-  invoicesTrend: number | null;
-  activeRules: number;
-  rulesTrend: number | null;
   pendingExceptions: number;
   exceptionsTrend: number | null;
   automationRate?: number;
@@ -366,29 +339,6 @@ export interface WolumenInvoiceRecord {
   resolved_by: string | null;
   created_at: string;
   auto_created_at: string | null;
-}
-
-// Typ dla danych wykresu aktywności
-export interface ActivityChartData {
-  data: string;
-  obsluzone: number;
-  wyjatki: number;
-}
-
-// Typ dla top klienta w dashboardzie
-export interface TopClient {
-  klient: string;
-  obsluzone: number;
-  hit_rate: number;
-}
-
-// Typ dla top reguły w dashboardzie
-export interface TopRule {
-  id: number;
-  pattern_pozycji: string;
-  opis_zdarzenia: string;
-  klient: string;
-  hit_count: number;
 }
 
 // Typ dla wpisu z ostatniej aktywności

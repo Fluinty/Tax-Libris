@@ -33,31 +33,7 @@ export async function resolveException(
     return { success: false, error: 'Nie znaleziono wyjątku' }
   }
 
-  // 2. Stwórz regułę (lub UPDATE jeśli istnieje)
-  const pattern = isPattern ? `%${exc.pozycja_xml}%` : exc.pozycja_xml
-  const { data: rule, error: ruleError } = await supabase
-    .from('rules')
-    .upsert(
-      {
-        client_nip: exc.client_nip,
-        pattern_pozycji: pattern,
-        is_pattern: isPattern,
-        opis_zdarzenia: opis,
-        typ_dokumentu: exc.typ_dokumentu || 'zakup',
-        source: 'learned_from_exception',
-        created_by: user.email ?? 'unknown',
-        hit_count: 1,
-      },
-      { onConflict: 'client_nip,pattern_pozycji' }
-    )
-    .select()
-    .single()
-
-  if (ruleError || !rule) {
-    return { success: false, error: `Błąd tworzenia reguły: ${ruleError?.message}` }
-  }
-
-  // 3. Update exception
+  // 2. Update exception
   const { data: updatedQueue, error: updateError } = await supabase
     .from('exceptions_queue')
     .update({
@@ -65,7 +41,6 @@ export async function resolveException(
       resolved_opis: opis,
       resolved_by: user.email ?? 'unknown',
       resolved_at: new Date().toISOString(),
-      rule_created_id: rule.id,
     })
     .eq('id', exceptionId)
     .in('status', ['pending_review', 'pending'])
@@ -78,13 +53,12 @@ export async function resolveException(
     return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
   }
 
-  // 4. Audit log
+  // 3. Audit log
   await supabase.from('audit_log').insert({
     client_nip: exc.client_nip,
     zapis_id: exc.zapis_id,
     action: 'resolve_exception',
     pozycja_xml: exc.pozycja_xml,
-    rule_id: rule.id,
     opis_zapisany: opis,
     details: {
       resolved_by: user.email,

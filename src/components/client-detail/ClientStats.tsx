@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText, Target, AlertTriangle, BookOpen, Car } from 'lucide-react'
+import { FileText, Target, AlertTriangle, Car } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export function ClientStats({ stats }: { stats: any }) {
@@ -10,7 +10,7 @@ export function ClientStats({ stats }: { stats: any }) {
         📊 Statystyki
       </h2>
       
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
           <div className="text-xs text-[#64748B] flex items-center gap-1 mb-1"><FileText className="w-3 h-3" /> Faktur w m-cu</div>
           <div className="text-xl font-bold text-[#1E293B]">{stats.invoicesMonth}</div>
@@ -22,10 +22,6 @@ export function ClientStats({ stats }: { stats: any }) {
         <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
           <div className="text-xs text-[#64748B] flex items-center gap-1 mb-1"><AlertTriangle className="w-3 h-3" /> Wyjątki pending</div>
           <div className="text-xl font-bold text-[#F59E0B]">{stats.exceptionsCount}</div>
-        </div>
-        <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
-          <div className="text-xs text-[#64748B] flex items-center gap-1 mb-1"><BookOpen className="w-3 h-3" /> Aktywne reguły</div>
-          <div className="text-xl font-bold text-[#1E293B]">{stats.rulesCount}</div>
         </div>
         <div className="bg-[#F8FAFC] p-3 rounded-lg border border-[#E2E8F0]">
           <div className="text-xs text-[#64748B] flex items-center gap-1 mb-1"><Car className="w-3 h-3" /> Pojazdy</div>

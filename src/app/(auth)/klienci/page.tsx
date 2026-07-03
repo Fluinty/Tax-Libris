@@ -17,11 +17,6 @@ export default async function KlienciPage() {
 
   const { data: clients } = await clientsQuery
 
-  // Fetch rules count per client
-  let rulesCountQuery = supabase.from('rules').select('client_nip')
-  rulesCountQuery = applyNipFilter(rulesCountQuery, nips, 'client_nip', ryczaltNips)
-  const { data: rulesCounts } = await rulesCountQuery
-
   // Fetch pending exceptions count per client
   let excCountQuery = supabase
     .from('exceptions_queue')
@@ -31,11 +26,6 @@ export default async function KlienciPage() {
   const { data: exceptionsCounts } = await excCountQuery
 
   // Aggregate counts
-  const rulesMap = new Map<string, number>()
-  for (const r of rulesCounts ?? []) {
-    rulesMap.set(r.client_nip, (rulesMap.get(r.client_nip) ?? 0) + 1)
-  }
-
   const exceptionsMap = new Map<string, number>()
   for (const e of exceptionsCounts ?? []) {
     exceptionsMap.set(e.client_nip, (exceptionsMap.get(e.client_nip) ?? 0) + 1)
@@ -43,7 +33,6 @@ export default async function KlienciPage() {
 
   const clientsWithCounts: ClientWithCounts[] = (clients ?? []).map((c) => ({
     ...c,
-    rules_count: rulesMap.get(c.nip) ?? 0,
     exceptions_count: exceptionsMap.get(c.nip) ?? 0,
   }))
 

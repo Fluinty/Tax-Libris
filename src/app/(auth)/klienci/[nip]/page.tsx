@@ -41,9 +41,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   const thirtyDaysIso = thirtyDaysAgo.toISOString()
 
-  // 1. Zsumowane exception i reguly
+  // 1. Zsumowane exception
   const { count: exceptionsCount } = await supabase.from('exceptions_queue').select('*', { count: 'exact', head: true }).eq('client_nip', nip).in('status', ['pending', 'pending_review'])
-  const { count: rulesCount } = await supabase.from('rules').select('*', { count: 'exact', head: true }).eq('client_nip', nip)
 
   // 2. Faktury z tego miesiąca (z auditu action = 'auto_create_full' lub 'set_opis')
   const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
@@ -91,7 +90,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
     invoicesMonth: invoicesMonth || 0,
     hitRate,
     exceptionsCount: exceptionsCount || 0,
-    rulesCount: rulesCount || 0,
     activePojazdyCount,
     chartData
   }

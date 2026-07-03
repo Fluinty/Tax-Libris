@@ -170,9 +170,6 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                   Faktur/mies
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
-                  Reguły
-                </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
                   Wyjątki
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
@@ -202,11 +199,6 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                   </td>
                   <td className="px-4 py-3 text-center text-[#64748B]">
                     {client.avg_faktur_mies ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="text-[#1E293B] font-medium">
-                      {client.rules_count}
-                    </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {client.exceptions_count > 0 ? (
