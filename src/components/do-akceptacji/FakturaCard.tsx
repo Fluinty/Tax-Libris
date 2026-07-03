@@ -834,24 +834,67 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <div>
               <span className="text-sm font-medium text-[#475569] block mb-1">{getEtykietaSekcjiKwot(exception.typ_dokumentu)}:</span>
               <div className="space-y-1">
-                {getKolumnyForTyp(exception.typ_dokumentu).map((col) => {
-                  const val = finalKwoty[col.klucz]
-                  const isZero = !val || Number(val) === 0
-                  
-                  // Zmiana 2: jeśli wartość to 0, nie pokazujemy kolumny by zmniejszyć szum wizualny
-                  if (isZero) return null;
+                {(() => {
+                  const getKolumnaPozycjeSumy = (colNumer: number): { netto: number; brutto: number } | null => {
+                    if (exception.pozycje_editable && exception.pozycje_editable.length > 0) {
+                      const matched = exception.pozycje_editable.filter(p => {
+                        const effCol = p.effective_kolumna_kpir ?? p.final_kolumna_kpir ?? p.ai_kolumna_kpir;
+                        return effCol === colNumer && p.effective_kup_status !== 'nkup';
+                      });
+                      if (matched.length === 0) return null;
+                      const netto = matched.reduce((acc, p) => acc + Number(p.wartosc_netto || 0), 0);
+                      const brutto = matched.reduce((acc, p) => acc + Number(p.wartosc_brutto || 0), 0);
+                      if ((netto === 0 && brutto === 0) || isNaN(netto) || isNaN(brutto)) return null;
+                      return { netto, brutto };
+                    }
+                    if (exception.pozycje_xml_full && exception.pozycje_xml_full.length > 0) {
+                      const joined = joinPozycjeWithKlasyfikacja(exception.pozycje_xml_full, exception.ai_klasyfikacja_pozycji || []);
+                      const matched = joined.filter(p => p.kolumna_kpir === colNumer);
+                      if (matched.length === 0) return null;
+                      const netto = matched.reduce((acc, p) => acc + Number(p.wartoscNetto || 0), 0);
+                      const brutto = matched.reduce((acc, p) => acc + Number(p.wartosc_brutto || 0), 0);
+                      if ((netto === 0 && brutto === 0) || isNaN(netto) || isNaN(brutto)) return null;
+                      return { netto, brutto };
+                    }
+                    return null;
+                  };
 
-                  return (
-                    <div key={col.numer} className="flex text-sm">
-                      <span className="w-48 shrink-0 text-[#64748B]">
-                        Kolumna {col.numer} ({col.labelKrotki}):
-                      </span>
-                      <span className="font-medium text-[#1E293B]">
-                        {Number(val).toFixed(2)} zł
-                      </span>
-                    </div>
-                  )
-                })}
+                  const formatKwota = (n: number) => {
+                    const rounded = Math.round(n * 100) / 100;
+                    return rounded.toLocaleString('pl-PL', {
+                      minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2,
+                      maximumFractionDigits: 2
+                    });
+                  };
+
+                  return getKolumnyForTyp(exception.typ_dokumentu).map((col) => {
+                    const val = finalKwoty[col.klucz]
+                    const isZero = !val || Number(val) === 0
+                    
+                    // Zmiana 2: jeśli wartość to 0, nie pokazujemy kolumny by zmniejszyć szum wizualny
+                    if (isZero) return null;
+
+                    const sumyPozycji = getKolumnaPozycjeSumy(col.numer);
+
+                    return (
+                      <div key={col.numer} className="py-0.5">
+                        <div className="flex text-sm">
+                          <span className="w-48 shrink-0 text-[#64748B]">
+                            Kolumna {col.numer} ({col.labelKrotki}):
+                          </span>
+                          <span className="font-medium text-[#1E293B]">
+                            {Number(val).toFixed(2)} zł
+                          </span>
+                        </div>
+                        {sumyPozycji && (
+                          <div className="text-xs text-slate-500 pl-48 mt-0.5">
+                            netto {formatKwota(sumyPozycji.netto)} zł · brutto {formatKwota(sumyPozycji.brutto)} zł
+                          </div>
+                        )}
+                      </div>
+                    )
+                  });
+                })()}
               </div>
               
               {/* WARNING BANNER dla niepoprawnych kolumn w aiKwoty */}

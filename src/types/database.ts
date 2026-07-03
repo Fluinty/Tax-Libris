@@ -118,6 +118,7 @@ export interface FakturaPozycja {
   // Podstawa prawna
   ai_podstawa_prawna: string | null;
   final_podstawa_prawna: string | null;
+  effective_gtu_bits?: number | null;
 }
 
 // Walidator usluga obca warning entry
@@ -238,6 +239,12 @@ export interface ExceptionItem {
   pojazd_id?: number | null;
   pojazd_id_final?: number | null;
   rezim_edited?: boolean;
+
+  // Mechanizm podzielonej płatności (MPP)
+  wymaga_mpp?: boolean | null;
+  mpp_kwota?: number | null;
+  mpp_gru_match?: string | null;
+  mpp_reason?: string | null;
 
   // Joined client data
   client?: Client;

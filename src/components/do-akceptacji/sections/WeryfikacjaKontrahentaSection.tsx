@@ -20,7 +20,7 @@ function StatusIcon({ status }: { status: 'ok' | 'warn' | 'error' | 'pending' })
 function getOverallStatus(e: ExceptionWithClient): 'ok' | 'warn' | 'error' | 'pending' {
   if (e.vendor_vat_active === false) return 'error'
   if (e.date_anomaly === 'future') return 'error'
-  if (e.is_potential_duplicate || e.vendor_first_occurrence || e.date_anomaly === 'too_old') return 'warn'
+  if (e.wymaga_mpp === true || e.is_potential_duplicate || e.vendor_first_occurrence || e.date_anomaly === 'too_old') return 'warn'
   if (e.vendor_vat_active === null || e.vendor_vat_active === undefined) return 'pending'
   return 'ok'
 }
@@ -32,6 +32,7 @@ function getBadge(status: 'ok' | 'warn' | 'error' | 'pending', e: ExceptionWithC
     return <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] h-5">🔴 Problem</Badge>
   }
   if (status === 'warn') {
+    if (e.wymaga_mpp === true) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[10px] h-5">⚠ MPP</Badge>
     if (e.vendor_first_occurrence) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[10px] h-5">⚠ Nowy kontrahent</Badge>
     if (e.is_potential_duplicate) return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[10px] h-5">⚠ Możliwy duplikat</Badge>
     return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 text-[10px] h-5">⚠ Do sprawdzenia</Badge>
@@ -168,6 +169,38 @@ export function WeryfikacjaKontrahentaSection({ exception: e }: Props) {
             </>
           )}
         </div>
+
+        {e.wymaga_mpp != null && (
+          <>
+            <div className="border-t border-slate-100" />
+            <div>
+              <div className="text-xs font-medium text-slate-500 uppercase mb-1.5 flex items-center gap-1.5">
+                💳 Mechanizm podzielonej płatności
+              </div>
+              {e.wymaga_mpp === true ? (
+                <div className="bg-red-50 border border-red-200 rounded-md p-2">
+                  <div className="flex items-center gap-1.5 text-red-800 font-medium">
+                    <StatusIcon status="error" />
+                    MPP wymagany
+                  </div>
+                  <div className="text-red-700 text-xs mt-1">
+                    {e.mpp_reason || 'Obowiązkowy mechanizm podzielonej płatności'}
+                    {e.mpp_kwota != null && (
+                      <span className="font-semibold ml-1">
+                        ({Number(e.mpp_kwota).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <StatusIcon status="ok" />
+                  <span className="text-green-700">MPP niewymagany</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         <div className="border-t border-slate-100" />
 

@@ -22,6 +22,7 @@ import { FileText, Pencil, ChevronsUpDown, Search, AlertTriangle, Scale, ShieldC
 import { toast } from 'sonner'
 import type { FakturaPozycja, TypDokumentu } from '@/types/database'
 import { getKolumnyForTyp } from '@/lib/kpir'
+import { formatGtuBadgeList } from '@/lib/jpk-helpers'
 import { updatePozycjaWymiar } from '@/app/(auth)/do-akceptacji/pozycje-actions'
 import { SimilarPozycjeModal } from './SimilarPozycjeModal'
 
@@ -121,6 +122,11 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
                   <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />walidator
                 </Badge>
               )}
+              {isSprzedaz && (poz.effective_gtu_bits ?? 0) > 0 && formatGtuBadgeList(poz.effective_gtu_bits!).map(gtuCode => (
+                <Badge key={gtuCode} variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 text-[10px] px-1.5 py-0 shrink-0 font-mono">
+                  {gtuCode}
+                </Badge>
+              ))}
             </div>
             <div className="text-[12px] text-slate-500">
               {poz.wartosc_netto != null ? `${Number(poz.wartosc_netto).toFixed(2)} zł netto` : ''}
