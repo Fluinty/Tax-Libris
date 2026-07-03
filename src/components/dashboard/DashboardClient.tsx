@@ -9,6 +9,7 @@ import {
   BookOpen,
   AlertTriangle,
   Activity,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { ActivityChart } from './ActivityChart'
 import { RecentActivityList } from './RecentActivityList'
+import { WolumenKpirSection } from './WolumenKpirSection'
 import { refreshDashboard } from '@/app/(auth)/dashboard/actions'
 import type {
   DashboardMetrics,
@@ -29,6 +31,8 @@ import type {
   TopRule,
   RecentActivity,
   Client,
+  AutomationRateClient,
+  WolumenInvoiceRecord,
 } from '@/types/database'
 
 interface Props {
@@ -37,6 +41,9 @@ interface Props {
   topClients: TopClient[]
   topRules: TopRule[]
   recentActivity: RecentActivity[]
+  topAutomationClients?: AutomationRateClient[]
+  wolumenRecords?: WolumenInvoiceRecord[]
+  kpirClientNames?: Record<string, string>
   clients: Pick<Client, 'nip' | 'nazwa'>[]
   selectedClient: string
   selectedPeriod: string
@@ -55,6 +62,9 @@ export function DashboardClient({
   topClients,
   topRules,
   recentActivity,
+  topAutomationClients = [],
+  wolumenRecords = [],
+  kpirClientNames = {},
   clients,
   selectedClient,
   selectedPeriod,
@@ -138,13 +148,19 @@ export function DashboardClient({
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <MetricCard
           label="Hit rate"
           value={`${metrics.hitRate}%`}
           trend={showTrends ? metrics.hitRateTrend : null}
           trendSuffix="pp"
           icon={<Activity className="w-5 h-5 text-[#4A90E2]" />}
+        />
+        <MetricCard
+          label="Automatyzacja (bm)"
+          value={`${metrics.automationRate || 0}%`}
+          trend={null}
+          icon={<Sparkles className="w-5 h-5 text-purple-600" />}
         />
         <MetricCard
           label="Faktury obsłużone"
@@ -168,6 +184,45 @@ export function DashboardClient({
           icon={<AlertTriangle className="w-5 h-5 text-[#F59E0B]" />}
         />
       </div>
+
+      {/* Top Automation Clients Table */}
+      <Card className="p-6 mb-8 border-[#E2E8F0]">
+        <h2 className="text-sm font-semibold text-[#1E293B] mb-4 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-purple-600" />
+          Top 10 klientów wg automatyzacji (bieżący miesiąc)
+        </h2>
+        {topAutomationClients.length === 0 ? (
+          <p className="text-sm text-[#94A3B8] text-center py-6">
+            Brak automatycznych księgowań w bieżącym miesiącu
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#F1F5F9]">
+                  <th className="text-left py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">Klient</th>
+                  <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">Auto</th>
+                  <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">Procesowalne</th>
+                  <th className="text-right py-2 text-xs text-[#64748B] font-medium uppercase tracking-wider">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topAutomationClients.map((c, i) => (
+                  <tr key={i} className="border-b border-[#F8FAFC] last:border-0">
+                    <td className="py-2 text-[#1E293B] font-medium">{c.klient}</td>
+                    <td className="py-2 text-right tabular-nums text-purple-700 font-semibold">{c.auto.toLocaleString('pl-PL')}</td>
+                    <td className="py-2 text-right tabular-nums text-slate-600">{c.procesowalne.toLocaleString('pl-PL')}</td>
+                    <td className="py-2 text-right tabular-nums font-bold text-[#1E293B]">{c.pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Wolumen faktur (KPiR) */}
+      <WolumenKpirSection records={wolumenRecords} clientNames={kpirClientNames} />
 
       {/* Chart */}
       {chartData.length > 0 ? (

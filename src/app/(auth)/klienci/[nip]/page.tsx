@@ -9,6 +9,7 @@ import { ClientDataPanel } from '@/components/client-detail/ClientDataPanel'
 import { PojazdyTable } from '@/components/client-detail/PojazdyTable'
 import { OpisyTable } from '@/components/client-detail/OpisyTable'
 import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
+import { AutoWriteSection } from '@/components/client-detail/AutoWriteSection'
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ nip: string }> }) {
   const { nip } = await params
@@ -105,6 +106,27 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
     .order('changed_at', { ascending: false })
     .limit(20)
 
+  // Kandydat na auto: policz z ostatnich 50 rekordów klienta o statusie approved/auto_created/resolved
+  const { data: candidateRecords } = await supabase
+    .from('exceptions_queue')
+    .select('final_kwoty_per_kolumna, final_zapis_vat_data, final_opis, final_kpir_pojazdowe_data')
+    .eq('client_nip', nip)
+    .in('status', ['approved', 'auto_created', 'resolved'])
+    .order('id', { ascending: false })
+    .limit(50)
+
+  const records = candidateRecords || []
+  const totalCount = records.length
+  const editedCount = records.filter(r => 
+    r.final_kwoty_per_kolumna != null ||
+    r.final_zapis_vat_data != null ||
+    r.final_opis != null ||
+    r.final_kpir_pojazdowe_data != null
+  ).length
+  const editRatePct = totalCount > 0 ? Math.round((editedCount / totalCount) * 100) : 0
+  const isCandidate = totalCount >= 50 && editRatePct < 5
+  const candidateStats = { isCandidate, editRatePct, totalCount }
+
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <Link href="/klienci" className="inline-flex items-center text-sm font-medium text-[#64748B] hover:text-[#1F3A5F]">
@@ -113,6 +135,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
       </Link>
 
       <ClientHeader client={client} isAdmin={isAdmin} />
+
+      <AutoWriteSection client={client} isAdmin={isAdmin} candidateStats={candidateStats} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <ClientStats stats={stats} />

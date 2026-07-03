@@ -49,6 +49,7 @@ export interface Client {
   aktywny: boolean;
   pilot: boolean;
   auto_write_enabled: boolean;
+  auto_max_kwota?: number | null;
   avg_faktur_mies: number | null;
   utworzony: string;
   ostatni_sync: string | null;
@@ -169,6 +170,7 @@ export interface ExceptionItem {
   status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored';
   resolved_opis: string | null;
   resolved_by: string | null;
+  auto_created_by?: string | null;
   resolved_at: string | null;
   rule_created_id: number | null;
   typ_dokumentu: TypDokumentu | null;
@@ -346,6 +348,24 @@ export interface DashboardMetrics {
   rulesTrend: number | null;
   pendingExceptions: number;
   exceptionsTrend: number | null;
+  automationRate?: number;
+}
+
+export interface AutomationRateClient {
+  klient: string;
+  auto: number;
+  procesowalne: number;
+  pct: number;
+}
+
+// Typ dla surowych danych wolumenu faktur (KPiR) — pobierane raz server-side,
+// agregowane klientem w komponencie (bez ponownego fetch przy zmianie zakładki okresu)
+export interface WolumenInvoiceRecord {
+  client_nip: string;
+  status: string;
+  resolved_by: string | null;
+  created_at: string;
+  auto_created_at: string | null;
 }
 
 // Typ dla danych wykresu aktywności

@@ -783,9 +783,14 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             )
           })()}
         </div>
-        {stan === 'auto_created' && (
-          <Badge className="bg-green-100 text-green-800 border-none">Zaksięgowane</Badge>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0 self-start">
+          {stan === 'auto_created' && (
+            <Badge className="bg-green-100 text-green-800 border-none">Zaksięgowane</Badge>
+          )}
+          {(exception.resolved_by === 'fluinty_auto' || exception.auto_created_by === 'fluinty_auto') && (
+            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">AUTO</Badge>
+          )}
+        </div>
       </div>
 
       {/* A3 AI Review section — show BEFORE confidence and classification */}
