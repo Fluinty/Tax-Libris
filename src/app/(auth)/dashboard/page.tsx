@@ -4,7 +4,6 @@ import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import type {
   DashboardMetrics,
   RecentActivity,
-  Client,
   AutomationRateClient,
   WolumenInvoiceRecord,
 } from '@/types/database'
@@ -161,9 +160,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       topAutomationClients={topAutomationClients}
       wolumenRecords={wolumenRecords}
       kpirClientNames={kpirClientNames}
-      clients={(allClients ?? []) as Pick<Client, 'nip' | 'nazwa'>[]}
-      selectedClient={selectedClient}
-      selectedPeriod={selectedPeriod}
     />
   )
 }

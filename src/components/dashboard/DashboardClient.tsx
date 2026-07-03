@@ -10,20 +10,12 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { RecentActivityList } from './RecentActivityList'
 import { WolumenKpirSection } from './WolumenKpirSection'
 import { refreshDashboard } from '@/app/(auth)/dashboard/actions'
 import type {
   DashboardMetrics,
   RecentActivity,
-  Client,
   AutomationRateClient,
   WolumenInvoiceRecord,
 } from '@/types/database'
@@ -34,17 +26,7 @@ interface Props {
   topAutomationClients?: AutomationRateClient[]
   wolumenRecords?: WolumenInvoiceRecord[]
   kpirClientNames?: Record<string, string>
-  clients: Pick<Client, 'nip' | 'nazwa'>[]
-  selectedClient: string
-  selectedPeriod: string
 }
-
-const periodOptions = [
-  { value: '1d', label: 'Dziś' },
-  { value: '7d', label: 'Ostatnie 7 dni' },
-  { value: '30d', label: 'Ostatnie 30 dni' },
-  { value: 'all', label: 'Cały okres' },
-]
 
 export function DashboardClient({
   metrics,
@@ -52,31 +34,13 @@ export function DashboardClient({
   topAutomationClients = [],
   wolumenRecords = [],
   kpirClientNames = {},
-  clients,
-  selectedClient,
-  selectedPeriod,
 }: Props) {
   const router = useRouter()
-
-  const updateUrl = (overrides: Record<string, string>) => {
-    const params = new URLSearchParams()
-    const values = {
-      client: selectedClient,
-      period: selectedPeriod,
-      ...overrides,
-    }
-    Object.entries(values).forEach(([k, v]) => {
-      if (v && v !== '__all__') params.set(k, v)
-    })
-    router.push(`/dashboard?${params.toString()}`)
-  }
 
   const handleRefresh = async () => {
     await refreshDashboard()
     router.refresh()
   }
-
-  const showTrends = selectedPeriod !== 'all'
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -85,39 +49,6 @@ export function DashboardClient({
         <h1 className="text-2xl font-bold text-[#1E293B]">Dashboard</h1>
 
         <div className="flex items-center gap-3">
-          <Select
-            value={selectedClient || '__all__'}
-            onValueChange={(v) => updateUrl({ client: !v || v === '__all__' ? '' : v })}
-          >
-            <SelectTrigger className="w-[180px] h-9 border-[#E2E8F0] cursor-pointer">
-              <SelectValue placeholder="Klient" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Wszyscy razem</SelectItem>
-              {clients.map((c) => (
-                <SelectItem key={c.nip} value={c.nip}>
-                  {c.nazwa}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={selectedPeriod}
-            onValueChange={(v) => updateUrl({ period: v ?? '7d' })}
-          >
-            <SelectTrigger className="w-[160px] h-9 border-[#E2E8F0] cursor-pointer">
-              <SelectValue placeholder="Okres" />
-            </SelectTrigger>
-            <SelectContent>
-              {periodOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Button
             variant="outline"
             size="sm"
@@ -141,7 +72,7 @@ export function DashboardClient({
         <MetricCard
           label="Wyjątki pending"
           value={metrics.pendingExceptions.toLocaleString('pl-PL')}
-          trend={showTrends ? metrics.exceptionsTrend : null}
+          trend={metrics.exceptionsTrend}
           invertColor
           icon={<AlertTriangle className="w-5 h-5 text-[#F59E0B]" />}
         />
