@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from 'lucide-react'
+import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { EditModal } from './EditModal'
@@ -45,6 +45,7 @@ import { WalidatorBadge } from './sections/WalidatorBadge'
 import { WalidatorKupVatBadge } from './sections/WalidatorKupVatBadge'
 import { getLatestReview } from '@/lib/ai-review'
 import type { ExceptionWithClient, ClientPojazd, PozycjaXml, KlasyfikacjaAiPozycja, TypDokumentu, ZapisVATData, PozycjaVAT } from '@/types/database'
+import { FakturaPreview } from './sections/FakturaPreview'
 
 interface ClientOpis {
   id: number
@@ -98,11 +99,24 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
+    try {
+      const saved = localStorage.getItem('fluinty_preview_visible')
+      if (saved === 'true') setShowPreview(true)
+    } catch { /* SSR / no localStorage */ }
   }, [])
+
+  const togglePreview = () => {
+    setShowPreview(prev => {
+      const next = !prev
+      try { localStorage.setItem('fluinty_preview_visible', String(next)) } catch { /* noop */ }
+      return next
+    })
+  }
   
   // Pending state
   const [selectedOpis, setSelectedOpis] = useState('')
@@ -790,8 +804,46 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           {(exception.resolved_by === 'fluinty_auto' || exception.auto_created_by === 'fluinty_auto') && (
             <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">AUTO</Badge>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={togglePreview}
+            className={cn(
+              "h-7 px-2 text-xs gap-1",
+              showPreview ? "text-[#1F3A5F] bg-blue-50" : "text-[#94A3B8]"
+            )}
+            title={showPreview ? 'Ukryj podgląd faktury' : 'Pokaż podgląd faktury'}
+          >
+            {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Podgląd</span>
+          </Button>
         </div>
       </div>
+
+      {/* ── SPLIT VIEW: left = sections, right = preview ── */}
+      <div className={cn(
+        showPreview && "lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5"
+      )}>
+      {/* Left column — existing sections */}
+      <div className="min-w-0">
+
+      {/* Mobile preview — accordion (shown only when preview toggled on mobile/tablet) */}
+      {showPreview && (
+        <div className="lg:hidden mb-4">
+          <Collapsible>
+            <CollapsibleTrigger className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors">
+              <span className="flex items-center gap-2 font-medium">
+                <FileText className="w-4 h-4" />
+                Podgląd faktury
+              </span>
+              <ChevronDown className="w-4 h-4" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <FakturaPreview exception={exception} />
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
 
       {/* A3 AI Review section — show BEFORE confidence and classification */}
       {(() => {
@@ -1204,6 +1256,18 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           </div>
         </div>
       )}
+
+      </div>{/* end left column */}
+
+      {/* Right column — sticky FakturaPreview (desktop only) */}
+      {showPreview && (
+        <div className="hidden lg:block">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
+            <FakturaPreview exception={exception} />
+          </div>
+        </div>
+      )}
+      </div>{/* end split view grid */}
 
       {/* Modal Edycji */}
       {showEditModal && (
