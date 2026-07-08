@@ -76,14 +76,21 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
     }
   }
 
+  // Hide cena column when all items have ilosc=1 (redundant with netto)
+  const allIloscOne = hasAnyPozycje && pozycje.every(p => {
+    const qty = Number(pVal(p, 'ilosc') || 1)
+    return qty === 1
+  })
+  if (allIloscOne) colHasData.cena = false
+
   const columns: { key: ColKey; label: string; align?: string }[] = [
     { key: 'lp', label: 'LP' },
-    { key: 'nazwa', label: 'Nazwa towaru / usługi' },
+    { key: 'nazwa', label: 'Nazwa' },
     { key: 'ilosc', label: 'Ilość', align: 'right' },
     { key: 'jm', label: 'J.m.' },
-    { key: 'cena', label: 'Cena jedn.', align: 'right' },
+    { key: 'cena', label: 'Cena', align: 'right' },
     { key: 'netto', label: 'Netto', align: 'right' },
-    { key: 'vat', label: 'VAT %' },
+    { key: 'vat', label: 'VAT' },
     { key: 'brutto', label: 'Brutto', align: 'right' },
   ]
   const visibleCols = columns.filter(c => colHasData[c.key])
@@ -156,16 +163,16 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
 
       {/* ── Pozycje table ──────────────────────────── */}
       {hasAnyPozycje ? (
-        <div className="border-b border-slate-200 overflow-x-auto">
-          <table className="w-full text-xs">
+        <div className="border-b border-slate-200">
+          <table className="w-full text-[11px] table-fixed">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200">
                 {visibleCols.map(col => (
                   <th
                     key={col.key}
-                    className={`px-3 py-2 font-semibold text-slate-600 uppercase text-[10px] tracking-wider whitespace-nowrap ${
+                    className={`px-2 py-1.5 font-semibold text-slate-600 uppercase text-[10px] tracking-wider ${
                       col.align === 'right' ? 'text-right' : 'text-left'
-                    } ${col.key === 'nazwa' ? 'min-w-[140px]' : ''}`}
+                    } ${col.key === 'lp' ? 'w-8' : ''} ${col.key === 'nazwa' ? '' : col.key === 'jm' ? 'w-10' : col.key === 'vat' ? 'w-12' : col.key === 'ilosc' ? 'w-10' : 'w-[70px]'}`}
                   >
                     {col.label}
                   </th>
@@ -181,9 +188,9 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
                   {visibleCols.map(col => (
                     <td
                       key={col.key}
-                      className={`px-3 py-1.5 ${
+                      className={`px-2 py-1 ${
                         col.align === 'right' ? 'text-right tabular-nums' : 'text-left'
-                      } ${col.key === 'nazwa' ? 'text-slate-800' : 'text-slate-600'}`}
+                      } ${col.key === 'nazwa' ? 'text-slate-800 break-words' : 'text-slate-600 whitespace-nowrap'}`}
                     >
                       {getCellValue(poz, col.key)}
                     </td>

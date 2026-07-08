@@ -99,14 +99,14 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
+  const [showPreview, setShowPreview] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
     try {
       const saved = localStorage.getItem('fluinty_preview_visible')
-      if (saved === 'true') setShowPreview(true)
+      if (saved === 'false') setShowPreview(false)
     } catch { /* SSR / no localStorage */ }
   }, [])
 
@@ -822,7 +822,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
       {/* ── SPLIT VIEW: left = sections, right = preview ── */}
       <div className={cn(
-        showPreview && "lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-5"
+        showPreview && "lg:grid lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,55fr)_45fr] lg:gap-5"
       )}>
       {/* Left column — existing sections */}
       <div className="min-w-0">
