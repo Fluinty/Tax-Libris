@@ -3,6 +3,8 @@ import { getAllowedNips, applyNipFilter } from '@/lib/auth-helpers'
 import { ClientsTableClient } from '@/components/clients/ClientsTableClient'
 import type { ClientWithCounts } from '@/types/database'
 
+export const dynamic = 'force-dynamic'
+
 export default async function KlienciPage() {
   const supabase = createSupabaseAdmin()
   const { nips, isAdmin, ryczaltNips } = await getAllowedNips()

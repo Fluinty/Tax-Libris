@@ -11,6 +11,8 @@ import { OpisyTable } from '@/components/client-detail/OpisyTable'
 import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
 import { AutoWriteSection } from '@/components/client-detail/AutoWriteSection'
 
+export const dynamic = 'force-dynamic'
+
 export default async function ClientDetailPage({ params }: { params: Promise<{ nip: string }> }) {
   const { nip } = await params
   const { nips, isAdmin, ryczaltNips } = await getAllowedNips()

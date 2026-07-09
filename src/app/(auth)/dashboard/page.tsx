@@ -31,6 +31,8 @@ function formatDateSQL(daysAgo: number): string {
   return d.toISOString()
 }
 
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams
   const selectedClient = params.client ?? ''

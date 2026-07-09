@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import type { UserProfile } from '@/types/database'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AuthLayout({
   children,
 }: {
