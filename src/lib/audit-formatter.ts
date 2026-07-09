@@ -8,7 +8,6 @@ export interface AuditEntry {
   pozycja_xml: string | null
   rule_id: number | null
   opis_zapisany: string | null
-  error?: string | null
   error_message: string | null
   duration_ms: number | null
   details: Record<string, unknown> | null
@@ -120,7 +119,7 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
         iconName: 'XCircle',
         color: 'red',
         title: 'Błąd',
-        subtitle: audit.error || audit.error_message || details.error || 'nieznany błąd',
+        subtitle: audit.error_message || details.error || 'nieznany błąd',
       }
 
     case 'ignore_exception': {

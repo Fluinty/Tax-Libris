@@ -12,7 +12,7 @@ export async function getZapisHistory(zapisId: number): Promise<{
   // Audit log entries for this zapis
   const { data: audits } = await supabase
     .from('audit_log')
-    .select('id, timestamp, action, pozycja_xml, rule_id, opis_zapisany, error, error_message, duration_ms, details')
+    .select('id, timestamp, action, pozycja_xml, rule_id, opis_zapisany, error_message, duration_ms, details')
     .eq('zapis_id', zapisId)
     .order('timestamp', { ascending: true })
 

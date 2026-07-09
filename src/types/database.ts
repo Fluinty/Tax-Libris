@@ -264,7 +264,6 @@ export interface AuditLog {
   rule_id: number | null;
   opis_zapisany: string | null;
   duration_ms: number | null;
-  error?: string | null;
   error_message: string | null;
   details: Record<string, unknown> | null;
 }
@@ -363,7 +362,6 @@ export interface RecentActivity {
   zapis_id: number | null;
   opis_zapisany: string | null;
   pozycja_xml: string | null;
-  error?: string | null;
   error_message: string | null;
   rule_id: number | null;
   details: Record<string, unknown> | null;

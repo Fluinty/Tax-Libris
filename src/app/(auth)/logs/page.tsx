@@ -32,7 +32,7 @@ export default async function LogsPage({ searchParams }: Props) {
   // ── 2. audit_log ───────────────────────────────────
   let auditQuery = adminSupabase
     .from('audit_log')
-    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error, error_message, details', { count: 'exact' })
+    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, details', { count: 'exact' })
     .order('timestamp', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
   auditQuery = applyNipFilter(auditQuery, nips, 'client_nip', ryczaltNips)
@@ -43,20 +43,20 @@ export default async function LogsPage({ searchParams }: Props) {
   const allNips = new Set<string>()
   for (const row of changesRaw ?? []) if (row.client_nip) allNips.add(row.client_nip)
   for (const row of auditRaw ?? []) if (row.client_nip) allNips.add(row.client_nip)
-
+  allNips.delete('')
   const clientMap: Record<string, string> = {}
   if (allNips.size > 0) {
-    const { data: clients } = await adminSupabase
+    const { data: clientsRaw } = await adminSupabase
       .from('clients')
       .select('nip, nazwa')
       .in('nip', Array.from(allNips))
-    for (const c of clients ?? []) {
-      clientMap[c.nip] = c.nazwa
+    for (const c of clientsRaw ?? []) {
+      clientMap[c.nip] = c.nazwa || c.nip
     }
   }
 
-  // ── 4. Normalize into unified log entries ──────────
-  type UnifiedLog = {
+  // ── 4. Combine and sort ────────────────────────────
+  interface UnifiedLog {
     id: string
     type: 'change' | 'audit'
     timestamp: string
@@ -71,7 +71,6 @@ export default async function LogsPage({ searchParams }: Props) {
     action?: string
     opis_zapisany?: string | null
     pozycja_xml?: string | null
-    error?: string | null
     error_message?: string | null
     zapis_id?: number | null
     details?: Record<string, unknown> | null
@@ -98,7 +97,6 @@ export default async function LogsPage({ searchParams }: Props) {
     action: a.action,
     opis_zapisany: a.opis_zapisany,
     pozycja_xml: a.pozycja_xml,
-    error: a.error,
     error_message: a.error_message,
     zapis_id: a.zapis_id,
     details: a.details,

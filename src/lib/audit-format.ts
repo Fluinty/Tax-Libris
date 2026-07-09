@@ -1,7 +1,6 @@
 export interface AuditLogLike {
   action?: string
   details?: Record<string, unknown> | null
-  error?: string | null
   error_message?: string | null
   opis_zapisany?: string | null
   pozycja_xml?: string | null
@@ -203,7 +202,6 @@ export function extractAuditDetailsInfo(log: AuditLogLike): AuditDetailsResult {
   // 2. Error check
   if (log.action === 'error') {
     const fullErr = String(
-      log.error ||
       log.error_message ||
       d.error ||
       d.error_message ||
