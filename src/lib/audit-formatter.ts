@@ -8,6 +8,7 @@ export interface AuditEntry {
   pozycja_xml: string | null
   rule_id: number | null
   opis_zapisany: string | null
+  error?: string | null
   error_message: string | null
   duration_ms: number | null
   details: Record<string, unknown> | null
@@ -24,10 +25,10 @@ export interface ZapisInfo {
   typ_dokumentu: 'zakup' | 'sprzedaz' | null
 }
 
-export type ActionColor = 'green' | 'blue' | 'orange' | 'red' | 'gray'
+export type ActionColor = 'green' | 'blue' | 'orange' | 'red' | 'gray' | 'purple'
 
 export interface FormattedAction {
-  iconName: 'Check' | 'CheckCircle2' | 'AlertTriangle' | 'Search' | 'XCircle' | 'MinusCircle' | 'Wrench' | 'Trash2' | 'HelpCircle'
+  iconName: 'Check' | 'CheckCircle2' | 'AlertTriangle' | 'Search' | 'XCircle' | 'MinusCircle' | 'Wrench' | 'Trash2' | 'HelpCircle' | 'FileText'
   color: ActionColor
   title: string
   subtitle: string | null
@@ -77,12 +78,41 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
       }
     }
 
+    case 'external_booked': {
+      const nr = details.numer_faktury || details.numer_dokumentu || details.ksiegowe_numer || details.invoice_number || details.faktura_numer || details.numer || details.faktura || audit.pozycja_xml || ''
+      return {
+        iconName: 'CheckCircle2',
+        color: 'purple',
+        title: 'Zaksięgowano ręcznie w Rachmistrzu (poza panelem)',
+        subtitle: nr ? `Faktura: ${nr}` : null,
+      }
+    }
+
+    case 'approved': {
+      return {
+        iconName: 'CheckCircle2',
+        color: 'blue',
+        title: 'Zatwierdzono w panelu',
+        subtitle: details.by ? `przez ${details.by}` : null,
+      }
+    }
+
+    case 'pre_fill_pending_review': {
+      return {
+        iconName: 'FileText',
+        color: 'gray',
+        title: 'Pre-fill gotowy do akceptacji',
+        subtitle: null,
+      }
+    }
+
+    case 'dry_run_create':
     case 'dry_run':
       return {
         iconName: 'Search',
         color: 'gray',
-        title: 'DRY RUN',
-        subtitle: `byłby wpisany opis "${details.opis}"`,
+        title: 'Test (dry run)',
+        subtitle: `byłby wpisany opis "${details.opis || audit.opis_zapisany || ''}"`,
       }
 
     case 'error':
@@ -90,7 +120,7 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
         iconName: 'XCircle',
         color: 'red',
         title: 'Błąd',
-        subtitle: audit.error_message || details.error || 'nieznany błąd',
+        subtitle: audit.error || audit.error_message || details.error || 'nieznany błąd',
       }
 
     case 'ignore_exception': {
@@ -119,13 +149,23 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
         subtitle: details.deleted_by ? `przez ${details.deleted_by}` : null,
       }
 
-    default:
+    default: {
+      if (audit.action && audit.action.startsWith('skip_')) {
+        const skipPart = audit.action.slice(5).replace(/_/g, ' ').trim()
+        return {
+          iconName: 'MinusCircle',
+          color: 'gray',
+          title: skipPart ? `Pominięto: ${skipPart}` : 'Pominięto',
+          subtitle: details.reason || details.powod || null,
+        }
+      }
       return {
         iconName: 'HelpCircle',
         color: 'gray',
-        title: `Nieznana akcja: ${audit.action}`,
+        title: audit.action || 'Nieznana akcja',
         subtitle: null,
       }
+    }
   }
 }
 

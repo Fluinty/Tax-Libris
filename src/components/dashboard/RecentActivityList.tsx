@@ -3,15 +3,7 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { pl } from 'date-fns/locale'
-import {
-  Check,
-  Pencil,
-  AlertTriangle,
-  XCircle,
-  Wrench,
-  Trash2,
-  Clock,
-} from 'lucide-react'
+import { Clock } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -20,109 +12,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { ZapisHistorySheet } from '@/components/shared/ZapisHistorySheet'
 import type { RecentActivity } from '@/types/database'
+import { getAuditActionConfig } from '@/lib/audit-format'
+import { AuditBadge, AuditDetailsText, getAuditIcon } from '@/components/shared/AuditActionViews'
 
 interface Props {
   activities: RecentActivity[]
-}
-
-function getActionConfig(action: string) {
-  switch (action) {
-    case 'auto_create_full':
-      return {
-        icon: <Check className="w-4 h-4" />,
-        color: 'text-[#22C55E]',
-        bg: 'bg-[#22C55E]/10',
-      }
-    case 'set_opis':
-      return {
-        icon: <Check className="w-4 h-4" />,
-        color: 'text-[#22C55E]',
-        bg: 'bg-[#22C55E]/10',
-      }
-    case 'resolve_exception':
-      return {
-        icon: <Pencil className="w-4 h-4" />,
-        color: 'text-[#4A90E2]',
-        bg: 'bg-[#4A90E2]/10',
-      }
-    case 'exception':
-      return {
-        icon: <AlertTriangle className="w-4 h-4" />,
-        color: 'text-[#F59E0B]',
-        bg: 'bg-[#F59E0B]/10',
-      }
-    case 'error':
-      return {
-        icon: <XCircle className="w-4 h-4" />,
-        color: 'text-[#EF4444]',
-        bg: 'bg-[#EF4444]/10',
-      }
-    case 'rule_edited':
-      return {
-        icon: <Wrench className="w-4 h-4" />,
-        color: 'text-[#64748B]',
-        bg: 'bg-[#F1F5F9]',
-      }
-    case 'rule_deleted':
-      return {
-        icon: <Trash2 className="w-4 h-4" />,
-        color: 'text-[#64748B]',
-        bg: 'bg-[#F1F5F9]',
-      }
-    default:
-      return {
-        icon: <Check className="w-4 h-4" />,
-        color: 'text-[#94A3B8]',
-        bg: 'bg-[#F8FAFC]',
-      }
-  }
-}
-
-function formatDescription(activity: RecentActivity): string {
-  const d = (activity.details ?? {}) as Record<string, string>
-
-  switch (activity.action) {
-    case 'auto_create_full': {
-      const nr = d.numer_faktury || d.numer_dokumentu || d.ksiegowe_numer || d.invoice_number || d.faktura_numer || d.numer || d.faktura || activity.pozycja_xml || ''
-      return `${activity.client_nazwa} → Zaksięgowano w Rachmistrzu${nr ? ` (faktura: ${nr})` : ''}`
-    }
-    case 'set_opis': {
-      const opis = activity.opis_zapisany || d.opis || d.result || '?'
-      return `${activity.client_nazwa} → "${opis}" (auto)`
-    }
-    case 'resolve_exception': {
-      const opis = activity.opis_zapisany || d.opis || ''
-      const by = d.resolved_by || d.by || ''
-      return `${activity.client_nazwa} → reguła${opis ? ` "${opis}"` : ''} utworzona${by ? ` przez ${by}` : ''}`
-    }
-    case 'exception': {
-      const pozycja = activity.pozycja_xml || d.pierwsza_pozycja || d.pozycja_xml || '?'
-      const truncated = pozycja.length > 50 ? pozycja.slice(0, 50) + '…' : pozycja
-      return `${activity.client_nazwa} → wyjątek: "${truncated}"`
-    }
-    case 'dry_run': {
-      const opis = activity.opis_zapisany || d.opis || '?'
-      return `${activity.client_nazwa} → DRY RUN: "${opis}"`
-    }
-    case 'error': {
-      const errMsg = activity.error_message || d.error || 'Nieznany błąd'
-      return `${activity.client_nazwa} → BŁĄD: ${errMsg}`
-    }
-    case 'ignore_exception': {
-      const by = d.ignored_by || d.by || 'księgowa'
-      return `${activity.client_nazwa} → pominięto (przez ${by})`
-    }
-    case 'rule_edited': {
-      const by = d.edited_by || ''
-      return `${activity.client_nazwa} → reguła #${activity.rule_id ?? '?'} edytowana${by ? ` przez ${by}` : ''}`
-    }
-    case 'rule_deleted': {
-      const by = d.deleted_by || ''
-      return `${activity.client_nazwa} → reguła #${activity.rule_id ?? '?'} usunięta${by ? ` przez ${by}` : ''}`
-    }
-    default:
-      return `${activity.client_nazwa} → ${activity.action}`
-  }
 }
 
 export function RecentActivityList({ activities }: Props) {
@@ -132,7 +26,7 @@ export function RecentActivityList({ activities }: Props) {
     <>
       <div className="space-y-1">
         {activities.map((activity) => {
-          const config = getActionConfig(activity.action)
+          const config = getAuditActionConfig(activity.action)
           const timeAgo = formatDistanceToNow(new Date(activity.timestamp), {
             addSuffix: true,
             locale: pl,
@@ -152,14 +46,23 @@ export function RecentActivityList({ activities }: Props) {
               className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#F8FAFC] transition-colors"
             >
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${config.bg} ${config.color}`}
+                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${config.circleBg} ${config.circleColor}`}
               >
-                {config.icon}
+                {getAuditIcon(config.iconType, 'w-4 h-4')}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-[#1E293B] break-words">
-                  {formatDescription(activity)}
-                </p>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className="font-semibold text-sm text-[#1E293B] truncate max-w-[200px]"
+                    title={activity.client_nazwa || activity.client_nip || ''}
+                  >
+                    {activity.client_nazwa || activity.client_nip || '—'}
+                  </span>
+                  <AuditBadge action={activity.action} />
+                </div>
+                <div className="text-xs text-[#64748B]">
+                  <AuditDetailsText log={activity} />
+                </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {activity.zapis_id && (

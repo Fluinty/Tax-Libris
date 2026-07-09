@@ -32,7 +32,7 @@ export default async function LogsPage({ searchParams }: Props) {
   // ── 2. audit_log ───────────────────────────────────
   let auditQuery = adminSupabase
     .from('audit_log')
-    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, details', { count: 'exact' })
+    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error, error_message, details', { count: 'exact' })
     .order('timestamp', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
   auditQuery = applyNipFilter(auditQuery, nips, 'client_nip', ryczaltNips)
@@ -71,6 +71,7 @@ export default async function LogsPage({ searchParams }: Props) {
     action?: string
     opis_zapisany?: string | null
     pozycja_xml?: string | null
+    error?: string | null
     error_message?: string | null
     zapis_id?: number | null
     details?: Record<string, unknown> | null
@@ -97,6 +98,7 @@ export default async function LogsPage({ searchParams }: Props) {
     action: a.action,
     opis_zapisany: a.opis_zapisany,
     pozycja_xml: a.pozycja_xml,
+    error: a.error,
     error_message: a.error_message,
     zapis_id: a.zapis_id,
     details: a.details,

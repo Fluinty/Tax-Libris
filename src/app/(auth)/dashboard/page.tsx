@@ -101,7 +101,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // ========== RECENT ACTIVITY ==========
   let recentQuery = supabase
     .from('audit_log')
-    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, rule_id, details')
+    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error, error_message, rule_id, details')
     .order('timestamp', { ascending: false })
     .limit(20)
   if (selectedClient) recentQuery = recentQuery.eq('client_nip', selectedClient)

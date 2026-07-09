@@ -14,6 +14,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AuditBadge, AuditDetailsText } from '@/components/shared/AuditActionViews'
 
 interface UnifiedLog {
   id: string
@@ -39,49 +40,17 @@ interface Props {
   totalPages: number
 }
 
-function getAuditActionLabel(action: string): { label: string; icon: React.ReactNode; color: string; bg: string } {
-  switch (action) {
-    case 'auto_create_full':
-      return { label: 'Zaksięgowano w Rachmistrzu', icon: <Check className="w-3.5 h-3.5" />, color: 'text-green-700', bg: 'bg-green-50' }
-    case 'set_opis':
-      return { label: 'Zapis opisu', icon: <Check className="w-3.5 h-3.5" />, color: 'text-green-700', bg: 'bg-green-50' }
-    case 'resolve_exception':
-      return { label: 'Rozwiązanie wyjątku', icon: <Pencil className="w-3.5 h-3.5" />, color: 'text-blue-700', bg: 'bg-blue-50' }
-    case 'exception':
-      return { label: 'Wyjątek', icon: <AlertTriangle className="w-3.5 h-3.5" />, color: 'text-amber-700', bg: 'bg-amber-50' }
-    case 'error':
-      return { label: 'Błąd', icon: <XCircle className="w-3.5 h-3.5" />, color: 'text-red-700', bg: 'bg-red-50' }
-    case 'ignore_exception':
-      return { label: 'Pominięcie', icon: <XCircle className="w-3.5 h-3.5" />, color: 'text-slate-700', bg: 'bg-slate-50' }
-    case 'dry_run':
-      return { label: 'Dry run', icon: <FileText className="w-3.5 h-3.5" />, color: 'text-purple-700', bg: 'bg-purple-50' }
-    default:
-      return { label: action, icon: <Clock className="w-3.5 h-3.5" />, color: 'text-slate-600', bg: 'bg-slate-50' }
-  }
-}
-
-function formatAuditDetails(log: UnifiedLog): string {
-  const d = (log.details ?? {}) as Record<string, string>
-  switch (log.action) {
-    case 'auto_create_full': {
-      const nr = d.numer_faktury || d.numer_dokumentu || d.ksiegowe_numer || d.invoice_number || d.faktura_numer || d.numer || d.faktura || log.pozycja_xml || ''
-      return nr ? `Faktura: ${nr}` : 'Automatyczne zaksięgowanie dokumentu w Rachmistrzu'
-    }
-    case 'set_opis':
-      return log.opis_zapisany || d.opis || d.result || ''
-    case 'resolve_exception':
-      return log.opis_zapisany || d.opis || ''
-    case 'exception':
-      return log.pozycja_xml || d.pierwsza_pozycja || ''
-    case 'error':
-      return log.error_message || d.error || ''
-    case 'ignore_exception':
-      return d.reason || ''
-    case 'dry_run':
-      return log.opis_zapisany || d.opis || ''
-    default:
-      return log.opis_zapisany || log.pozycja_xml || ''
-  }
+function formatTimestamp(timestamp: string) {
+  return (
+    <>
+      <div>{new Date(timestamp).toLocaleDateString('pl-PL')}</div>
+      <div className="text-[10px] text-[#94A3B8]">
+        {new Date(timestamp).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+        {' · '}
+        {formatDistanceToNow(new Date(timestamp), { addSuffix: true, locale: pl })}
+      </div>
+    </>
+  )
 }
 
 export function LogsClient({ logs, page, totalPages }: Props) {
@@ -116,27 +85,22 @@ export function LogsClient({ logs, page, totalPages }: Props) {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs text-left">
           <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] uppercase text-[10px] tracking-wider">
-              <th className="px-4 py-2.5 text-left w-[140px]">Data</th>
-              <th className="px-4 py-2.5 text-left w-[90px]">Typ</th>
-              <th className="px-4 py-2.5 text-left w-[180px]">Klient</th>
-              <th className="px-4 py-2.5 text-left">Szczegóły</th>
-              <th className="px-4 py-2.5 text-right w-[140px]">Autor</th>
+            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B] font-semibold">
+              <th className="px-4 py-3 w-[140px]">Czas</th>
+              <th className="px-4 py-3 w-[150px]">Typ / Akcja</th>
+              <th className="px-4 py-3 w-[180px]">Klient</th>
+              <th className="px-4 py-3">Szczegóły</th>
+              <th className="px-4 py-3 w-[140px] text-right">Autor</th>
             </tr>
           </thead>
-          <tbody>
-            {logs.map(log => (
-              <tr key={log.id} className="border-b border-[#F1F5F9] last:border-0 hover:bg-[#F8FAFC] transition-colors">
-                {/* Date */}
-                <td className="px-4 py-3 text-[#64748B] whitespace-nowrap align-top">
-                  <div>{new Date(log.timestamp).toLocaleDateString('pl-PL')}</div>
-                  <div className="text-[10px] text-[#94A3B8]">
-                    {new Date(log.timestamp).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
-                    {' · '}
-                    {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true, locale: pl })}
-                  </div>
+          <tbody className="divide-y divide-[#E2E8F0]">
+            {logs.map((log) => (
+              <tr key={log.id} className="hover:bg-[#F8FAFC]/60 transition-colors">
+                {/* Time */}
+                <td className="px-4 py-3 text-[#64748B] whitespace-nowrap font-mono align-top">
+                  {formatTimestamp(log.timestamp)}
                 </td>
 
                 {/* Type badge */}
@@ -147,15 +111,7 @@ export function LogsClient({ logs, page, totalPages }: Props) {
                       Edycja
                     </span>
                   ) : (
-                    (() => {
-                      const cfg = getAuditActionLabel(log.action || '')
-                      return (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
-                          {cfg.icon}
-                          {cfg.label}
-                        </span>
-                      )
-                    })()
+                    <AuditBadge action={log.action} />
                   )}
                 </td>
 
@@ -185,8 +141,8 @@ export function LogsClient({ logs, page, totalPages }: Props) {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-[#475569] truncate max-w-[400px]" title={formatAuditDetails(log)}>
-                      {formatAuditDetails(log) || '—'}
+                    <div className="text-[#475569] max-w-[500px]">
+                      <AuditDetailsText log={log} />
                     </div>
                   )}
                 </td>

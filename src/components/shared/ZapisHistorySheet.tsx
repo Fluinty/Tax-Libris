@@ -11,6 +11,7 @@ import {
   Wrench,
   Trash2,
   HelpCircle,
+  FileText,
   Loader2,
   ShoppingCart,
   DollarSign,
@@ -52,6 +53,7 @@ const iconMap = {
   Wrench: Wrench,
   Trash2: Trash2,
   HelpCircle: HelpCircle,
+  FileText: FileText,
 } as const
 
 const colorMap: Record<ActionColor, { text: string; bg: string; dot: string }> = {
@@ -60,6 +62,7 @@ const colorMap: Record<ActionColor, { text: string; bg: string; dot: string }> =
   orange: { text: 'text-[#F59E0B]', bg: 'bg-[#F59E0B]/10', dot: 'bg-[#F59E0B]' },
   red: { text: 'text-[#EF4444]', bg: 'bg-[#EF4444]/10', dot: 'bg-[#EF4444]' },
   gray: { text: 'text-[#64748B]', bg: 'bg-[#F1F5F9]', dot: 'bg-[#94A3B8]' },
+  purple: { text: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/10', dot: 'bg-[#8B5CF6]' },
 }
 
 export function ZapisHistorySheet({ zapisId, open, onOpenChange }: Props) {
