@@ -27,6 +27,12 @@ interface Props {
 
 function getActionConfig(action: string) {
   switch (action) {
+    case 'auto_create_full':
+      return {
+        icon: <Check className="w-4 h-4" />,
+        color: 'text-[#22C55E]',
+        bg: 'bg-[#22C55E]/10',
+      }
     case 'set_opis':
       return {
         icon: <Check className="w-4 h-4" />,
@@ -76,6 +82,10 @@ function formatDescription(activity: RecentActivity): string {
   const d = (activity.details ?? {}) as Record<string, string>
 
   switch (activity.action) {
+    case 'auto_create_full': {
+      const nr = d.numer_faktury || d.numer_dokumentu || d.ksiegowe_numer || d.invoice_number || d.faktura_numer || d.numer || d.faktura || activity.pozycja_xml || ''
+      return `${activity.client_nazwa} → Zaksięgowano w Rachmistrzu${nr ? ` (faktura: ${nr})` : ''}`
+    }
     case 'set_opis': {
       const opis = activity.opis_zapisany || d.opis || d.result || '?'
       return `${activity.client_nazwa} → "${opis}" (auto)`

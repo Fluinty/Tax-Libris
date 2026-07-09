@@ -67,6 +67,16 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
       }
     }
 
+    case 'auto_create_full': {
+      const nr = details.numer_faktury || details.numer_dokumentu || details.ksiegowe_numer || details.invoice_number || details.faktura_numer || details.numer || details.faktura || audit.pozycja_xml || ''
+      return {
+        iconName: 'CheckCircle2',
+        color: 'green',
+        title: 'Zaksięgowano w Rachmistrzu',
+        subtitle: nr ? `Faktura: ${nr}` : 'Automatyczne księgowanie',
+      }
+    }
+
     case 'dry_run':
       return {
         iconName: 'Search',

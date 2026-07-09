@@ -41,6 +41,8 @@ interface Props {
 
 function getAuditActionLabel(action: string): { label: string; icon: React.ReactNode; color: string; bg: string } {
   switch (action) {
+    case 'auto_create_full':
+      return { label: 'Zaksięgowano w Rachmistrzu', icon: <Check className="w-3.5 h-3.5" />, color: 'text-green-700', bg: 'bg-green-50' }
     case 'set_opis':
       return { label: 'Zapis opisu', icon: <Check className="w-3.5 h-3.5" />, color: 'text-green-700', bg: 'bg-green-50' }
     case 'resolve_exception':
@@ -61,6 +63,10 @@ function getAuditActionLabel(action: string): { label: string; icon: React.React
 function formatAuditDetails(log: UnifiedLog): string {
   const d = (log.details ?? {}) as Record<string, string>
   switch (log.action) {
+    case 'auto_create_full': {
+      const nr = d.numer_faktury || d.numer_dokumentu || d.ksiegowe_numer || d.invoice_number || d.faktura_numer || d.numer || d.faktura || log.pozycja_xml || ''
+      return nr ? `Faktura: ${nr}` : 'Automatyczne zaksięgowanie dokumentu w Rachmistrzu'
+    }
     case 'set_opis':
       return log.opis_zapisany || d.opis || d.result || ''
     case 'resolve_exception':
