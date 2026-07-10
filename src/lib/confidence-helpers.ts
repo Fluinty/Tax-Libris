@@ -70,3 +70,6 @@ export function hasVendorAlarms(exception: {
   if (exception.date_anomaly) return true;
   return false;
 }
+
+export { fakturaWymagaUwagi } from './faktura-uwaga';
+

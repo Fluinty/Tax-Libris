@@ -25,10 +25,9 @@ export function ClientSidebar({ clients, totalPending, selectedClient, currentTy
   )
 
   const handleSelectClient = (nip: string | null) => {
-    const params = new URLSearchParams()
-    params.set('typ', currentTyp)
-    if (nip) params.set('client', nip)
-    if (currentSort !== 'newest') params.set('sort', currentSort)
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+    if (nip) params.set('client', nip); else params.delete('client')
+    if (currentSort !== 'oldest') params.set('sort', currentSort); else params.delete('sort')
     router.push(`/do-akceptacji?${params.toString()}`)
   }
 

@@ -47,17 +47,25 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
 
   // Apply sorting
   switch (params.sort) {
-    case 'oldest':
-      exceptionsQuery = exceptionsQuery.order('created_at', { ascending: true })
+    case 'newest':
+      exceptionsQuery = exceptionsQuery.order('created_at', { ascending: false })
       break
     case 'highest':
+    case 'amount_desc':
       exceptionsQuery = exceptionsQuery.order('kwota_brutto', { ascending: false, nullsFirst: false })
       break
     case 'lowest':
       exceptionsQuery = exceptionsQuery.order('kwota_brutto', { ascending: true, nullsFirst: false })
       break
+    case 'conf_desc':
+      exceptionsQuery = exceptionsQuery.order('confidence_overall', { ascending: false, nullsFirst: false })
+      break
+    case 'conf_asc':
+      exceptionsQuery = exceptionsQuery.order('confidence_overall', { ascending: true, nullsFirst: false })
+      break
+    case 'oldest':
     default:
-      exceptionsQuery = exceptionsQuery.order('created_at', { ascending: false })
+      exceptionsQuery = exceptionsQuery.order('created_at', { ascending: true })
   }
 
   const { data: rawExceptions, error: rawError } = await exceptionsQuery
@@ -270,7 +278,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
               totalPending={totalPending}
               selectedClient={params.client ?? null}
               currentTyp={'all'}
-              currentSort={params.sort ?? 'newest'}
+              currentSort={params.sort ?? 'oldest'}
             />
           </div>
         </aside>

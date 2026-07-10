@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { FakturaCard } from '@/components/do-akceptacji/FakturaCard'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ListFilter } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ClientPojazd } from '@/types/database'
+import { fakturaWymagaUwagi } from '@/lib/faktura-uwaga'
 
 interface FakturaListClientProps {
   pendingReview: any[]
@@ -18,10 +19,63 @@ interface FakturaListClientProps {
 }
 
 type FilterType = 'all' | 'zakup' | 'sprzedaz'
+type UwagaFilterType = 'all' | 'czyste' | 'uwaga'
+type SortType = 'oldest' | 'newest' | 'conf_desc' | 'conf_asc' | 'amount_desc' | 'highest'
 
 export function FakturaListClient({ pendingReview, pending, autoCreated, clientOpisyMap, clientPojazdyMap = {} }: FakturaListClientProps) {
-  const [filter, setFilter] = useState<FilterType>('all')
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const [typ, setTyp] = useState<FilterType>(() => (searchParams?.get('typ') as FilterType) || 'all')
+  const [uwaga, setUwaga] = useState<UwagaFilterType>(() => (searchParams?.get('uwaga') as UwagaFilterType) || 'all')
+  const [sort, setSort] = useState<SortType>(() => (searchParams?.get('sort') as SortType) || 'oldest')
+
+  // Synchronize state when URL searchParams change externally (e.g. sidebar navigation)
+  useEffect(() => {
+    if (!searchParams) return
+    const t = (searchParams.get('typ') as FilterType) || 'all'
+    const u = (searchParams.get('uwaga') as UwagaFilterType) || 'all'
+    const s = (searchParams.get('sort') as SortType) || 'oldest'
+    if (t !== typ) setTyp(t)
+    if (u !== uwaga) setUwaga(u)
+    if (s !== sort) setSort(s)
+  }, [searchParams])
+
+  const updateUrlParams = (updates: { typ?: FilterType; uwaga?: UwagaFilterType; sort?: SortType }) => {
+    const sp = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+    
+    if (updates.typ !== undefined) {
+      if (updates.typ === 'all') sp.delete('typ')
+      else sp.set('typ', updates.typ)
+    }
+    if (updates.uwaga !== undefined) {
+      if (updates.uwaga === 'all') sp.delete('uwaga')
+      else sp.set('uwaga', updates.uwaga)
+    }
+    if (updates.sort !== undefined) {
+      if (updates.sort === 'oldest') sp.delete('sort')
+      else sp.set('sort', updates.sort)
+    }
+
+    const qs = sp.toString()
+    const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+    window.history.replaceState(null, '', newUrl)
+  }
+
+  const handleTypChange = (newTyp: FilterType) => {
+    setTyp(newTyp)
+    updateUrlParams({ typ: newTyp })
+  }
+
+  const handleUwagaChange = (newUwaga: UwagaFilterType) => {
+    setUwaga(newUwaga)
+    updateUrlParams({ uwaga: newUwaga })
+  }
+
+  const handleSortChange = (newSort: SortType) => {
+    setSort(newSort)
+    updateUrlParams({ sort: newSort })
+  }
 
   // Auto-refresh co 30s — pobiera świeże dane z server component bez przeładowania strony
   useEffect(() => {
@@ -55,56 +109,142 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
     }
   }, [router])
 
-  const filterFn = (e: any) => {
-    if (filter === 'all') return true
+  const typFilterFn = (e: any) => {
+    if (typ === 'all') return true
     const isSprzedaz = e.typ_dokumentu === 'sprzedaz'
-    if (filter === 'sprzedaz') return isSprzedaz
+    if (typ === 'sprzedaz') return isSprzedaz
     return !isSprzedaz // traktujemy null i cokolwiek innego jako 'zakup'
   }
 
-  const filteredPendingReview = pendingReview.filter(filterFn)
-    .sort((a, b) => (a.confidence_overall ?? 1) - (b.confidence_overall ?? 1)) // confidence ASC
-  const filteredPending = pending.filter(filterFn)
-  const filteredAutoCreated = autoCreated.filter(filterFn)
+  const uwagaFilterFn = (e: any) => {
+    if (uwaga === 'all') return true
+    const reqAtt = fakturaWymagaUwagi(e)
+    if (uwaga === 'czyste') return !reqAtt
+    return reqAtt // uwaga === 'uwaga'
+  }
 
-  // Counts
-  const countZakup = pendingReview.filter(e => e.typ_dokumentu !== 'sprzedaz').length 
-                   + pending.filter(e => e.typ_dokumentu !== 'sprzedaz').length 
-                   + autoCreated.filter(e => e.typ_dokumentu !== 'sprzedaz').length
-  
-  const countSprzedaz = pendingReview.filter(e => e.typ_dokumentu === 'sprzedaz').length 
-                      + pending.filter(e => e.typ_dokumentu === 'sprzedaz').length 
-                      + autoCreated.filter(e => e.typ_dokumentu === 'sprzedaz').length
-                      
+  const sortFn = (a: any, b: any) => {
+    if (sort === 'oldest') {
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    }
+    if (sort === 'newest') {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    }
+    if (sort === 'conf_desc') {
+      const ca = typeof a.confidence_overall === 'number' ? a.confidence_overall : (typeof a.ai_confidence === 'number' ? a.ai_confidence : 1.0)
+      const cb = typeof b.confidence_overall === 'number' ? b.confidence_overall : (typeof b.ai_confidence === 'number' ? b.ai_confidence : 1.0)
+      return cb - ca
+    }
+    if (sort === 'conf_asc') {
+      const ca = typeof a.confidence_overall === 'number' ? a.confidence_overall : (typeof a.ai_confidence === 'number' ? a.ai_confidence : 1.0)
+      const cb = typeof b.confidence_overall === 'number' ? b.confidence_overall : (typeof b.ai_confidence === 'number' ? b.ai_confidence : 1.0)
+      return ca - cb
+    }
+    if (sort === 'amount_desc' || sort === 'highest') {
+      const aa = Number(a.kwota_brutto ?? a.ai_kwoty_per_kolumna?.brutto ?? 0)
+      const ab = Number(b.kwota_brutto ?? b.ai_kwoty_per_kolumna?.brutto ?? 0)
+      return ab - aa
+    }
+    return 0
+  }
+
+  const allItemsForCounters = [...pendingReview, ...pending, ...autoCreated]
+
+  // Counts for Typ tabs (filtered by current uwaga filter)
+  const itemsMatchingUwaga = allItemsForCounters.filter(uwagaFilterFn)
+  const countZakup = itemsMatchingUwaga.filter(e => e.typ_dokumentu !== 'sprzedaz').length
+  const countSprzedaz = itemsMatchingUwaga.filter(e => e.typ_dokumentu === 'sprzedaz').length
   const countAll = countZakup + countSprzedaz
+
+  // Counts for Uwaga tabs (filtered by current typ filter)
+  const itemsMatchingTyp = allItemsForCounters.filter(typFilterFn)
+  const uwagaCountCzyste = itemsMatchingTyp.filter(e => !fakturaWymagaUwagi(e)).length
+  const uwagaCountUwaga = itemsMatchingTyp.filter(e => fakturaWymagaUwagi(e)).length
+  const uwagaCountAll = uwagaCountCzyste + uwagaCountUwaga
+
+  // Final filtered & sorted items
+  const filteredPendingReview = pendingReview.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
+  const filteredPending = pending.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
+  const filteredAutoCreated = autoCreated.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 mb-6 p-1 bg-white rounded-lg shadow-sm border border-[#E2E8F0] w-fit">
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={() => setFilter('all')}
-          className={cn("text-sm", filter === 'all' && "bg-[#1E293B] text-white hover:bg-[#1E293B] hover:text-white")}
-        >
-          Wszystkie ({countAll})
-        </Button>
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={() => setFilter('zakup')}
-          className={cn("text-sm", filter === 'zakup' && "bg-orange-100 text-orange-900 hover:bg-orange-200 hover:text-orange-900")}
-        >
-          🔻 Zakupy ({countZakup})
-        </Button>
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={() => setFilter('sprzedaz')}
-          className={cn("text-sm", filter === 'sprzedaz' && "bg-green-100 text-green-900 hover:bg-green-200 hover:text-green-900")}
-        >
-          🔺 Sprzedaż ({countSprzedaz})
-        </Button>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6 bg-white p-3 rounded-xl border border-[#E2E8F0] shadow-sm">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Taby typu dokumentu */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleTypChange('all')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium", typ === 'all' && "bg-[#1E293B] text-white hover:bg-[#1E293B] hover:text-white shadow-sm")}
+            >
+              Wszystkie ({countAll})
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleTypChange('zakup')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium", typ === 'zakup' && "bg-orange-100 text-orange-900 hover:bg-orange-200 hover:text-orange-900 shadow-sm")}
+            >
+              🔻 Zakupy ({countZakup})
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleTypChange('sprzedaz')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium", typ === 'sprzedaz' && "bg-green-100 text-green-900 hover:bg-green-200 hover:text-green-900 shadow-sm")}
+            >
+              🔺 Sprzedaż ({countSprzedaz})
+            </Button>
+          </div>
+
+          <div className="hidden sm:block h-6 w-px bg-slate-200" />
+
+          {/* Segment filtrów uwagi */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleUwagaChange('all')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium", uwaga === 'all' && "bg-white text-[#1E293B] shadow-sm hover:bg-white")}
+            >
+              Wszystkie ({uwagaCountAll})
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleUwagaChange('czyste')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium text-emerald-800", uwaga === 'czyste' && "bg-emerald-100 text-emerald-900 shadow-sm hover:bg-emerald-100")}
+            >
+              ✨ Czyste ({uwagaCountCzyste})
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => handleUwagaChange('uwaga')}
+              className={cn("text-xs sm:text-sm h-8 px-2.5 font-medium text-amber-800", uwaga === 'uwaga' && "bg-amber-100 text-amber-900 shadow-sm hover:bg-amber-100")}
+            >
+              ⚠️ Wymaga uwagi ({uwagaCountUwaga})
+            </Button>
+          </div>
+        </div>
+
+        {/* Sortowanie po prawej */}
+        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:inline">Sortuj:</span>
+          <select
+            value={sort}
+            onChange={(e) => handleSortChange(e.target.value as SortType)}
+            className="h-8.5 text-xs sm:text-sm font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#4A90E2] cursor-pointer shadow-2xs"
+          >
+            <option value="oldest">Najstarsze (domyślnie)</option>
+            <option value="newest">Najnowsze</option>
+            <option value="conf_desc">Pewność ↓</option>
+            <option value="conf_asc">Pewność ↑</option>
+            <option value="amount_desc">Kwota ↓</option>
+          </select>
+        </div>
       </div>
 
       {countAll === 0 ? (
