@@ -1,7 +1,10 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
+import { Switch } from '@/components/ui/switch'
+import { toast } from 'sonner'
 import { CollapsibleJpkSection } from './CollapsibleJpkSection'
+import { updateJpkSection } from '@/app/(auth)/do-akceptacji/actions'
 import type { ExceptionItem } from '@/types/database'
 
 export function SrodekTrwalySection({ exception }: { exception: ExceptionItem }) {
@@ -12,12 +15,35 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
   const pozycja = exception.srodek_trwaly_pozycja;
   const reason = exception.srodek_trwaly_reason;
   
+  const [ksiegujSt, setKsiegujSt] = useState(exception.ksieguj_jako_st === true)
+  const [saving, setSaving] = useState(false)
+
   if (!status) return null;
 
   const isMocny = status === 'mocny_alert';
   const headerColor = isMocny ? 'text-orange-700' : 'text-yellow-700';
   const bgColor = isMocny ? 'bg-orange-50 border-orange-200' : 'bg-yellow-50 border-yellow-200';
   const iconStr = isMocny ? '🟠' : '🟡';
+
+  const handleToggleSt = async (checked: boolean) => {
+    const prev = ksiegujSt
+    setKsiegujSt(checked)
+    setSaving(true)
+    try {
+      const res = await updateJpkSection(exception.id, { ksieguj_jako_st: checked })
+      if (!res?.success) {
+        toast.error(`Nie zapisano: ${res?.error || 'Błąd zapisu'}`)
+        setKsiegujSt(prev)
+      } else {
+        toast.success(checked ? 'Oznaczono jako środek trwały' : 'Usunięto oznaczenie środka trwałego')
+      }
+    } catch {
+      toast.error('Błąd połączenia')
+      setKsiegujSt(prev)
+    } finally {
+      setSaving(false)
+    }
+  }
   
   return (
     <CollapsibleJpkSection
@@ -54,7 +80,7 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
           {pozycja && (
             <div>
               <span className="text-gray-600">W pozycji:</span>{' '}
-              <span className="text-sm italic">"{pozycja}"</span>
+              <span className="text-sm italic">&quot;{pozycja}&quot;</span>
             </div>
           )}
           
@@ -65,6 +91,39 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
             </div>
           )}
         </div>
+
+        {/* Przełącznik "Księguj jako środek trwały" */}
+        <div className="mt-3 pt-3 border-t border-orange-200">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={ksiegujSt}
+              onCheckedChange={handleToggleSt}
+              disabled={saving}
+              id="ksieguj-st-switch"
+            />
+            <label
+              htmlFor="ksieguj-st-switch"
+              className="text-sm font-medium text-gray-800 cursor-pointer select-none"
+            >
+              Księguj jako środek trwały
+            </label>
+          </div>
+          <p className="text-xs text-gray-500 mt-1.5 ml-[44px] leading-relaxed">
+            KPiR bez kosztu (koszt pójdzie odpisami amortyzacyjnymi), VAT jako zakup inwestycyjny (K_40/K_41).
+            Po zaksięgowaniu wprowadź ŚT do ewidencji środków trwałych w Rachmistrzu.
+          </p>
+        </div>
+
+        {/* Żółta adnotacja gdy toggle ON */}
+        {ksiegujSt && (
+          <div className="mt-3 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 text-sm text-amber-800 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span>
+              Ta faktura zaksięguje się z <strong>zerową kwotą KPiR</strong> — koszt zostanie ujęty przez odpisy amortyzacyjne.
+              Pozycje VAT trafią do pól K_40/K_41 (zakup inwestycyjny).
+            </span>
+          </div>
+        )}
         
         {/* Co księgowa ma zrobić */}
         <div className="mt-3 pt-3 border-t border-orange-200">
@@ -85,11 +144,13 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
           </ul>
         </div>
         
-        {/* Akcja: pomiń → księgowa zaksięguje ręcznie do ewidencji ŚT w Rachmistrzu */}
-        <div className="mt-3 text-xs text-gray-500">
-          💡 Jeśli to środek trwały — kliknij <strong>"Pomiń"</strong> i ręcznie wpisz do ewidencji ŚT w Rachmistrzu.
-          Jeśli to nie ŚT (np. krótki czas użycia, drobne komponenty) — zaakceptuj fakturę normalnie.
-        </div>
+        {/* Akcja */}
+        {!ksiegujSt && (
+          <div className="mt-3 text-xs text-gray-500">
+            💡 Jeśli to środek trwały — włącz przełącznik powyżej lub kliknij <strong>&quot;Pomiń&quot;</strong> i ręcznie wpisz do ewidencji ŚT w Rachmistrzu.
+            Jeśli to nie ŚT (np. krótki czas użycia, drobne komponenty) — zaakceptuj fakturę normalnie.
+          </div>
+        )}
       </div>
     </CollapsibleJpkSection>
   );

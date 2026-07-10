@@ -509,7 +509,8 @@ const ALLOWED_JPK_KEYS = [
   'gtu_bitmask_final', 'gtu_edited_by_user',
   'procedura_jpk_final', 'typ_dokumentu_jpk_final', 'jpk_procedury_edited',
   'pozycje_vat_final', 'pozycje_vat_edited',
-  'pojazd_id_final', 'rezim_paliwowy_final', 'rezim_edited'
+  'pojazd_id_final', 'rezim_paliwowy_final', 'rezim_edited',
+  'ksieguj_jako_st'
 ]
 
 // Generic update for any JPK section — pass the exact columns to SET
