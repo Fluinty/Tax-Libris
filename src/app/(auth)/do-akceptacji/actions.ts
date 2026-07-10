@@ -41,16 +41,17 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const supabase = createSupabaseAdmin()
 
   // Pobierz dane z fluinty.faktury (gdzie trigger przelicza final_kwoty_per_kolumna)
+  // Pobierz dane z fluinty.faktury (gdzie trigger przelicza final_kwoty_per_kolumna)
   const { data: faktura } = await supabase
     .from('faktury')
-    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna')
-    .eq('legacy_queue_id', exceptionId)
+    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, legacy_queue_id')
+    .or(`legacy_queue_id.eq.${exceptionId},id.eq.${exceptionId}`)
     .maybeSingle()
 
   const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
+    .from('exceptions_queue_v2')
     .select('*')
-    .eq('id', exceptionId)
+    .or(`legacy_id.eq.${exceptionId},id.eq.${exceptionId}`)
     .maybeSingle()
 
   if (fetchErr) {
@@ -80,6 +81,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
 
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
+  const queueIdToUpdate = faktura?.legacy_queue_id ?? exception?.legacy_id ?? exceptionId
   const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
@@ -91,7 +93,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
       resolved_by: userEmail,
       resolved_at: new Date().toISOString()
     })
-    .eq('id', exceptionId)
+    .eq('id', queueIdToUpdate)
     .in('status', ['pending_review', 'pending'])
     .select('id')
 
@@ -114,7 +116,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
-      .eq('legacy_queue_id', exceptionId)
+      .eq('id', faktura.id)
   }
 
   await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id, {
@@ -203,15 +205,15 @@ export async function approveExceptionFull(
 
   const { data: faktura } = await supabase
     .from('faktury')
-    .select('id')
-    .eq('legacy_queue_id', exceptionId)
+    .select('id, legacy_queue_id')
+    .or(`legacy_queue_id.eq.${exceptionId},id.eq.${exceptionId}`)
     .maybeSingle()
 
   const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
+    .from('exceptions_queue_v2')
     .select('*')
-    .eq('id', exceptionId)
-    .single()
+    .or(`legacy_id.eq.${exceptionId},id.eq.${exceptionId}`)
+    .maybeSingle()
 
   if (fetchErr || !exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
@@ -233,6 +235,7 @@ export async function approveExceptionFull(
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
+  const queueIdToUpdate = faktura?.legacy_queue_id ?? exception?.legacy_id ?? exceptionId
   const { data: updatedQueue, error } = await supabase
     .from('exceptions_queue')
     .update({
@@ -244,7 +247,7 @@ export async function approveExceptionFull(
       resolved_by: userEmail,
       resolved_at: new Date().toISOString()
     })
-    .eq('id', exceptionId)
+    .eq('id', queueIdToUpdate)
     .in('status', ['pending_review', 'pending'])
     .select('id')
 
@@ -267,7 +270,7 @@ export async function approveExceptionFull(
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
-      .eq('legacy_queue_id', exceptionId)
+      .eq('id', faktura.id)
   }
 
   await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id, {
@@ -530,7 +533,7 @@ export async function updateJpkSection(
     const supabase = createSupabaseAdmin()
 
     const { error } = await supabase
-      .from('exceptions_queue')
+      .from('faktury')
       .update(data)
       .eq('id', exceptionId)
 
@@ -538,10 +541,10 @@ export async function updateJpkSection(
 
     // Audit
     const { data: exc } = await supabase
-      .from('exceptions_queue')
+      .from('faktury')
       .select('client_nip')
       .eq('id', exceptionId)
-      .single()
+      .maybeSingle()
 
     if (exc) {
       await logAudit(supabase, 'jpk_section_update', exc.client_nip, null, {
@@ -572,17 +575,17 @@ export async function resetJpkSection(
     const supabase = createSupabaseAdmin()
 
     const { error } = await supabase
-      .from('exceptions_queue')
+      .from('faktury')
       .update(fields)
       .eq('id', exceptionId)
 
     if (error) return { success: false, error: error.message }
 
     const { data: exc } = await supabase
-      .from('exceptions_queue')
+      .from('faktury')
       .select('client_nip')
       .eq('id', exceptionId)
-      .single()
+      .maybeSingle()
 
     if (exc) {
       await logAudit(supabase, 'jpk_section_reset', exc.client_nip, null, {

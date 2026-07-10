@@ -99,7 +99,15 @@ export async function assertCanWrite(exceptionId: number) {
   const { nips, isAdmin, panelUser } = await getAllowedNips()
   if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
   const admin = createSupabaseAdmin()
-  const { data } = await admin.from('exceptions_queue').select('client_nip,status').eq('id', exceptionId).single()
+  let { data } = await admin.from('faktury').select('client_nip, status').eq('id', exceptionId).maybeSingle()
+  if (!data) {
+    const res = await admin.from('faktury').select('client_nip, status').eq('legacy_queue_id', exceptionId).maybeSingle()
+    data = res.data
+  }
+  if (!data) {
+    const res = await admin.from('exceptions_queue').select('client_nip, status').eq('id', exceptionId).maybeSingle()
+    data = res.data
+  }
   if (!data) throw new Error('Nie znaleziono faktury')
   if (!isAdmin && !nips?.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
   return data
