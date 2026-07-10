@@ -34,40 +34,37 @@ async function resolveExceptionIds(
   supabase: any,
   exceptionId: number
 ): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any }> {
-  const { data: excV2 } = await supabase
-    .from('exceptions_queue_v2')
-    .select('*')
-    .or(`id.eq.${exceptionId},legacy_id.eq.${exceptionId},legacy_queue_id.eq.${exceptionId}`)
-    .maybeSingle()
+  // Deterministycznie, bez .or() - sekwencje id faktury i exceptions_queue nakladaja sie,
+  // wiec .or(id.eq.X, legacy_queue_id.eq.X) potrafi zwrocic 2 wiersze i zepsuc maybeSingle().
+  const FAKTURA_COLS = 'id, legacy_queue_id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, client_nip'
 
-  const fakturaIdToFind = excV2?.id ?? exceptionId
-  const { data: faktura } = await supabase
+  // 1. Priorytet: exceptionId to faktury.id (tak przekazuje karta po F4)
+  let { data: faktura } = await supabase
     .from('faktury')
-    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, legacy_queue_id')
-    .or(`id.eq.${fakturaIdToFind},legacy_queue_id.eq.${exceptionId}`)
+    .select(FAKTURA_COLS)
+    .eq('id', exceptionId)
     .maybeSingle()
 
-  if (excV2) {
-    return {
-      fakturaId: excV2.id ?? faktura?.id ?? null,
-      queueId: excV2.legacy_id ?? excV2.legacy_queue_id ?? faktura?.legacy_queue_id ?? exceptionId,
-      exception: excV2,
-      faktura
-    }
+  // 2. Fallback: exceptionId to stare queue.id (wywolania z /wyjatki)
+  if (!faktura) {
+    const r = await supabase
+      .from('faktury')
+      .select(FAKTURA_COLS)
+      .eq('legacy_queue_id', exceptionId)
+      .maybeSingle()
+    faktura = r.data
   }
 
-  const { data: queue } = await supabase
-    .from('exceptions_queue')
-    .select('*')
-    .eq('id', faktura?.legacy_queue_id ?? exceptionId)
-    .maybeSingle()
+  const fakturaId: number | null = faktura?.id ?? null
+  // faktura po id, bez legacy -> nowy rekord, nie piszemy do queue;
+  // faktury brak wcale -> exceptionId to czysty queue-id (bardzo stare rekordy)
+  const queueId: number | null = faktura ? (faktura.legacy_queue_id ?? null) : exceptionId
 
-  return {
-    fakturaId: faktura?.id ?? null,
-    queueId: queue?.id ?? faktura?.legacy_queue_id ?? exceptionId,
-    exception: queue ?? faktura ?? null,
-    faktura
-  }
+  const { data: exception } = fakturaId
+    ? await supabase.from('exceptions_queue_v2').select('*').eq('id', fakturaId).maybeSingle()
+    : await supabase.from('exceptions_queue').select('*').eq('id', queueId).maybeSingle()
+
+  return { fakturaId, queueId, exception, faktura }
 }
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
@@ -677,13 +674,13 @@ export async function resetJpkSection(
  */
 export async function checkExceptionStatus(exceptionId: number): Promise<{ status: string | null }> {
   const supabase = createSupabaseAdmin()
-  const { data, error } = await supabase
+  // Deterministycznie: najpierw v2 po id (= faktury.id, tak przekazuje karta),
+  // potem stare queue po id (wywolania legacy). Bez .or() - patrz resolveExceptionIds.
+  const { data } = await supabase
     .from('exceptions_queue_v2')
     .select('status')
-    .or(`id.eq.${exceptionId},legacy_id.eq.${exceptionId},legacy_queue_id.eq.${exceptionId}`)
+    .eq('id', exceptionId)
     .maybeSingle()
-
-  if (error) throw new Error(`Supabase error: ${error.message}`)
   if (data) return { status: data.status ?? null }
 
   const { data: queueData } = await supabase
