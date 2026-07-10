@@ -29,6 +29,47 @@ async function logAudit(
   })
 }
 
+// Helper to resolve fakturaId, queueId and coalesced exception object
+async function resolveExceptionIds(
+  supabase: any,
+  exceptionId: number
+): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any }> {
+  const { data: excV2 } = await supabase
+    .from('exceptions_queue_v2')
+    .select('*')
+    .or(`id.eq.${exceptionId},legacy_id.eq.${exceptionId},legacy_queue_id.eq.${exceptionId}`)
+    .maybeSingle()
+
+  const fakturaIdToFind = excV2?.id ?? exceptionId
+  const { data: faktura } = await supabase
+    .from('faktury')
+    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, legacy_queue_id')
+    .or(`id.eq.${fakturaIdToFind},legacy_queue_id.eq.${exceptionId}`)
+    .maybeSingle()
+
+  if (excV2) {
+    return {
+      fakturaId: excV2.id ?? faktura?.id ?? null,
+      queueId: excV2.legacy_id ?? excV2.legacy_queue_id ?? faktura?.legacy_queue_id ?? exceptionId,
+      exception: excV2,
+      faktura
+    }
+  }
+
+  const { data: queue } = await supabase
+    .from('exceptions_queue')
+    .select('*')
+    .eq('id', faktura?.legacy_queue_id ?? exceptionId)
+    .maybeSingle()
+
+  return {
+    fakturaId: faktura?.id ?? null,
+    queueId: queue?.id ?? faktura?.legacy_queue_id ?? exceptionId,
+    exception: queue ?? faktura ?? null,
+    faktura
+  }
+}
+
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
   try {
@@ -40,34 +81,18 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  // Pobierz dane z fluinty.faktury (gdzie trigger przelicza final_kwoty_per_kolumna)
-  // Pobierz dane z fluinty.faktury (gdzie trigger przelicza final_kwoty_per_kolumna)
-  const { data: faktura } = await supabase
-    .from('faktury')
-    .select('id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, legacy_queue_id')
-    .or(`legacy_queue_id.eq.${exceptionId},id.eq.${exceptionId}`)
-    .maybeSingle()
-
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue_v2')
-    .select('*')
-    .or(`legacy_id.eq.${exceptionId},id.eq.${exceptionId}`)
-    .maybeSingle()
-
-  if (fetchErr) {
-    return { success: false, error: `Fetch error: ${fetchErr.message} (code: ${fetchErr.code}, details: ${fetchErr.details})` }
-  }
+  const { fakturaId, queueId, exception, faktura } = await resolveExceptionIds(supabase, exceptionId)
 
   if (!exception) {
     return { success: false, error: `Exception null dla id=${exceptionId}, supabase schema=${(supabase as any).rest?.schemaName || '?'}` }
   }
 
   // Pobierz pozycje faktury (sesja 33: 3-wymiarowa klasyfikacja) dla auto-korekty rodzaj_odliczenia
-  const { data: pozycjeEditable } = faktura
+  const { data: pozycjeEditable } = fakturaId
     ? await supabase
         .from('faktury_pozycje')
         .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
-        .eq('faktura_id', faktura.id)
+        .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
   // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
@@ -81,31 +106,32 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
 
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
-  const queueIdToUpdate = faktura?.legacy_queue_id ?? exception?.legacy_id ?? exceptionId
-  const { data: updatedQueue, error } = await supabase
-    .from('exceptions_queue')
-    .update({
-      status: 'approved',
-      resolved_opis: opisDoZapisu,
-      final_kwoty_per_kolumna: kwotyDoZapisu,
-      final_zapis_vat_data: scalonyVat,
-      final_kpir_pojazdowe_data: scalonyPojazd,
-      resolved_by: userEmail,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', queueIdToUpdate)
-    .in('status', ['pending_review', 'pending'])
-    .select('id')
+  if (queueId) {
+    const { data: updatedQueue, error } = await supabase
+      .from('exceptions_queue')
+      .update({
+        status: 'approved',
+        resolved_opis: opisDoZapisu,
+        final_kwoty_per_kolumna: kwotyDoZapisu,
+        final_zapis_vat_data: scalonyVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', queueId)
+      .in('status', ['pending_review', 'pending'])
+      .select('id')
 
-  if (error) {
-    return { success: false, error: error.message }
-  }
-  if (!updatedQueue || updatedQueue.length === 0) {
-    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
   // Sync też do fluinty.faktury (audit + future migration off exceptions_queue)
-  if (faktura) {
+  if (fakturaId) {
     await supabase
       .from('faktury')
       .update({
@@ -116,12 +142,12 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
-      .eq('id', faktura.id)
+      .eq('id', fakturaId)
   }
 
-  await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id, {
+  await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
-    faktura_id: faktura?.id,
+    faktura_id: fakturaId,
     resolved_by: userEmail,
     opis: opisDoZapisu,
     kwoty: kwotyDoZapisu,
@@ -145,38 +171,50 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
-    .select('client_nip, zapis_id')
-    .eq('id', exceptionId)
-    .single()
+  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  if (fetchErr || !exception) {
+  if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { data: updatedQueue, error } = await supabase
-    .from('exceptions_queue')
-    .update({
-      status: 'approved',
-      resolved_opis: opis,
-      final_kwoty_per_kolumna: kwoty,
-      resolved_by: userEmail,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', exceptionId)
-    .in('status', ['pending_review', 'pending'])
-    .select('id')
+  if (queueId) {
+    const { data: updatedQueue, error } = await supabase
+      .from('exceptions_queue')
+      .update({
+        status: 'approved',
+        resolved_opis: opis,
+        final_kwoty_per_kolumna: kwoty,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', queueId)
+      .in('status', ['pending_review', 'pending'])
+      .select('id')
 
-  if (error) {
-    return { success: false, error: error.message }
-  }
-  if (!updatedQueue || updatedQueue.length === 0) {
-    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
-  await logAudit(supabase, 'approved_with_edit', exception.client_nip, exception.zapis_id, {
+  if (fakturaId) {
+    await supabase
+      .from('faktury')
+      .update({
+        status: 'approved',
+        final_opis: opis,
+        final_kwoty_per_kolumna: kwoty,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', fakturaId)
+  }
+
+  await logAudit(supabase, 'approved_with_edit', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
+    faktura_id: fakturaId,
     resolved_by: userEmail,
     opis,
     kwoty,
@@ -203,28 +241,18 @@ export async function approveExceptionFull(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { data: faktura } = await supabase
-    .from('faktury')
-    .select('id, legacy_queue_id')
-    .or(`legacy_queue_id.eq.${exceptionId},id.eq.${exceptionId}`)
-    .maybeSingle()
+  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue_v2')
-    .select('*')
-    .or(`legacy_id.eq.${exceptionId},id.eq.${exceptionId}`)
-    .maybeSingle()
-
-  if (fetchErr || !exception) {
+  if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
   // Pobierz pozycje faktury dla auto-korekty rodzaj_odliczenia
-  const { data: pozycjeEditable } = faktura
+  const { data: pozycjeEditable } = fakturaId
     ? await supabase
         .from('faktury_pozycje')
         .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
-        .eq('faktura_id', faktura.id)
+        .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
   // Scalenie inline edits z modal edits
@@ -235,31 +263,32 @@ export async function approveExceptionFull(
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
-  const queueIdToUpdate = faktura?.legacy_queue_id ?? exception?.legacy_id ?? exceptionId
-  const { data: updatedQueue, error } = await supabase
-    .from('exceptions_queue')
-    .update({
-      status: 'approved',
-      resolved_opis: finalOpis,
-      final_kwoty_per_kolumna: finalKwotyPerKolumna,
-      final_zapis_vat_data: baseVat,
-      final_kpir_pojazdowe_data: scalonyPojazd,
-      resolved_by: userEmail,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', queueIdToUpdate)
-    .in('status', ['pending_review', 'pending'])
-    .select('id')
+  if (queueId) {
+    const { data: updatedQueue, error } = await supabase
+      .from('exceptions_queue')
+      .update({
+        status: 'approved',
+        resolved_opis: finalOpis,
+        final_kwoty_per_kolumna: finalKwotyPerKolumna,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', queueId)
+      .in('status', ['pending_review', 'pending'])
+      .select('id')
 
-  if (error) {
-    return { success: false, error: error.message }
-  }
-  if (!updatedQueue || updatedQueue.length === 0) {
-    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
   // Sync też do fluinty.faktury
-  if (faktura) {
+  if (fakturaId) {
     await supabase
       .from('faktury')
       .update({
@@ -270,12 +299,12 @@ export async function approveExceptionFull(
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
-      .eq('id', faktura.id)
+      .eq('id', fakturaId)
   }
 
-  await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id, {
+  await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
-    faktura_id: faktura?.id,
+    faktura_id: fakturaId,
     resolved_by: userEmail,
     opis: finalOpis,
     kwoty: finalKwotyPerKolumna,
@@ -301,32 +330,36 @@ export async function updateFinalZapisVAT(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
   
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
-    .select('client_nip, zapis_id')
-    .eq('id', exceptionId)
-    .single()
+  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  if (fetchErr || !exception) {
+  if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { error } = await supabase
-    .from('exceptions_queue')
-    .update({ final_zapis_vat_data: zapisVatData })
-    .eq('id', exceptionId);
-  
-  if (error) {
-    return { success: false, error: error.message }
+  if (queueId) {
+    const { error } = await supabase
+      .from('exceptions_queue')
+      .update({ final_zapis_vat_data: zapisVatData })
+      .eq('id', queueId)
+    if (error) return { success: false, error: error.message }
   }
-  
-  await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id, {
+
+  if (fakturaId) {
+    const { error } = await supabase
+      .from('faktury')
+      .update({ final_zapis_vat_data: zapisVatData })
+      .eq('id', fakturaId)
+    if (error && !queueId) return { success: false, error: error.message }
+  }
+
+  await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
+    faktura_id: fakturaId,
     user: userEmail,
     payload: { final_zapis_vat_data: zapisVatData }
-  });
-  
-  revalidatePath('/do-akceptacji');
+  })
+
+  revalidatePath('/do-akceptacji')
   return { success: true }
 }
 
@@ -341,37 +374,48 @@ export async function resolveException(exceptionId: number, opis: string) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
-    .select('client_nip, zapis_id')
-    .eq('id', exceptionId)
-    .single()
+  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  if (fetchErr || !exception) {
+  if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { data: updatedQueue, error } = await supabase
-    .from('exceptions_queue')
-    .update({
-      status: 'resolved',
-      resolved_opis: opis,
-      resolved_by: userEmail,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', exceptionId)
-    .in('status', ['pending_review', 'pending'])
-    .select('id')
+  if (queueId) {
+    const { data: updatedQueue, error } = await supabase
+      .from('exceptions_queue')
+      .update({
+        status: 'resolved',
+        resolved_opis: opis,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', queueId)
+      .in('status', ['pending_review', 'pending'])
+      .select('id')
 
-  if (error) {
-    return { success: false, error: error.message }
-  }
-  if (!updatedQueue || updatedQueue.length === 0) {
-    return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    if (error) {
+      return { success: false, error: error.message }
+    }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
-  await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id, {
+  if (fakturaId) {
+    await supabase
+      .from('faktury')
+      .update({
+        status: 'resolved',
+        final_opis: opis,
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', fakturaId)
+  }
+
+  await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
+    faktura_id: fakturaId,
     resolved_by: userEmail,
     opis,
     type: 'manual_resolve'
@@ -392,31 +436,41 @@ export async function ignoreFaktura(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { data: exception, error: fetchErr } = await supabase
-    .from('exceptions_queue')
-    .select('client_nip, zapis_id')
-    .eq('id', exceptionId)
-    .single()
+  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  if (fetchErr || !exception) {
+  if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  const { error } = await supabase
-    .from('exceptions_queue')
-    .update({
-      status: 'ignored',
-      resolved_by: userEmail,
-      resolved_at: new Date().toISOString()
-    })
-    .eq('id', exceptionId)
+  if (queueId) {
+    const { error } = await supabase
+      .from('exceptions_queue')
+      .update({
+        status: 'ignored',
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', queueId)
 
-  if (error) {
-    return { success: false, error: error.message }
+    if (error) {
+      return { success: false, error: error.message }
+    }
   }
 
-  await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id, {
+  if (fakturaId) {
+    await supabase
+      .from('faktury')
+      .update({
+        status: 'ignored',
+        resolved_by: userEmail,
+        resolved_at: new Date().toISOString()
+      })
+      .eq('id', fakturaId)
+  }
+
+  await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
+    faktura_id: fakturaId,
     resolved_by: userEmail
   })
 
@@ -435,13 +489,9 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { data: exception, error: errFetch } = await supabase
-    .from('exceptions_queue')
-    .select('client_nip, ai_proponowany_opis, typ_dokumentu')
-    .eq('id', exceptionId)
-    .single()
+  const { exception } = await resolveExceptionIds(supabase, exceptionId)
 
-  if (errFetch || !exception || !exception.ai_proponowany_opis) {
+  if (!exception || !exception.ai_proponowany_opis) {
     return { success: false, error: 'Brak danych propozycji AI' }
   }
 
@@ -532,27 +582,36 @@ export async function updateJpkSection(
     const userEmail = await getUserEmail()
     const supabase = createSupabaseAdmin()
 
-    const { error } = await supabase
-      .from('faktury')
-      .update(data)
-      .eq('id', exceptionId)
+    const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-    if (error) return { success: false, error: error.message }
-
-    // Audit
-    const { data: exc } = await supabase
-      .from('faktury')
-      .select('client_nip')
-      .eq('id', exceptionId)
-      .maybeSingle()
-
-    if (exc) {
-      await logAudit(supabase, 'jpk_section_update', exc.client_nip, null, {
-        exception_id: exceptionId,
-        fields: Object.keys(data),
-        user: userEmail,
-      })
+    if (!exception) {
+      return { success: false, error: 'Nie znaleziono faktury.' }
     }
+
+    if (fakturaId) {
+      const { error } = await supabase
+        .from('faktury')
+        .update(data)
+        .eq('id', fakturaId)
+
+      if (error && !queueId) return { success: false, error: error.message }
+    }
+
+    if (queueId) {
+      const { error } = await supabase
+        .from('exceptions_queue')
+        .update(data)
+        .eq('id', queueId)
+
+      if (error && !fakturaId) return { success: false, error: error.message }
+    }
+
+    await logAudit(supabase, 'jpk_section_update', exception.client_nip, exception.zapis_id ?? null, {
+      exception_id: exceptionId,
+      faktura_id: fakturaId,
+      fields: Object.keys(data),
+      user: userEmail,
+    })
 
     revalidatePath('/do-akceptacji')
     return { success: true }
@@ -574,26 +633,36 @@ export async function resetJpkSection(
     const userEmail = await getUserEmail()
     const supabase = createSupabaseAdmin()
 
-    const { error } = await supabase
-      .from('faktury')
-      .update(fields)
-      .eq('id', exceptionId)
+    const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
 
-    if (error) return { success: false, error: error.message }
-
-    const { data: exc } = await supabase
-      .from('faktury')
-      .select('client_nip')
-      .eq('id', exceptionId)
-      .maybeSingle()
-
-    if (exc) {
-      await logAudit(supabase, 'jpk_section_reset', exc.client_nip, null, {
-        exception_id: exceptionId,
-        section,
-        user: userEmail,
-      })
+    if (!exception) {
+      return { success: false, error: 'Nie znaleziono faktury.' }
     }
+
+    if (fakturaId) {
+      const { error } = await supabase
+        .from('faktury')
+        .update(fields)
+        .eq('id', fakturaId)
+
+      if (error && !queueId) return { success: false, error: error.message }
+    }
+
+    if (queueId) {
+      const { error } = await supabase
+        .from('exceptions_queue')
+        .update(fields)
+        .eq('id', queueId)
+
+      if (error && !fakturaId) return { success: false, error: error.message }
+    }
+
+    await logAudit(supabase, 'jpk_section_reset', exception.client_nip, exception.zapis_id ?? null, {
+      exception_id: exceptionId,
+      faktura_id: fakturaId,
+      section,
+      user: userEmail,
+    })
 
     revalidatePath('/do-akceptacji')
     return { success: true }
@@ -609,11 +678,19 @@ export async function resetJpkSection(
 export async function checkExceptionStatus(exceptionId: number): Promise<{ status: string | null }> {
   const supabase = createSupabaseAdmin()
   const { data, error } = await supabase
+    .from('exceptions_queue_v2')
+    .select('status')
+    .or(`id.eq.${exceptionId},legacy_id.eq.${exceptionId},legacy_queue_id.eq.${exceptionId}`)
+    .maybeSingle()
+
+  if (error) throw new Error(`Supabase error: ${error.message}`)
+  if (data) return { status: data.status ?? null }
+
+  const { data: queueData } = await supabase
     .from('exceptions_queue')
     .select('status')
     .eq('id', exceptionId)
     .maybeSingle()
 
-  if (error) throw new Error(`Supabase error: ${error.message}`)
-  return { status: data?.status ?? null }
+  return { status: queueData?.status ?? null }
 }
