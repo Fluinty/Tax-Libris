@@ -246,6 +246,9 @@ export interface ExceptionItem {
   mpp_gru_match?: string | null;
   mpp_reason?: string | null;
 
+  // Anomalie od historii klienta (sesja 35)
+  anomalie_historii?: { typ: string; szczegol: string; severity: string }[] | null;
+
   // Adresy stron z KSeF (sesja 34)
   adres_sprzedawcy?: string | null;
   adres_nabywcy?: string | null;

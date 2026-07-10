@@ -33,6 +33,7 @@ import {
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
+import { AnomalieHistoriiSection } from './sections/AnomalieHistoriiSection'
 import { PozycjeVatSection } from './sections/PozycjeVatSection'
 import { PojazdRezimSection } from './sections/PojazdRezimSection'
 import { WeryfikacjaKontrahentaSection } from './sections/WeryfikacjaKontrahentaSection'
@@ -856,6 +857,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
         confidenceOverall={exception.confidence_overall}
         confidenceReasons={exception.confidence_reasons}
       />
+
+      {/* Anomalie od historii klienta */}
+      <AnomalieHistoriiSection anomalie={exception.anomalie_historii} />
 
       {/* WARIANT PENDING REVIEW (AI Pre-fill) */}
       {stan === 'pending_review' && (
