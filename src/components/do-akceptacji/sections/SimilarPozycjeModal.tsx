@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, Loader2, Search } from 'lucide-react'
 import { getSimilarPozycje } from '@/app/(auth)/do-akceptacji/pozycje-actions'
 import { getKolumnyForTyp } from '@/lib/kpir'
+import { kpirShort } from '@/lib/kpir-labels'
 
 interface SimilarResult {
   id: number
@@ -44,8 +45,7 @@ export function SimilarPozycjeModal({ pozycjaId, pozycjaNazwa, open, onOpenChang
 
   function kolLabel(numer: number | null): string {
     if (numer == null) return '—'
-    const k = allKolumny.find(k => k.numer === numer)
-    return k ? `kol. ${k.numer}` : `kol. ${numer}`
+    return kpirShort(numer)
   }
 
   return (

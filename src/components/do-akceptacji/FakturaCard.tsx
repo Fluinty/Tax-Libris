@@ -31,6 +31,7 @@ import {
   REZIM_KPIR_LABELS
 } from '@/lib/vat'
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
+import { kpirDisplayNum } from '@/lib/kpir-labels'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
 import { AnomalieHistoriiSection } from './sections/AnomalieHistoriiSection'
@@ -90,7 +91,7 @@ function joinPozycjeWithKlasyfikacja(
 function getKolumnaLabel(typ: TypDokumentu | null, numer: number): string {
   const kolumny = getKolumnyForTyp(typ)
   const kol = kolumny.find(k => k.numer === numer)
-  return kol ? `Kolumna ${kol.numer} (${kol.labelKrotki})` : `Kolumna ${numer}`
+  return kol ? `Kolumna ${kol.displayNumer} (${kol.labelKrotki})` : `Kolumna ${kpirDisplayNum(numer)}`
 }
 
 export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPojazdy = [] }: FakturaCardProps) {
@@ -888,7 +889,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             </div>
             
             <div>
-              <span className="text-sm font-medium text-[#475569] block mb-1">{getEtykietaSekcjiKwot(exception.typ_dokumentu)}:</span>
+              <span className="text-sm font-medium text-[#475569] block mb-1" title="Numeracja wg wzoru KPiR 2026">{getEtykietaSekcjiKwot(exception.typ_dokumentu)}:</span>
               <div className="space-y-1">
                 {(() => {
                   const getKolumnaPozycjeSumy = (colNumer: number): { netto: number; brutto: number } | null => {
@@ -936,7 +937,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                       <div key={col.numer} className="py-0.5">
                         <div className="flex text-sm">
                           <span className="w-48 shrink-0 text-[#64748B]">
-                            Kolumna {col.numer} ({col.labelKrotki}):
+                            Kolumna {col.displayNumer} ({col.labelKrotki}):
                           </span>
                           <span className="font-medium text-[#1E293B]">
                             {Number(val).toFixed(2)} zł
@@ -1213,7 +1214,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                   return (
                     <div key={col.numer} className={cn("flex", isZero && "text-slate-400")}>
                       <span className={cn("w-32 shrink-0", isZero ? "text-slate-400" : "text-[#64748B]")}>
-                        Kolumna {col.numer}:
+                        Kolumna {col.displayNumer}:
                       </span>
                       <span className={cn("font-medium", isZero ? "text-slate-400" : "text-[#1E293B]")}>
                         {Number(val || 0).toFixed(2)} zł

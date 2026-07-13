@@ -273,7 +273,7 @@ export function EditModal({
               <div className="border border-[#E2E8F0] rounded-lg p-4 space-y-3 bg-[#F8FAFC]">
                 {getKolumnyForTyp(typDokumentu).map(col => (
                   <div key={col.numer} className="flex items-center justify-between">
-                    <span className="text-sm text-[#475569]">Kolumna {col.numer} ({col.label})</span>
+                    <span className="text-sm text-[#475569]">Kolumna {col.displayNumer} ({col.label})</span>
                     <div className="flex items-center gap-2">
                       <Input
                         className="w-32 text-right tabular-nums"

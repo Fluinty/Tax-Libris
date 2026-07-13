@@ -2,6 +2,7 @@
 
 import { ShieldAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { kpirShort, kpirDisplayNum } from '@/lib/kpir-labels'
 import type { WalidatorWarning } from '@/types/database'
 
 function truncate(s: string, max: number): string {
@@ -13,7 +14,7 @@ function powodLabel(powod: string): string {
     case 'usluga_obca_bez_materialu':
       return 'Usługa bez materiału na FV'
     case 'usluga_obca_z_materialem_na_fakturze':
-      return 'Usługa z materiałem (kol. 11)'
+      return `Usługa z materiałem (${kpirShort(11)})`
     default:
       return powod
   }
@@ -44,7 +45,7 @@ export function WalidatorBadge({ warnings }: Props) {
             <span className="font-mono text-xs text-amber-600">LP={w.lp}</span>
             <span className="truncate max-w-[280px]">&quot;{truncate(w.nazwa, 50)}&quot;</span>
             <span className="text-amber-600">—</span>
-            <span>z kol.{w.stara_kolumna} → kol.{w.nowa_kolumna}</span>
+            <span>z {kpirShort(w.stara_kolumna)} → {kpirShort(w.nowa_kolumna)}</span>
             <Badge variant="outline" className="ml-1 text-[10px] text-amber-700 border-amber-300 bg-amber-100/50">
               {powodLabel(w.powod)}
             </Badge>
@@ -52,9 +53,9 @@ export function WalidatorBadge({ warnings }: Props) {
         ))}
       </ul>
       <p className="mt-2 text-xs text-amber-700 leading-relaxed">
-        AI klasyfikator zaklasyfikował te pozycje jako materiał (kol. 10/11). 
-        Walidator wykrył że to usługa obca bez powiązanego materiału i przepiął na kol. 13 
-        (lub kol. 11 jeśli na fakturze jest też materiał). 
+        AI klasyfikator zaklasyfikował te pozycje jako materiał ({kpirShort(10)}/{kpirShort(11)}). 
+        Walidator wykrył że to usługa obca bez powiązanego materiału i przepiął na {kpirShort(13)} 
+        (lub {kpirShort(11)} jeśli na fakturze jest też materiał). 
         Sprawdź czy poprawnie — możesz cofnąć w sekcji &quot;Pozycje faktury&quot;.
       </p>
     </div>

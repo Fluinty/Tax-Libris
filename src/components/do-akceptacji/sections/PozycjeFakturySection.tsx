@@ -152,7 +152,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
           {/* Dim 1: Kolumna KPiR */}
           {readOnly ? (
             <span className={`text-xs font-medium px-2 py-1 rounded-md ${isInvalid ? 'bg-orange-50 text-orange-700' : 'bg-slate-100 text-[#1F3A5F]'}`}>
-              {kolDef ? `Kol. ${kolDef.numer} (${kolDef.labelKrotki})` : effectiveKol != null ? `Kol. ${effectiveKol}` : '—'}
+              {kolDef ? `Kol. ${kolDef.displayNumer} (${kolDef.labelKrotki})` : effectiveKol != null ? `Kol. ${effectiveKol}` : '—'}
             </span>
           ) : (
             <Select
@@ -162,7 +162,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
             >
               <SelectTrigger className={`h-7 text-xs w-[200px] ${isInvalid ? 'border-orange-300 bg-orange-50' : ''}`}>
                 {kolDef ? (
-                  <span className="truncate">{kolDef.numer} — {kolDef.labelKrotki}</span>
+                  <span className="truncate">{kolDef.displayNumer} — {kolDef.labelKrotki}</span>
                 ) : effectiveKol != null ? (
                   <span>Kol. {effectiveKol}</span>
                 ) : (
@@ -172,7 +172,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
               <SelectContent>
                 {kolumny.map(k => (
                   <SelectItem key={k.numer} value={k.numer.toString()}>
-                    Kol. {k.numer} — {k.labelKrotki}
+                    Kol. {k.displayNumer} — {k.labelKrotki}
                   </SelectItem>
                 ))}
               </SelectContent>
