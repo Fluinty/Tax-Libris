@@ -166,7 +166,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     setIsSubmitting(true)
 
     // Pre-check: czy status w Supabase nadal pozwala na zatwierdzenie?
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    const actionId = exception.id
     try {
       const { status: currentStatus } = await checkExceptionStatus(actionId)
       if (!currentStatus || !['pending', 'pending_review'].includes(currentStatus)) {
@@ -197,7 +197,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     setIsSubmitting(true)
 
     // Pre-check status w Supabase
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    const actionId = exception.id
     try {
       const { status: currentStatus } = await checkExceptionStatus(actionId)
       if (!currentStatus || !['pending', 'pending_review'].includes(currentStatus)) {
@@ -230,7 +230,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     }
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    const actionId = exception.id
     const res = await resolveException(actionId, selectedOpis)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
@@ -245,7 +245,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleIgnore = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    const actionId = exception.id
     const res = await ignoreFaktura(actionId)
     if (res.success) {
       toast.success('Faktura pominięta')
@@ -260,7 +260,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const handleAddAiProposalToClient = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
-    const actionId = exception.legacy_id || exception.legacy_queue_id || exception.id
+    const actionId = exception.id
     const res = await addProponowanyToClientOpisy(actionId)
     if (res.success) {
       toast.success(res.message)
