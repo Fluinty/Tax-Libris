@@ -62,6 +62,7 @@ interface FakturaCardProps {
   isActive: boolean
   clientOpisy: ClientOpis[]
   clientPojazdy?: ClientPojazd[]
+  onResolved?: (id: number) => void
 }
 
 import { getKolumnyForTyp, getEtykietaKontrahenta, getEtykietaSekcjiKwot } from '@/lib/kpir'
@@ -94,7 +95,7 @@ function getKolumnaLabel(typ: TypDokumentu | null, numer: number): string {
   return kol ? `Kolumna ${kol.displayNumer} (${kol.labelKrotki})` : `Kolumna ${kpirDisplayNum(numer)}`
 }
 
-export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPojazdy = [] }: FakturaCardProps) {
+export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPojazdy = [], onResolved }: FakturaCardProps) {
   const showAlarms = hasVendorAlarms(exception)
   const weakCount = getWeakDimensionsCount(exception.confidence_reasons)
   const confidenceCardClasses = getConfidenceCardClasses(exception.confidence_overall)
@@ -183,6 +184,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await approveFaktura(actionId, editableOpis || undefined)
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
+      onResolved?.(exception.id)
       router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
@@ -213,6 +215,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await approveExceptionFull(actionId, kwoty, zapisVat, opis)
     if (res.success) {
       toast.success('Zapisano z edytowanymi kwotami')
+      onResolved?.(exception.id)
       router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
@@ -231,6 +234,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await resolveException(actionId, selectedOpis)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
+      onResolved?.(exception.id)
       router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')
@@ -245,6 +249,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await ignoreFaktura(actionId)
     if (res.success) {
       toast.success('Faktura pominięta')
+      onResolved?.(exception.id)
       router.refresh()
     } else {
       toast.error(res.error || 'Wystąpił błąd')

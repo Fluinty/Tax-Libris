@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FakturaCard } from '@/components/do-akceptacji/FakturaCard'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -29,6 +29,30 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
   const [typ, setTyp] = useState<FilterType>(() => (searchParams?.get('typ') as FilterType) || 'all')
   const [uwaga, setUwaga] = useState<UwagaFilterType>(() => (searchParams?.get('uwaga') as UwagaFilterType) || 'all')
   const [sort, setSort] = useState<SortType>(() => (searchParams?.get('sort') as SortType) || 'oldest')
+
+  // Optimistic: track locally-resolved (approved/ignored) ids for instant UI removal
+  const [resolvedIds, setResolvedIds] = useState<Set<number>>(new Set())
+
+  const handleResolved = useCallback((id: number) => {
+    setResolvedIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
+
+  // Reset resolvedIds when server delivers fresh props (they already exclude resolved items)
+  const propsRef = useRef({ pendingReview, pending, autoCreated })
+  useEffect(() => {
+    if (
+      propsRef.current.pendingReview !== pendingReview ||
+      propsRef.current.pending !== pending ||
+      propsRef.current.autoCreated !== autoCreated
+    ) {
+      propsRef.current = { pendingReview, pending, autoCreated }
+      setResolvedIds(new Set())
+    }
+  }, [pendingReview, pending, autoCreated])
 
   // Synchronize state when URL searchParams change externally (e.g. sidebar navigation)
   useEffect(() => {
@@ -148,7 +172,10 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
     return 0
   }
 
-  const allItemsForCounters = [...pendingReview, ...pending, ...autoCreated]
+  // Base filter: exclude optimistically-resolved items
+  const notResolved = (e: any) => !resolvedIds.has(e.id)
+
+  const allItemsForCounters = [...pendingReview, ...pending, ...autoCreated].filter(notResolved)
 
   // Counts for Typ tabs (filtered by current uwaga filter)
   const itemsMatchingUwaga = allItemsForCounters.filter(uwagaFilterFn)
@@ -163,9 +190,9 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
   const uwagaCountAll = uwagaCountCzyste + uwagaCountUwaga
 
   // Final filtered & sorted items
-  const filteredPendingReview = pendingReview.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
-  const filteredPending = pending.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
-  const filteredAutoCreated = autoCreated.filter(e => typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
+  const filteredPendingReview = pendingReview.filter(e => notResolved(e) && typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
+  const filteredPending = pending.filter(e => notResolved(e) && typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
+  const filteredAutoCreated = autoCreated.filter(e => notResolved(e) && typFilterFn(e) && uwagaFilterFn(e)).sort(sortFn)
 
   return (
     <>
@@ -271,6 +298,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                 isActive={idx === 0} 
                 clientOpisy={clientOpisyMap.get(exc.client_nip) ?? []} 
                 clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                onResolved={handleResolved}
               />
             ))}
           </div>
@@ -291,6 +319,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                 isActive={false} 
                 clientOpisy={clientOpisyMap.get(exc.client_nip) ?? []} 
                 clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                onResolved={handleResolved}
               />
             ))}
           </div>
@@ -313,6 +342,7 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                   isActive={false} 
                   clientOpisy={[]} 
                   clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                  onResolved={handleResolved}
                 />
               ))}
             </CollapsibleContent>
