@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { EditModal } from './EditModal'
@@ -103,6 +104,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [showEditModal, setShowEditModal] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -824,19 +826,29 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">Podgląd</span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowPreviewModal(true)}
+            className="h-7 px-2 text-xs gap-1 text-[#94A3B8] hover:text-[#1F3A5F] hover:bg-blue-50"
+            title="Powiększ podgląd faktury"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Powiększ</span>
+          </Button>
         </div>
       </div>
 
       {/* ── SPLIT VIEW: left = sections, right = preview ── */}
       <div className={cn(
-        showPreview && "lg:grid lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,55fr)_45fr] lg:gap-5"
+        showPreview && "xl:grid xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:gap-5"
       )}>
       {/* Left column — existing sections */}
       <div className="min-w-0">
 
       {/* Mobile preview — accordion (shown only when preview toggled on mobile/tablet) */}
       {showPreview && (
-        <div className="lg:hidden mb-4">
+        <div className="xl:hidden mb-4">
           <Collapsible>
             <CollapsibleTrigger className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors">
               <span className="flex items-center gap-2 font-medium">
@@ -1271,7 +1283,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
       {/* Right column — sticky FakturaPreview (desktop only) */}
       {showPreview && (
-        <div className="hidden lg:block">
+        <div className="hidden xl:block">
           <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <FakturaPreview exception={exception} />
           </div>
@@ -1296,6 +1308,21 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           onSave={handleEditSave}
         />
       )}
+
+      {/* Preview modal — powiększony podgląd faktury */}
+      <Dialog open={showPreviewModal} onOpenChange={setShowPreviewModal}>
+        <DialogContent className="sm:max-w-[940px] max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="px-6 pt-5 pb-0">
+            <DialogTitle className="text-base font-semibold text-slate-800 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Podgląd faktury — {exception.ksiegowe_numer || '(brak numeru)'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-4 pb-4">
+            <FakturaPreview exception={exception} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

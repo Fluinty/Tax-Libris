@@ -246,16 +246,16 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
 
       {/* ── Pozycje table ──────────────────────────── */}
       {hasAnyPozycje ? (
-        <div className="border-b border-slate-200">
-          <table className="w-full text-xs table-fixed">
+        <div className="border-b border-slate-200 overflow-x-auto">
+          <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200">
                 {visibleCols.map(col => (
                   <th
                     key={col.key}
-                    className={`px-2 py-1.5 font-semibold text-slate-600 uppercase text-[10px] tracking-wider ${
+                    className={`px-2 py-1.5 font-semibold text-slate-600 uppercase text-[10px] tracking-wider whitespace-nowrap ${
                       col.align === 'right' ? 'text-right' : 'text-left'
-                    } ${col.key === 'lp' ? 'w-7' : ''} ${col.key === 'nazwa' ? '' : col.key === 'jm' ? 'w-10' : col.key === 'vat' ? 'w-11' : col.key === 'ilosc' ? 'w-10' : 'w-[68px]'}`}
+                    } ${col.key === 'lp' ? 'w-8' : col.key === 'nazwa' ? '' : col.key === 'jm' ? 'w-10' : col.key === 'vat' ? 'w-12' : col.key === 'ilosc' ? 'w-12' : 'w-20'}`}
                   >
                     {col.label}
                   </th>
@@ -268,16 +268,17 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
                   key={idx}
                   className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50"
                 >
-                  {visibleCols.map(col => (
-                    <td
-                      key={col.key}
-                      className={`px-2 py-1 ${
-                        col.align === 'right' ? 'text-right tabular-nums' : 'text-left'
-                      } ${col.key === 'nazwa' ? 'text-slate-800 break-words' : 'text-slate-600 whitespace-nowrap'}`}
-                    >
-                      {getCellValue(poz, col.key)}
-                    </td>
-                  ))}
+                    {visibleCols.map(col => (
+                      <td
+                        key={col.key}
+                        className={`px-2 py-1 ${
+                          col.align === 'right' ? 'text-right tabular-nums' : 'text-left'
+                        } ${col.key === 'nazwa' ? 'text-slate-800 max-w-[260px] truncate' : 'text-slate-600 whitespace-nowrap'}`}
+                        title={col.key === 'nazwa' ? getCellValue(poz, col.key) : undefined}
+                      >
+                        {getCellValue(poz, col.key)}
+                      </td>
+                    ))}
                 </tr>
               ))}
             </tbody>
