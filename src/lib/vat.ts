@@ -100,22 +100,22 @@ export const GRUPY_ASORTYMENTU = [
 ];
 
 export const STRATEGIA_LABELS: Record<string, string> = {
-  'mieszany_50_75': 'Mieszany (firmowo-prywatnie)',
-  'sluzbowy_100_100': 'Służbowy (VAT-26)',
-  'prywatny_50_20': 'Prywatny w działalności',
-  'ciezarowy_100_100': 'Ciężarowy (>3.5T)',
+  'mieszany_50_75': '75% (użytek mieszany)',
+  'sluzbowy_100_100': '100% (firmowy / VAT-26)',
+  'prywatny_50_20': '20% (pojazd prywatny)',
+  'ciezarowy_100_100': '100% (ciężarowy > 3.5T)',
 };
 
 export const REZIM_VAT_LABELS: Record<string, string> = {
-  'mieszany_50_75': '50% odliczenia',
-  'sluzbowy_100_100': '100% (pełne odliczenie)',
-  'prywatny_50_20': '50% odliczenia',
-  'ciezarowy_100_100': '100% (pełne odliczenie)',
+  'mieszany_50_75': '50% odliczenia VAT',
+  'sluzbowy_100_100': '100% odliczenia VAT',
+  'prywatny_50_20': '50% odliczenia VAT',
+  'ciezarowy_100_100': '100% odliczenia VAT',
 };
 
 export const REZIM_KPIR_LABELS: Record<string, string> = {
-  'mieszany_50_75': '75% kosztu',
-  'sluzbowy_100_100': '100% (pełen koszt)',
-  'prywatny_50_20': '20% kosztu',
-  'ciezarowy_100_100': '100% (pełen koszt)',
+  'mieszany_50_75': '75% × (netto + ½ VAT)',
+  'sluzbowy_100_100': '100% kosztu',
+  'prywatny_50_20': '20% × (netto + ½ VAT)',
+  'ciezarowy_100_100': '100% kosztu',
 };

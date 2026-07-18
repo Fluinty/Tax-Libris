@@ -42,6 +42,7 @@ import { WeryfikacjaKontrahentaSection } from './sections/WeryfikacjaKontrahenta
 import { ProceduryJpkSection } from './sections/ProceduryJpkSection'
 import { GtuSection } from './sections/GtuSection'
 import { SrodekTrwalySection } from './sections/SrodekTrwalySection'
+import { TransakcjaZagranicznaSection } from './sections/TransakcjaZagranicznaSection'
 import { AiReviewSection, AiReviewBadge } from './sections/AiReviewSection'
 import { PozycjeFakturySection } from './sections/PozycjeFakturySection'
 import { WalidatorBadge } from './sections/WalidatorBadge'
@@ -390,6 +391,17 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             readOnly={isReadOnly}
           />
         )}
+        {/* Transakcja zagraniczna */}
+        {isClientVatPayer && (() => {
+          const effectiveZapisVat = exception.final_zapis_vat_data || exception.zapis_vat_data
+          return effectiveZapisVat?.transakcja_zagraniczna ? (
+            <TransakcjaZagranicznaSection
+              exceptionId={exception.id}
+              zapisVat={effectiveZapisVat}
+              readOnly={isReadOnly}
+            />
+          ) : null
+        })()}
         {/* Pojazd i reżim paliwowy — UKRYJ dla sprzedaży */}
         {exception.typ_dokumentu !== 'sprzedaz' && (
           <PojazdRezimSection

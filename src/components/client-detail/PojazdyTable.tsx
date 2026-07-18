@@ -32,6 +32,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
     ewidencja_przebiegu: boolean | null
     wartosc_netto_zakupu: number | string | null
     data_rozpoczecia_uzytkowania: string | null
+    typ_napedu: string | null
+    wartosc_nabycia: number | string | null
   }>({
     nr_rejestracyjny: '',
     marka_model: '',
@@ -46,6 +48,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
     ewidencja_przebiegu: null,
     wartosc_netto_zakupu: null,
     data_rozpoczecia_uzytkowania: null,
+    typ_napedu: 'spalinowy',
+    wartosc_nabycia: null,
   })
 
   useEffect(() => {
@@ -90,6 +94,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       ewidencja_przebiegu: null,
       wartosc_netto_zakupu: null,
       data_rozpoczecia_uzytkowania: null,
+      typ_napedu: 'spalinowy',
+      wartosc_nabycia: null,
     })
     setIsModalOpen(true)
   }
@@ -110,6 +116,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       ewidencja_przebiegu: p.ewidencja_przebiegu ?? null,
       wartosc_netto_zakupu: p.wartosc_netto_zakupu ?? null,
       data_rozpoczecia_uzytkowania: p.data_rozpoczecia_uzytkowania ?? null,
+      typ_napedu: p.typ_napedu ?? 'spalinowy',
+      wartosc_nabycia: p.wartosc_nabycia ?? null,
     })
     setIsModalOpen(true)
   }
@@ -131,6 +139,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
         ewidencja_przebiegu: draft.ewidencja_przebiegu,
         wartosc_netto_zakupu: draft.wartosc_netto_zakupu === null || draft.wartosc_netto_zakupu === '' ? null : Number(draft.wartosc_netto_zakupu),
         data_rozpoczecia_uzytkowania: draft.data_rozpoczecia_uzytkowania || null,
+        typ_napedu: draft.typ_napedu || null,
+        wartosc_nabycia: draft.wartosc_nabycia === null || draft.wartosc_nabycia === '' ? null : Number(draft.wartosc_nabycia),
       }
       if (editingId) {
         await updatePojazd(editingId, nip, payload)
@@ -158,6 +168,28 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
     if (val === 1 || Number(val) === 1) return 'Mieszany 50/75'
     if (val === 2 || Number(val) === 2) return 'Prywatny 50/20'
     return '— (fallback klienta)'
+  }
+
+  const napedLabels: Record<string, string> = {
+    'spalinowy': 'Spalinowy',
+    'hybrydowy': 'Hybrydowy',
+    'elektryczny': 'Elektryczny',
+  }
+
+  const LEASING_LIMITS: Record<string, number> = {
+    'spalinowy': 100_000,
+    'hybrydowy': 150_000,
+    'elektryczny': 225_000,
+  }
+
+  function getLeasingPreview(): { limit: number; proporcja: number; procent: string } | null {
+    const wn = draft.wartosc_nabycia
+    if (wn === null || wn === '') return null
+    const val = Number(wn)
+    if (isNaN(val) || val <= 0) return null
+    const limit = LEASING_LIMITS[draft.typ_napedu || 'spalinowy'] || 100_000
+    const proporcja = Math.min(limit / val, 1)
+    return { limit, proporcja, procent: (proporcja * 100).toFixed(2) }
   }
 
   const wlasnoscLabels: Record<string, string> = {
@@ -196,6 +228,7 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Marka/model</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Leasing</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Rozliczenie</th>
+              <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Napęd</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Własność</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Zastosowanie</th>
               <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Aktywny</th>
@@ -212,6 +245,9 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
                   <Badge variant="outline" className="text-xs font-normal bg-white">
                     {getRozliczenieEnumLabel(p.sposob_rozliczenia_enum)}
                   </Badge>
+                </td>
+                <td className="px-4 py-3 text-[#64748B]">
+                  {napedLabels[p.typ_napedu] || p.typ_napedu || '-'}
                 </td>
                 <td className="px-4 py-3 text-[#64748B]">
                   {wlasnoscLabels[p.forma_wlasnosci] || p.forma_wlasnosci || '-'}
@@ -232,7 +268,7 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
               </tr>
             ))}
             {pojazdy.length === 0 && (
-              <tr><td colSpan={isAdminState ? 8 : 7} className="text-center py-8 text-[#64748B]">Brak dodanych pojazdów</td></tr>
+              <tr><td colSpan={isAdminState ? 9 : 8} className="text-center py-8 text-[#64748B]">Brak dodanych pojazdów</td></tr>
             )}
           </tbody>
         </table>
@@ -257,6 +293,49 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
             <div className="space-y-2">
               <Label>Nr umowy leasingu</Label>
               <Input value={draft.nr_umowy_leasingu} onChange={e => setDraft({...draft, nr_umowy_leasingu: e.target.value})} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Typ napędu</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={draft.typ_napedu || 'spalinowy'}
+                  onChange={e => setDraft({ ...draft, typ_napedu: e.target.value })}
+                >
+                  <option value="spalinowy">Spalinowy</option>
+                  <option value="hybrydowy">Hybrydowy</option>
+                  <option value="elektryczny">Elektryczny</option>
+                </select>
+                {draft.typ_napedu === 'hybrydowy' && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5 leading-snug">
+                    ⚠️ Limit 150 tys. dotyczy tylko aut z emisją CO₂ ≤ 50 g/km (zwykle plug-in). Zwykła hybryda = limit jak spalinowy — w razie wątpliwości wybierz Spalinowy.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Wartość nabycia (leasing)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={draft.wartosc_nabycia ?? ''}
+                  onChange={e => setDraft({ ...draft, wartosc_nabycia: e.target.value })}
+                />
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  Wartość z umowy leasingu: netto + nieodliczony VAT. Wypełnij tylko dla aut w leasingu — uruchamia proporcjonalne rozliczanie rat.
+                </p>
+                {(() => {
+                  const preview = getLeasingPreview()
+                  if (!preview) return null
+                  return (
+                    <div className="text-xs font-medium text-blue-700 bg-blue-50 rounded px-2 py-1.5">
+                      Proporcja KUP: {preview.limit.toLocaleString('pl-PL')} / {Number(draft.wartosc_nabycia).toLocaleString('pl-PL')} = {preview.procent}%
+                      {preview.proporcja >= 1 && <span className="text-emerald-600 ml-1">(100% — wartość ≤ limit)</span>}
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Sposób rozliczenia (opisowe/legacy)</Label>

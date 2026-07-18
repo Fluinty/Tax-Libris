@@ -12,9 +12,9 @@ import { cn } from '@/lib/utils'
 import type { ClientPojazd } from '@/types/database'
 
 const REZIM_OPTIONS = [
-  { value: '100', label: '100% VAT + 100% KPiR', desc: 'Pojazd firmowy zgłoszony VAT-26' },
-  { value: '50_75', label: 'Mieszany 50/75 — 50% VAT + 75% × (netto + ½VAT) KPiR', desc: 'Osobowy w użytku mieszanym — art. 23 ust. 1 pkt 46a PIT' },
-  { value: '20', label: 'Prywatny 20% — 0% VAT + 20% brutto KPiR', desc: 'Prywatny pojazd, sporadyczne użycie firmowe' },
+  { value: '100', label: '100% (firmowy / VAT-26)', desc: 'Pojazd firmowy zgłoszony VAT-26 — pełny VAT, pełny koszt KPiR' },
+  { value: '50_75', label: '75% (użytek mieszany)', desc: '50% VAT odliczone + 75% × (netto + ½ VAT) do KPiR — art. 23 ust. 1 pkt 46a PIT' },
+  { value: '20', label: '20% (pojazd prywatny)', desc: '50% VAT odliczone + 20% × (netto + ½ nieodliczonego VAT) do KPiR' },
 ] as const
 
 // Mapowanie procent_do_ujecia_w_kosztach (int enum) -> rezim UI value
@@ -25,9 +25,9 @@ const PROCENT_ENUM_TO_REZIM: Record<number, string> = {
 }
 
 const PROCENT_LABELS: Record<number, string> = {
-  0: '100% (auto firmowe / VAT-26 / ciężarowe)',
-  1: '75% (pojazd firmowy - mieszany)',
-  2: '20% (pojazd wspólnika - prywatny)',
+  0: '100% (firmowy / VAT-26)',
+  1: '75% (użytek mieszany)',
+  2: '20% (pojazd prywatny)',
 }
 
 interface KpirPojazdoweData {
@@ -37,6 +37,10 @@ interface KpirPojazdoweData {
   koszt_kpir_obliczony: number
   strategia: string
   rezim_proc: string
+  typ_wydatku?: string
+  pojazd_nr_rej?: string
+  leasingodawca?: string
+  wartosc_nabycia_pojazdu?: number
 }
 
 interface Props {
@@ -279,6 +283,53 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
             </div>
           )}
 
+          {/* Leasing rate dedicated section */}
+          {kpirPojazdoweData && kpirPojazdoweData.typ_wydatku === 'rata_leasingowa' && (
+            <div className="bg-indigo-50/60 border border-indigo-200 rounded-md p-3 space-y-1.5">
+              <div className="text-xs font-medium text-indigo-700 uppercase mb-2 flex items-center gap-1.5">
+                📋 Rata leasingowa
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+                {kpirPojazdoweData.leasingodawca && (
+                  <>
+                    <span className="text-slate-500">Leasingodawca:</span>
+                    <span className="font-medium text-slate-800">{kpirPojazdoweData.leasingodawca}</span>
+                  </>
+                )}
+                {(kpirPojazdoweData.pojazd_nr_rej || selPojazd) && (
+                  <>
+                    <span className="text-slate-500">Pojazd:</span>
+                    <span className="font-medium text-slate-800">
+                      {selPojazd ? `${selPojazd.marka_model || ''} ${selPojazd.nr_rejestracyjny}` : kpirPojazdoweData.pojazd_nr_rej}
+                    </span>
+                  </>
+                )}
+                {kpirPojazdoweData.wartosc_nabycia_pojazdu != null && (
+                  <>
+                    <span className="text-slate-500">Wartość nabycia:</span>
+                    <span className="font-medium text-slate-800">
+                      {kpirPojazdoweData.wartosc_nabycia_pojazdu.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
+                    </span>
+                  </>
+                )}
+                {kpirPojazdoweData.rezim_proc && (
+                  <>
+                    <span className="text-slate-500">Proporcja KUP:</span>
+                    <span className="font-semibold text-indigo-700">{kpirPojazdoweData.rezim_proc}</span>
+                  </>
+                )}
+                <span className="text-slate-500">Koszt KPiR:</span>
+                <span className="font-semibold text-emerald-700">
+                  {kpirPojazdoweData.koszt_kpir_obliczony?.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
+                </span>
+                <span className="text-slate-500">VAT odliczony:</span>
+                <span className="font-medium text-slate-800">50% (bez limitu)</span>
+              </div>
+            </div>
+          )}
+
+          {/* TODO: Alert "leasing_bez_danych" — czeka na flagę z workera */}
+
           {/* Vehicle selection */}
           <div>
             <label className="text-xs font-medium text-slate-500 uppercase mb-1.5 block">Pojazd</label>
@@ -319,7 +370,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
           <details className="text-sm">
             <summary className="cursor-pointer text-slate-500 font-medium">Podgląd obliczeń</summary>
             <div className="mt-2 font-mono text-xs text-slate-600 bg-slate-50 p-2 rounded-md">
-              Brutto: {kwotaBrutto.toFixed(2)} zł · Reżim: {selRezim === '100' ? '100% VAT + 100% KPiR' : selRezim === '50_75' ? '50% VAT + 75% KPiR' : '0% VAT + 20% KPiR'}
+              Brutto: {kwotaBrutto.toFixed(2)} zł · Reżim: {selRezim === '100' ? '100% VAT + 100% KPiR' : selRezim === '50_75' ? '50% VAT + 75% × (netto+½VAT) KPiR' : '50% VAT + 20% × (netto+½VAT) KPiR'}
             </div>
           </details>
         </div>

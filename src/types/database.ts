@@ -40,6 +40,9 @@ export interface ZapisVATData {
   suma_netto: number;
   suma_vat: number;
   suma_brutto: number;
+
+  // Transakcja zagraniczna (ustawiane przez worker gdy wykryta)
+  transakcja_zagraniczna?: string;
 }
 
 export interface Client {
@@ -391,6 +394,8 @@ export interface ClientPojazd {
   ewidencja_przebiegu: boolean | null;
   wartosc_netto_zakupu: number | null;
   data_rozpoczecia_uzytkowania: string | null;
+  typ_napedu: 'spalinowy' | 'hybrydowy' | 'elektryczny' | null;
+  wartosc_nabycia: number | null;
 }
 
 
