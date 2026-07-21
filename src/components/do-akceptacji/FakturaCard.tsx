@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2 } from 'lucide-react'
+import { CalcInput } from '@/components/ui/calc-input'
+import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { EditModal } from './EditModal'
@@ -67,8 +68,8 @@ interface FakturaCardProps {
   onResolved?: (id: number) => void
 }
 
-import { getKolumnyForTyp, getEtykietaKontrahenta, getEtykietaSekcjiKwot } from '@/lib/kpir'
-import { getEtykietaSekcjiVAT, isFakturaZwolniona } from '@/lib/vat'
+import { getKolumnyForTyp, getEtykietaKontrahenta, getEtykietaSekcjiKwot, computeKpirFromPozycje } from '@/lib/kpir'
+import { getEtykietaSekcjiVAT, isFakturaZwolniona, getOfficialVatTable } from '@/lib/vat'
 
 interface JoinedPozycja extends PozycjaXml {
   kolumna_kpir: number | null
@@ -108,6 +109,58 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [currentPozycje, setCurrentPozycje] = useState(exception.pozycje_editable ?? [])
   const [classificationVersion, setClassificationVersion] = useState(0)
+
+  const officialVatTable = useMemo(() => getOfficialVatTable(exception.pozycje_xml_full), [exception.pozycje_xml_full])
+
+  // KPiR State
+  const initialKpirKwoty = useMemo(() => exception.final_kwoty_per_kolumna || exception.ai_kwoty_per_kolumna || {}, [exception])
+  const [currentKpirKwoty, setCurrentKpirKwoty] = useState<Record<string, number>>(initialKpirKwoty)
+  const [kpirEditedManually, setKpirEditedManually] = useState(false)
+  const [showKpirRecalcBanner, setShowKpirRecalcBanner] = useState(false)
+  
+  const lastKpirClassVersion = useRef(0)
+
+  // Recalculate KPiR amounts on classification change (if not vehicle)
+  useEffect(() => {
+    if (classificationVersion === 0 || classificationVersion === lastKpirClassVersion.current) return
+    lastKpirClassVersion.current = classificationVersion
+    
+    // Disable KPiR auto-recalc if it's a vehicle (managed by worker/PojazdRezimSection)
+    if (exception.kpir_pojazdowe_data) return
+
+    const { kwoty: computedKwoty, requiresManualRecalc } = computeKpirFromPozycje(
+      currentPozycje, 
+      exception.typ_dokumentu, 
+      exception.ai_kwoty_per_kolumna || {},
+      exception.client?.platnik_vat ?? null
+    )
+
+    if (!kpirEditedManually && !requiresManualRecalc) {
+      setCurrentKpirKwoty(computedKwoty)
+      setShowKpirRecalcBanner(false)
+    } else {
+      setShowKpirRecalcBanner(true)
+    }
+  }, [classificationVersion, currentPozycje, exception, kpirEditedManually])
+
+  const handleKpirRecalcClick = () => {
+    const { kwoty: computedKwoty } = computeKpirFromPozycje(
+      currentPozycje, 
+      exception.typ_dokumentu, 
+      exception.ai_kwoty_per_kolumna || {},
+      exception.client?.platnik_vat ?? null
+    )
+    setCurrentKpirKwoty(computedKwoty)
+    setKpirEditedManually(false)
+    setShowKpirRecalcBanner(false)
+  }
+
+  const handleKpirKwotaChange = (klucz: string, value: string) => {
+    const numVal = parseFloat(value) || 0
+    setCurrentKpirKwoty(prev => ({ ...prev, [klucz]: numVal }))
+    setKpirEditedManually(true)
+  }
+
   const router = useRouter()
 
   const handleClassificationChange = useCallback((pozycje: import('@/types/database').FakturaPozycja[]) => {
@@ -191,7 +244,22 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       return
     }
 
-    const res = await approveFaktura(actionId, editableOpis || undefined)
+    // Check if KPiR changed from AI proposals OR was manually edited
+    // AND it's not a vehicle card (which manages its own KPiR via AI kwoty or modal)
+    // We also check exception.pozycje_vat_edited because if they edited VAT, we should probably use full approve just in case (though updateJpkSection handles VAT).
+    const isKpirChanged = !exception.kpir_pojazdowe_data && (
+      kpirEditedManually || 
+      JSON.stringify(currentKpirKwoty) !== JSON.stringify(exception.ai_kwoty_per_kolumna || {})
+    )
+
+    let res;
+    if (isKpirChanged || exception.pozycje_vat_edited) {
+      // Pass the current KPiR amounts to save them
+      res = await approveExceptionFull(actionId, currentKpirKwoty, exception.final_zapis_vat_data || exception.zapis_vat_data, editableOpis || '')
+    } else {
+      res = await approveFaktura(actionId, editableOpis || undefined)
+    }
+    
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
       onResolved?.(exception.id)
@@ -368,8 +436,6 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     )
   }
 
-  // renderRezimPojazdowy removed — replaced by PojazdRezimSection (sesja 7)
-
   const isClientVatPayer = exception.client?.platnik_vat !== false
 
   const renderJpkSections = (isReadOnly: boolean) => {
@@ -398,6 +464,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             readOnly={isReadOnly}
             pozycjeFaktury={currentPozycje}
             classificationVersion={classificationVersion}
+            officialVatTable={officialVatTable || undefined}
           />
         )}
         {/* Transakcja zagraniczna */}
@@ -963,7 +1030,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                   };
 
                   return getKolumnyForTyp(exception.typ_dokumentu).map((col) => {
-                    const val = finalKwoty[col.klucz]
+                    const val = currentKpirKwoty[col.klucz]
                     const isZero = !val || Number(val) === 0
                     
                     // Zmiana 2: jeśli wartość to 0, nie pokazujemy kolumny by zmniejszyć szum wizualny
@@ -971,15 +1038,29 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
                     const sumyPozycji = getKolumnaPozycjeSumy(col.numer);
 
+                    // If it's a vehicle or readOnly, display as static text. Otherwise, render CalcInput.
+                    const isStatic = exception.kpir_pojazdowe_data || stan !== 'pending_review'
+
                     return (
-                      <div key={col.numer} className="py-0.5">
-                        <div className="flex text-sm">
+                      <div key={col.numer} className="py-1">
+                        <div className="flex text-sm items-center">
                           <span className="w-48 shrink-0 text-[#64748B]">
                             Kolumna {col.displayNumer} ({col.labelKrotki}):
                           </span>
-                          <span className="font-medium text-[#1E293B]">
-                            {Number(val).toFixed(2)} zł
-                          </span>
+                          {isStatic ? (
+                            <span className="font-medium text-[#1E293B]">
+                              {Number(val).toFixed(2)} zł
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <CalcInput
+                                className="w-32 h-8 text-right tabular-nums text-sm font-medium"
+                                value={val || ''}
+                                onChange={(v) => handleKpirKwotaChange(col.klucz, v)}
+                              />
+                              <span className="text-sm text-[#475569] w-4">zł</span>
+                            </div>
+                          )}
                         </div>
                         {sumyPozycji && (
                           <div className="text-xs text-slate-500 pl-48 mt-0.5">
@@ -991,6 +1072,22 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                   });
                 })()}
               </div>
+              
+              {/* Recalc banner for KPiR */}
+              {showKpirRecalcBanner && !exception.kpir_pojazdowe_data && (
+                <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-sm text-amber-800">
+                  <RefreshCw className="w-4 h-4 shrink-0" />
+                  <span>Klasyfikacja pozycji wskazuje na inne kwoty KPiR</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleKpirRecalcClick}
+                    className="h-6 px-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 ml-auto"
+                  >
+                    Przelicz kwoty KPiR
+                  </Button>
+                </div>
+              )}
               
               {/* WARNING BANNER dla niepoprawnych kolumn w aiKwoty */}
               {(() => {
@@ -1005,7 +1102,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               })()}
 
               {(() => {
-                const sumaKolumn = Object.values(finalKwoty).reduce((a, b) => Number(a) + Number(b), 0);
+                const sumaKolumn = Object.values(currentKpirKwoty).reduce((a, b) => Number(a) + Number(b), 0);
                 const brutto = exception.kwota_brutto || 0;
                 const isRezim = Math.abs(sumaKolumn - brutto) > 0.01;
                 const pojazdowe = exception.kpir_pojazdowe_data;
@@ -1319,7 +1416,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           open={showEditModal} 
           onOpenChange={setShowEditModal}
           initialOpis={exception.ai_proponowany_opis || ''}
-          initialKwoty={exception.final_kwoty_per_kolumna || exception.ai_kwoty_per_kolumna || {}}
+          initialKwoty={currentKpirKwoty}
           initialZapisVatData={mergeInlineEditsVat(exception, exception.pozycje_editable, mergeInlineEditsPojazd(exception)) || exception.zapis_vat_data || null}
           kwotaBrutto={exception.kwota_brutto}
           kwotaNetto={exception.zapis_vat_data?.suma_netto ?? null}

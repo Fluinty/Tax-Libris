@@ -43,6 +43,64 @@ export const RODZAJ_ODLICZENIA_LABELS: Record<number, string> = {
   3: 'Strukturą',
 };
 
+// Pomocnicza funkcja do wyciągania wartości z PozycjaXml
+function findVal(obj: any, ...keys: string[]): string | null {
+  if (!obj || typeof obj !== 'object') return null
+  for (const k of keys) {
+    if (k in obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
+      return String(obj[k])
+    }
+  }
+  return null
+}
+
+function pVal(poz: any, ...keys: string[]): string | null {
+  if (!poz) return null
+  
+  if (poz.DanePozycji) {
+    return findVal(poz.DanePozycji, ...keys)
+  }
+  
+  return findVal(poz, ...keys)
+}
+
+/**
+ * Zwraca zsumowaną oficjalną tabelę VAT bezpośrednio z pozycji XML
+ * (tak, jak robi to podgląd KSeF). Ignoruje ewentualne usunięcie pozycji przez księgową (np. nkup).
+ */
+export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): any[] | null {
+  if (!pozycjeXmlFull || !Array.isArray(pozycjeXmlFull) || pozycjeXmlFull.length === 0) {
+    return null
+  }
+
+  const groups: Record<string, { netto: number; brutto: number }> = {}
+  
+  for (const p of pozycjeXmlFull) {
+    const rawStawka = (pVal(p, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
+    const stawka = rawStawka || 'zw'
+    if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
+    
+    const nettoVal = Number(pVal(p, 'wartoscNetto', 'wartosc_netto') || 0)
+    let bruttoVal = Number(pVal(p, 'wartoscBrutto', 'wartosc_brutto') || 0)
+    
+    if (!bruttoVal && nettoVal) {
+      const stawkaNum = parseFloat(stawka)
+      bruttoVal = !isNaN(stawkaNum) ? Math.round(nettoVal * (1 + stawkaNum / 100) * 100) / 100 : nettoVal
+    }
+    
+    groups[stawka].netto += nettoVal
+    groups[stawka].brutto += bruttoVal
+  }
+
+  return Object.entries(groups).map(([stawka, { netto, brutto }]) => ({
+    stawka_symbol: stawka,
+    stawka_id: '',
+    netto: Math.round(netto * 100) / 100,
+    vat: Math.round((brutto - netto) * 100) / 100,
+    brutto: Math.round(brutto * 100) / 100,
+  }))
+}
+
 export const CEL_ZAKUPU_LABELS: Record<number, string> = {
   0: 'Gospodarczy',
   1: 'Mieszany',

@@ -33,6 +33,8 @@ interface PozycjeVatSectionProps {
   pozycjeFaktury?: FakturaPozycja[]
   /** Counter incremented on every classification change (triggers recalc) */
   classificationVersion?: number
+  /** Official VAT table from XML (used to align rounding exactly) */
+  officialVatTable?: PozycjaVatRow[]
 }
 
 function calcVat(netto: number, stawka: string): number {
@@ -46,29 +48,55 @@ function calcBrutto(netto: number, vat: number): number {
 }
 
 /** Compute VAT rows from pozycje faktury based on classification */
-function computeVatFromPozycje(pozycje: FakturaPozycja[]): PozycjaVatRow[] {
+function computeVatFromPozycje(pozycje: FakturaPozycja[], officialVatTable?: PozycjaVatRow[]): PozycjaVatRow[] {
   // Filter: only positions where vat_odliczalny != 'brak'
   const included = pozycje.filter(p => p.effective_vat_odliczalny !== 'brak')
   if (included.length === 0) return [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }]
 
-  // Group by stawka_vat
-  const groups: Record<string, { netto: number; brutto: number }> = {}
+  // Zlicz pozycje dla każdej stawki (ile jest w ogóle, ile zostało włączonych)
+  const countAll: Record<string, number> = {}
+  for (const p of pozycje) {
+    const stawka = p.stawka_vat?.replace('%', '').trim() || '23'
+    countAll[stawka] = (countAll[stawka] || 0) + 1
+  }
+
+  // Group by stawka_vat for included positions
+  const groups: Record<string, { netto: number; brutto: number; count: number }> = {}
   for (const p of included) {
     const stawka = p.stawka_vat?.replace('%', '').trim() || '23'
-    if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
+    if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0, count: 0 }
     groups[stawka].netto += Number(p.wartosc_netto || 0)
     groups[stawka].brutto += Number(p.wartosc_brutto || 0)
+    groups[stawka].count += 1
   }
 
   // Build rows
   return Object.entries(groups)
     .sort(([a], [b]) => parseFloat(b) - parseFloat(a)) // Sort descending by rate
-    .map(([stawka, { netto, brutto }]) => ({
-      stawka,
-      netto: Math.round(netto * 100) / 100,
-      vat: Math.round((brutto - netto) * 100) / 100,
-      brutto: Math.round(brutto * 100) / 100,
-    }))
+    .map(([stawka, { netto, brutto, count }]) => {
+      // Jeśli uwzględniono WSZYSTKIE pozycje dla tej stawki (nic nie wyrzucono) 
+      // ORAZ mamy oficjalną tabelę VAT, używamy dokładnie kwot z oficjalnej tabeli.
+      const isAllIncluded = count === countAll[stawka]
+      if (isAllIncluded && officialVatTable) {
+        const officialMatch = officialVatTable.find(o => o.stawka === stawka)
+        if (officialMatch) {
+          return {
+            stawka,
+            netto: officialMatch.netto,
+            vat: officialMatch.vat,
+            brutto: officialMatch.brutto
+          }
+        }
+      }
+
+      // W przeciwnym razie wyliczamy ręcznie z pozycji (vat = brutto - netto)
+      return {
+        stawka,
+        netto: Math.round(netto * 100) / 100,
+        vat: Math.round((brutto - netto) * 100) / 100,
+        brutto: Math.round(brutto * 100) / 100,
+      }
+    })
 }
 
 export function PozycjeVatSection({
@@ -80,6 +108,7 @@ export function PozycjeVatSection({
   readOnly = false,
   pozycjeFaktury,
   classificationVersion,
+  officialVatTable,
 }: PozycjeVatSectionProps) {
   const initial: PozycjaVatRow[] = pozycjeVatFinal ?? pozycjeVatAi ?? []
   // Use ref for initial to avoid re-initialization on router.refresh()
@@ -101,22 +130,25 @@ export function PozycjeVatSection({
 
     if (!pozycjeFaktury || pozycjeFaktury.length === 0) return
 
+    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable)
+    
+    // Check if new computed rows differ from current rows
+    const isDifferent = JSON.stringify(computedRows) !== JSON.stringify(rows)
+    if (!isDifferent) return
+
     if (!vatEditedManually) {
-      // Auto-recalc
-      const newRows = computeVatFromPozycje(pozycjeFaktury)
-      setRows(newRows)
+      setRows(computedRows)
       setDirty(true)
       setShowRecalcBanner(false)
     } else {
-      // Show banner instead
       setShowRecalcBanner(true)
     }
-  }, [classificationVersion, pozycjeFaktury, vatEditedManually])
+  }, [classificationVersion, pozycjeFaktury, vatEditedManually, rows, officialVatTable])
 
   const handleRecalcClick = () => {
-    if (!pozycjeFaktury || pozycjeFaktury.length === 0) return
-    const newRows = computeVatFromPozycje(pozycjeFaktury)
-    setRows(newRows)
+    if (!pozycjeFaktury) return
+    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable)
+    setRows(computedRows)
     setDirty(true)
     setVatEditedManually(false)
     setShowRecalcBanner(false)

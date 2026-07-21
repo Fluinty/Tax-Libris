@@ -37,3 +37,85 @@ export function getEtykietaSekcjiKwot(typ: string | null): string {
     ? 'Rozdzielenie kwot na kolumny KPiR (przychody)' 
     : 'Rozdzielenie kwot na kolumny KPiR (rozchody)';
 }
+
+import type { FakturaPozycja } from '@/types/database'
+
+export function computeKpirFromPozycje(
+  pozycje: FakturaPozycja[],
+  typDokumentu: string | null,
+  aiKwoty: Record<string, number>,
+  isVatPayerKarta: boolean | null
+): { kwoty: Record<string, number>; requiresManualRecalc: boolean } {
+  const result: Record<string, number> = {}
+  const kolumny = getKolumnyForTyp(typDokumentu)
+  
+  // Wariant rozliczenia VAT
+  let isVatPayer = isVatPayerKarta
+  let requiresManualRecalc = false
+  
+  if (isVatPayer === null) {
+    // Heurystyka: jeśli suma brutto wszystkich pozycji AI KUP == suma kolumn AI, to prawdopodobnie nievatowiec (brutto).
+    // Jeśli netto, to vatowiec (netto).
+    let sumaBruttoKup = 0
+    let sumaNettoKup = 0
+    for (const p of pozycje) {
+      if (p.effective_kup_status === 'kup') {
+        sumaBruttoKup += Number(p.wartosc_brutto || 0)
+        sumaNettoKup += Number(p.wartosc_netto || 0)
+      }
+    }
+    
+    // Check if all positions have same netto and brutto (e.g. rate 'zw', 'np')
+    const allNettoEqualsBrutto = pozycje.length > 0 && pozycje.every(p => Number(p.wartosc_netto) === Number(p.wartosc_brutto))
+    
+    if (allNettoEqualsBrutto) {
+      // Tie-break (wymóg użytkownika): Gdy faktura ma wyłącznie pozycje zw/np, wariant netto (vatowiec)
+      isVatPayer = true
+      requiresManualRecalc = true
+    } else {
+      const sumaAi = Object.values(aiKwoty).reduce((acc, val) => acc + Number(val || 0), 0)
+      const diffBrutto = Math.abs(sumaAi - sumaBruttoKup)
+      const diffNetto = Math.abs(sumaAi - sumaNettoKup)
+      // Domyślnie zakładamy vatowca (netto), chyba że bliżej nam do brutto
+      isVatPayer = diffNetto <= diffBrutto
+    }
+  }
+
+  // Zainicjuj zerami dla dozwolonych kolumn
+  for (const col of kolumny) {
+    result[col.klucz] = 0
+  }
+
+  // Sumowanie pozycji
+  for (const p of pozycje) {
+    if (p.effective_kup_status === 'nkup') continue
+    
+    const colNumer = p.effective_kolumna_kpir ?? p.final_kolumna_kpir ?? p.ai_kolumna_kpir
+    const colDef = kolumny.find(c => c.numer === colNumer)
+    if (!colDef) continue // Pomijamy pozycje przypisane do błędnej kolumny (np. 10 przy sprzedaży)
+    
+    const netto = Number(p.wartosc_netto || 0)
+    const brutto = Number(p.wartosc_brutto || 0)
+    const vat = brutto - netto
+    
+    let kwota = 0
+    if (!isVatPayer) {
+      kwota = brutto
+    } else {
+      const odlicz = p.effective_vat_odliczalny || 'pelny'
+      if (odlicz === 'pelny') kwota = netto
+      else if (odlicz === 'brak') kwota = brutto
+      else if (odlicz === 'czesciowe_50') kwota = netto + (vat / 2)
+      else kwota = netto // fallback (czesciowe_25 is extremely rare, keep netto as default or do math)
+    }
+    
+    result[colDef.klucz] += kwota
+  }
+  
+  // Zaokrąglenie do 2 miejsc po przecinku
+  for (const key of Object.keys(result)) {
+    result[key] = Math.round(result[key] * 100) / 100
+  }
+
+  return { kwoty: result, requiresManualRecalc }
+}
