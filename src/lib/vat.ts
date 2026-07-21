@@ -64,6 +64,12 @@ function pVal(poz: any, ...keys: string[]): string | null {
   return findVal(poz, ...keys)
 }
 
+export function normalizeStawka(raw: string | null | undefined): string {
+  const s = String(raw ?? '').replace(/stawka/i, '').replace('%', '').trim().toLowerCase()
+  if (s === '') return 'zw'
+  return s
+}
+
 /**
  * Zwraca zsumowaną oficjalną tabelę VAT bezpośrednio z pozycji XML
  * (tak, jak robi to podgląd KSeF). Ignoruje ewentualne usunięcie pozycji przez księgową (np. nkup).
@@ -76,8 +82,7 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
   const groups: Record<string, { netto: number; brutto: number }> = {}
   
   for (const p of pozycjeXmlFull) {
-    const rawStawka = (pVal(p, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
-    const stawka = rawStawka || 'zw'
+    const stawka = normalizeStawka(pVal(p, 'stawkaVat', 'stawka'))
     if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
     
     const nettoVal = Number(pVal(p, 'wartoscNetto', 'wartosc_netto') || 0)
@@ -93,6 +98,7 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
   }
 
   return Object.entries(groups).map(([stawka, { netto, brutto }]) => ({
+    stawka,
     stawka_symbol: stawka,
     stawka_id: '',
     netto: Math.round(netto * 100) / 100,

@@ -11,6 +11,7 @@ import { updateJpkSection, resetJpkSection } from '@/app/(auth)/do-akceptacji/ac
 import { toast } from 'sonner'
 import { Trash2, Plus, RotateCcw, RefreshCw } from 'lucide-react'
 import type { FakturaPozycja } from '@/types/database'
+import { normalizeStawka } from '@/lib/vat'
 
 interface PozycjaVatRow {
   stawka: string
@@ -56,29 +57,34 @@ function computeVatFromPozycje(pozycje: FakturaPozycja[], officialVatTable?: Poz
   // Zlicz pozycje dla każdej stawki (ile jest w ogóle, ile zostało włączonych)
   const countAll: Record<string, number> = {}
   for (const p of pozycje) {
-    const stawka = p.stawka_vat?.replace('%', '').trim() || '23'
+    const stawka = normalizeStawka(p.stawka_vat)
     countAll[stawka] = (countAll[stawka] || 0) + 1
   }
 
   // Group by stawka_vat for included positions
   const groups: Record<string, { netto: number; brutto: number; count: number }> = {}
   for (const p of included) {
-    const stawka = p.stawka_vat?.replace('%', '').trim() || '23'
+    const stawka = normalizeStawka(p.stawka_vat)
     if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0, count: 0 }
     groups[stawka].netto += Number(p.wartosc_netto || 0)
     groups[stawka].brutto += Number(p.wartosc_brutto || 0)
     groups[stawka].count += 1
   }
 
+  const getSortVal = (s: string) => {
+    const n = parseFloat(s)
+    return isNaN(n) ? -1 : n
+  }
+
   // Build rows
   return Object.entries(groups)
-    .sort(([a], [b]) => parseFloat(b) - parseFloat(a)) // Sort descending by rate
+    .sort(([a], [b]) => getSortVal(b) - getSortVal(a)) // Sort descending by numeric rate, non-numeric (-1) at the end
     .map(([stawka, { netto, brutto, count }]) => {
       // Jeśli uwzględniono WSZYSTKIE pozycje dla tej stawki (nic nie wyrzucono) 
       // ORAZ mamy oficjalną tabelę VAT, używamy dokładnie kwot z oficjalnej tabeli.
       const isAllIncluded = count === countAll[stawka]
       if (isAllIncluded && officialVatTable) {
-        const officialMatch = officialVatTable.find(o => o.stawka === stawka)
+        const officialMatch = officialVatTable.find(o => normalizeStawka(o.stawka) === stawka || normalizeStawka((o as any).stawka_symbol) === stawka)
         if (officialMatch) {
           return {
             stawka,

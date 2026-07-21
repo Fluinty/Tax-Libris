@@ -1,6 +1,7 @@
 // Helper functions for merging inline edits into final data
 
 import type { ZapisVATData } from '@/types/database'
+import { normalizeStawka } from './vat'
 
 /**
  * Phase 2 — Merge inline section edits (GTU, procedury JPK, pozycje VAT)
@@ -62,7 +63,7 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
       const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
       for (const p of deductible) {
         const rawStawka = p.stawka_vat || '0'
-        const stawka = rawStawka.startsWith('Stawka') ? rawStawka.replace('Stawka', '') : rawStawka
+        const stawka = normalizeStawka(rawStawka)
         const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
         const netto = Number(p.wartosc_netto || 0)
         const brutto = Number(p.wartosc_brutto || 0)
@@ -74,9 +75,7 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
       // Przelicz zachowując stawka_id i pole_deklaracji z oryginału
       const newPozycje: any[] = []
       for (const orig of merged.pozycje_vat) {
-        const stawkaNum = orig.stawka_symbol.startsWith('Stawka')
-          ? orig.stawka_symbol.replace('Stawka', '')
-          : orig.stawka_symbol
+        const stawkaNum = normalizeStawka(orig.stawka_symbol)
         const group = groups.get(stawkaNum)
         if (group && (group.netto !== 0 || group.brutto !== 0)) {
           newPozycje.push({ ...orig, netto: group.netto, vat: group.vat, brutto: group.brutto })

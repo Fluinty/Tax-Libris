@@ -69,7 +69,7 @@ interface FakturaCardProps {
 }
 
 import { getKolumnyForTyp, getEtykietaKontrahenta, getEtykietaSekcjiKwot, computeKpirFromPozycje } from '@/lib/kpir'
-import { getEtykietaSekcjiVAT, isFakturaZwolniona, getOfficialVatTable } from '@/lib/vat'
+import { getEtykietaSekcjiVAT, isFakturaZwolniona, getOfficialVatTable, normalizeStawka } from '@/lib/vat'
 
 interface JoinedPozycja extends PozycjaXml {
   kolumna_kpir: number | null
@@ -617,7 +617,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
       for (const p of deductible) {
         const rawStawka = p.stawka_vat || '0'
-        const stawka = rawStawka.startsWith('Stawka') ? rawStawka.replace('Stawka', '') : rawStawka
+        const stawka = normalizeStawka(rawStawka)
         const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
         const netto = Number(p.wartosc_netto || 0)
         const brutto = Number(p.wartosc_brutto || 0)
@@ -633,9 +633,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       excludedStawki = []
 
       for (const orig of origPozycje) {
-        const stawkaNum = orig.stawka_symbol.startsWith('Stawka')
-          ? orig.stawka_symbol.replace('Stawka', '')
-          : orig.stawka_symbol
+        const stawkaNum = normalizeStawka(orig.stawka_symbol)
         const group = groups.get(stawkaNum)
         if (group && (group.netto !== 0 || group.brutto !== 0)) {
           effectivePozycjeVat.push({ ...orig, netto: group.netto, vat: group.vat, brutto: group.brutto })
