@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CalcInput } from '@/components/ui/calc-input'
 import { Badge } from '@/components/ui/badge'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -275,10 +276,10 @@ export function EditModal({
                   <div key={col.numer} className="flex items-center justify-between">
                     <span className="text-sm text-[#475569]">Kolumna {col.displayNumer} ({col.label})</span>
                     <div className="flex items-center gap-2">
-                      <Input
+                      <CalcInput
                         className="w-32 text-right tabular-nums"
                         value={kwoty[col.klucz] || ''}
-                        onChange={(e) => handleKwotaChange(col.klucz, e.target.value)}
+                        onChange={(v) => handleKwotaChange(col.klucz, v)}
                       />
                       <span className="text-sm text-[#475569] w-4">zł</span>
                     </div>

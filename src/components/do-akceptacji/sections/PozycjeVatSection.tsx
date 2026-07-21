@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CalcInput } from '@/components/ui/calc-input'
 import { Input } from '@/components/ui/input'
 import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { STAWKI_VAT, getStawkaLabel, type StawkaVat } from '@/lib/jpk-helpers'
 import { updateJpkSection, resetJpkSection } from '@/app/(auth)/do-akceptacji/actions'
 import { toast } from 'sonner'
-import { Trash2, Plus, RotateCcw } from 'lucide-react'
+import { Trash2, Plus, RotateCcw, RefreshCw } from 'lucide-react'
+import type { FakturaPozycja } from '@/types/database'
 
 interface PozycjaVatRow {
   stawka: string
@@ -27,6 +29,10 @@ interface PozycjeVatSectionProps {
   pozycjeVatAi: PozycjaVatRow[] | null | undefined
   isEdited: boolean
   readOnly?: boolean
+  /** Current pozycje faktury with 3-dimensional classification (for auto-recalc) */
+  pozycjeFaktury?: FakturaPozycja[]
+  /** Counter incremented on every classification change (triggers recalc) */
+  classificationVersion?: number
 }
 
 function calcVat(netto: number, stawka: string): number {
@@ -39,6 +45,32 @@ function calcBrutto(netto: number, vat: number): number {
   return Math.round((netto + vat) * 100) / 100
 }
 
+/** Compute VAT rows from pozycje faktury based on classification */
+function computeVatFromPozycje(pozycje: FakturaPozycja[]): PozycjaVatRow[] {
+  // Filter: only positions where vat_odliczalny != 'brak'
+  const included = pozycje.filter(p => p.effective_vat_odliczalny !== 'brak')
+  if (included.length === 0) return [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }]
+
+  // Group by stawka_vat
+  const groups: Record<string, { netto: number; brutto: number }> = {}
+  for (const p of included) {
+    const stawka = p.stawka_vat?.replace('%', '').trim() || '23'
+    if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
+    groups[stawka].netto += Number(p.wartosc_netto || 0)
+    groups[stawka].brutto += Number(p.wartosc_brutto || 0)
+  }
+
+  // Build rows
+  return Object.entries(groups)
+    .sort(([a], [b]) => parseFloat(b) - parseFloat(a)) // Sort descending by rate
+    .map(([stawka, { netto, brutto }]) => ({
+      stawka,
+      netto: Math.round(netto * 100) / 100,
+      vat: Math.round((brutto - netto) * 100) / 100,
+      brutto: Math.round(brutto * 100) / 100,
+    }))
+}
+
 export function PozycjeVatSection({
   exceptionId,
   kwotaBrutto,
@@ -46,12 +78,49 @@ export function PozycjeVatSection({
   pozycjeVatAi,
   isEdited,
   readOnly = false,
+  pozycjeFaktury,
+  classificationVersion,
 }: PozycjeVatSectionProps) {
   const initial: PozycjaVatRow[] = pozycjeVatFinal ?? pozycjeVatAi ?? []
-  const [rows, setRows] = useState<PozycjaVatRow[]>(initial.length > 0 ? initial : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
-  const [savedRows, setSavedRows] = useState<PozycjaVatRow[]>(initial.length > 0 ? initial : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
+  // Use ref for initial to avoid re-initialization on router.refresh()
+  const initialRef = useRef(initial)
+  const [rows, setRows] = useState<PozycjaVatRow[]>(initialRef.current.length > 0 ? initialRef.current : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
+  const [savedRows, setSavedRows] = useState<PozycjaVatRow[]>(initialRef.current.length > 0 ? initialRef.current : [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }])
   const [isSaving, setIsSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+
+  // Track manual edits — prevents auto-recalc from overwriting user work
+  const [vatEditedManually, setVatEditedManually] = useState(false)
+  const [showRecalcBanner, setShowRecalcBanner] = useState(false)
+  const lastClassificationVersion = useRef(classificationVersion ?? 0)
+
+  // React to classification changes
+  useEffect(() => {
+    if (classificationVersion === undefined || classificationVersion === lastClassificationVersion.current) return
+    lastClassificationVersion.current = classificationVersion
+
+    if (!pozycjeFaktury || pozycjeFaktury.length === 0) return
+
+    if (!vatEditedManually) {
+      // Auto-recalc
+      const newRows = computeVatFromPozycje(pozycjeFaktury)
+      setRows(newRows)
+      setDirty(true)
+      setShowRecalcBanner(false)
+    } else {
+      // Show banner instead
+      setShowRecalcBanner(true)
+    }
+  }, [classificationVersion, pozycjeFaktury, vatEditedManually])
+
+  const handleRecalcClick = () => {
+    if (!pozycjeFaktury || pozycjeFaktury.length === 0) return
+    const newRows = computeVatFromPozycje(pozycjeFaktury)
+    setRows(newRows)
+    setDirty(true)
+    setVatEditedManually(false)
+    setShowRecalcBanner(false)
+  }
 
   const sumBrutto = rows.reduce((a, r) => a + r.brutto, 0)
   const diff = Math.abs(sumBrutto - kwotaBrutto)
@@ -82,16 +151,19 @@ export function PozycjeVatSection({
       return next
     })
     setDirty(true)
+    setVatEditedManually(true)
   }, [])
 
   const addRow = () => {
     setRows(prev => [...prev, { stawka: '23', netto: 0, vat: 0, brutto: 0 }])
     setDirty(true)
+    setVatEditedManually(true)
   }
 
   const removeRow = (index: number) => {
     setRows(prev => prev.filter((_, i) => i !== index))
     setDirty(true)
+    setVatEditedManually(true)
   }
 
   const handleSave = async () => {
@@ -140,6 +212,8 @@ export function PozycjeVatSection({
         setRows(aiRows)
         setSavedRows(aiRows)
         setDirty(false)
+        setVatEditedManually(false)
+        setShowRecalcBanner(false)
         toast.success('Przywrócono propozycję AI')
       }
     } catch (e: unknown) {
@@ -161,7 +235,7 @@ export function PozycjeVatSection({
     <Badge variant="outline" className="text-[10px] h-5 font-normal text-slate-600">{badgeContent}</Badge>
   ) : null
 
-  const defaultOpen = isEdited || (initial.length > 0 && initial.some(r => r.brutto > 0))
+  const defaultOpen = isEdited || (initialRef.current.length > 0 && initialRef.current.some(r => r.brutto > 0))
 
   // Dynamic grid: add pole_deklaracji column if any row has it
   const gridCols = hasPoleDeklaracji
@@ -170,6 +244,22 @@ export function PozycjeVatSection({
 
   return (
     <CollapsibleJpkSection title="Pozycje VAT (edycja)" badge={badge} defaultOpen={defaultOpen}>
+      {/* Recalc banner */}
+      {showRecalcBanner && !readOnly && (
+        <div className="mb-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-sm text-amber-800">
+          <RefreshCw className="w-4 h-4 shrink-0" />
+          <span>Klasyfikacja pozycji się zmieniła</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRecalcClick}
+            className="h-6 px-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Przelicz stawki VAT
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="space-y-2">
         <div className={`grid ${gridCols} gap-2 text-[11px] font-semibold text-slate-500 uppercase`}>
@@ -192,11 +282,9 @@ export function PozycjeVatSection({
                 <option key={s} value={s}>{getStawkaLabel(s)}</option>
               ))}
             </select>
-            <Input
-              type="number"
-              step="0.01"
+            <CalcInput
               value={row.netto || ''}
-              onChange={e => updateRow(i, 'netto', e.target.value)}
+              onChange={v => updateRow(i, 'netto', v)}
               className="h-8 text-sm"
               disabled={readOnly}
               placeholder="0.00"

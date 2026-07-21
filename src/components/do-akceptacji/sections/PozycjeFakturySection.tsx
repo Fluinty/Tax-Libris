@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,18 +53,27 @@ interface Props {
   pozycje: FakturaPozycja[]
   typDokumentu: TypDokumentu | string | null
   readOnly?: boolean
+  onClassificationChange?: (pozycje: FakturaPozycja[]) => void
 }
 
-export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false }: Props) {
+export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false, onClassificationChange }: Props) {
   const [isPending, startTransition] = useTransition()
   const [similarModalPozycjaId, setSimilarModalPozycjaId] = useState<number | null>(null)
+  // Local pozycje state to track classification changes before server round-trip
+  const [localPozycje, setLocalPozycje] = useState<FakturaPozycja[]>(pozycje)
+  const localPozycjeRef = useRef(pozycje)
+  // Sync from server props when they change (new data from router.refresh)
+  if (pozycje !== localPozycjeRef.current) {
+    localPozycjeRef.current = pozycje
+    setLocalPozycje(pozycje)
+  }
   const router = useRouter()
   const kolumny = getKolumnyForTyp(typDokumentu)
   const isSprzedaz = typDokumentu === 'sprzedaz'
 
-  const editedCount = pozycje.filter(p => p.edytowane_przez_monike).length
-  const walidatorCount = pozycje.filter(p => p.walidator_zmiana).length
-  const nkupCount = pozycje.filter(p => p.effective_kup_status === 'nkup').length
+  const editedCount = localPozycje.filter(p => p.edytowane_przez_monike).length
+  const walidatorCount = localPozycje.filter(p => p.walidator_zmiana).length
+  const nkupCount = localPozycje.filter(p => p.effective_kup_status === 'nkup').length
 
   const handleWymiarChange = (pozycjaId: number, wymiar: 'kolumna_kpir' | 'kup_status' | 'vat_odliczalny', value: string) => {
     startTransition(async () => {
@@ -77,8 +86,17 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false 
           vat_odliczalny: 'VAT odliczalny',
         }
         toast.success(`${labels[wymiar]} zaktualizowane`)
-        // Odśwież stronę po zmianie KUP/VAT żeby przeliczyć pozycje VAT
+        // Update local state with the change and notify parent
         if (wymiar === 'kup_status' || wymiar === 'vat_odliczalny') {
+          const updatedPozycje = localPozycje.map(p => {
+            if (p.id !== pozycjaId) return p
+            if (wymiar === 'kup_status') {
+              return { ...p, effective_kup_status: value as 'kup' | 'nkup', final_kup_status: value as 'kup' | 'nkup' }
+            }
+            return { ...p, effective_vat_odliczalny: value as FakturaPozycja['effective_vat_odliczalny'], final_vat_odliczalny: value as FakturaPozycja['final_vat_odliczalny'] }
+          })
+          setLocalPozycje(updatedPozycje)
+          onClassificationChange?.(updatedPozycje)
           router.refresh()
         }
       } else {

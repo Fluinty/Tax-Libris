@@ -184,22 +184,51 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
     }
   }
 
-  // ── VAT table rows ────────────────────────────────
-  const pozycjeVat: PozycjaVAT[] = (zapisVat && zapisVat.pozycje_vat && zapisVat.pozycje_vat.length > 0)
-    ? zapisVat.pozycje_vat
-    : zapisVat
-      ? [{
-          stawka_symbol: pozycje?.[0]?.stawkaVat?.replace('Stawka', '').trim() || 'zw',
-          stawka_id: '',
-          netto: zapisVat.suma_netto ?? e.kwota_brutto ?? 0,
-          vat: zapisVat.suma_vat ?? 0,
-          brutto: zapisVat.suma_brutto ?? e.kwota_brutto ?? 0,
-        }]
-      : []
+  // ── VAT table rows — always from ALL source positions (document preview) ──
+  const pozycjeVat: PozycjaVAT[] = (() => {
+    // Priority: compute from ALL XML positions (unfiltered source document)
+    if (hasAnyPozycje) {
+      const groups: Record<string, { netto: number; brutto: number }> = {}
+      for (const p of pozycje) {
+        const rawStawka = (pVal(p, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
+        const stawka = rawStawka || 'zw'
+        if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
+        const nettoVal = Number(pVal(p, 'wartoscNetto', 'wartosc_netto') || 0)
+        let bruttoVal = Number(pVal(p, 'wartoscBrutto', 'wartosc_brutto') || 0)
+        if (!bruttoVal && nettoVal) {
+          const stawkaNum = parseFloat(stawka)
+          bruttoVal = !isNaN(stawkaNum) ? Math.round(nettoVal * (1 + stawkaNum / 100) * 100) / 100 : nettoVal
+        }
+        groups[stawka].netto += nettoVal
+        groups[stawka].brutto += bruttoVal
+      }
+      return Object.entries(groups).map(([stawka, { netto, brutto }]) => ({
+        stawka_symbol: stawka,
+        stawka_id: '',
+        netto: Math.round(netto * 100) / 100,
+        vat: Math.round((brutto - netto) * 100) / 100,
+        brutto: Math.round(brutto * 100) / 100,
+      }))
+    }
+    // Fallback: use zapisVat data if no pozycje available
+    if (zapisVat && zapisVat.pozycje_vat && zapisVat.pozycje_vat.length > 0) {
+      return zapisVat.pozycje_vat
+    }
+    if (zapisVat) {
+      return [{
+        stawka_symbol: 'zw',
+        stawka_id: '',
+        netto: zapisVat.suma_netto ?? e.kwota_brutto ?? 0,
+        vat: zapisVat.suma_vat ?? 0,
+        brutto: zapisVat.suma_brutto ?? e.kwota_brutto ?? 0,
+      }]
+    }
+    return []
+  })()
 
-  const sumaNetto = zapisVat?.suma_netto ?? null
-  const sumaVat = zapisVat?.suma_vat ?? null
-  const sumaBrutto = zapisVat?.suma_brutto ?? e.kwota_brutto
+  const sumaNetto = pozycjeVat.reduce((a, p) => a + p.netto, 0) || null
+  const sumaVat = pozycjeVat.reduce((a, p) => a + p.vat, 0) || null
+  const sumaBrutto = pozycjeVat.reduce((a, p) => a + p.brutto, 0) || e.kwota_brutto
 
   // ── Payment info ──────────────────────────────────
   const { termin, forma } = extractPaymentInfo(e)

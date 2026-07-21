@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -106,7 +106,14 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [mounted, setMounted] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [currentPozycje, setCurrentPozycje] = useState(exception.pozycje_editable ?? [])
+  const [classificationVersion, setClassificationVersion] = useState(0)
   const router = useRouter()
+
+  const handleClassificationChange = useCallback((pozycje: import('@/types/database').FakturaPozycja[]) => {
+    setCurrentPozycje(pozycje)
+    setClassificationVersion(v => v + 1)
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -389,6 +396,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             pozycjeVatAi={aiPozycjeVat.length > 0 ? aiPozycjeVat : null}
             isEdited={exception.pozycje_vat_edited ?? false}
             readOnly={isReadOnly}
+            pozycjeFaktury={currentPozycje}
+            classificationVersion={classificationVersion}
           />
         )}
         {/* Transakcja zagraniczna */}
@@ -1046,6 +1055,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                 pozycje={exception.pozycje_editable}
                 typDokumentu={exception.typ_dokumentu}
                 readOnly={false}
+                onClassificationChange={handleClassificationChange}
               />
             ) : (
               renderPozycjeXml()
