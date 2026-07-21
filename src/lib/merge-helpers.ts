@@ -35,7 +35,20 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
 
   // Pozycje VAT (if edited inline via PozycjeVatSection)
   if (exception.pozycje_vat_final) {
-    merged.pozycje_vat = exception.pozycje_vat_final
+    const origPozycje = base.pozycje_vat ?? []
+    
+    merged.pozycje_vat = exception.pozycje_vat_final.map((row: any) => {
+      const normalizedStawka = normalizeStawka(row.stawka)
+      const origMatch = origPozycje.find((o: any) => normalizeStawka(o.stawka_symbol) === normalizedStawka)
+      
+      return {
+        ...row,
+        stawka_symbol: normalizedStawka,
+        stawka_id: origMatch ? origMatch.stawka_id : null,
+        pole_deklaracji: origMatch ? origMatch.pole_deklaracji : null,
+      }
+    })
+    
     merged.suma_netto = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.netto), 0)
     merged.suma_vat = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.vat), 0)
     merged.suma_brutto = exception.pozycje_vat_final.reduce((s: number, p: any) => s + Number(p.brutto), 0)
