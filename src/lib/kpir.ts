@@ -99,14 +99,30 @@ export function computeKpirFromPozycje(
     const vat = brutto - netto
     
     let kwota = 0
+    const odlicz = p.effective_vat_odliczalny || 'pelny'
+    
     if (!isVatPayer) {
-      kwota = brutto
+      if (odlicz === 'czesciowe_50') {
+        // Dla nie-vatowca cały VAT jest kosztem, więc podstawa = brutto.
+        // Mnożnik 75% z uwagi na użytek mieszany (analogicznie do vatowca).
+        kwota = 0.75 * brutto
+      } else {
+        kwota = brutto
+      }
     } else {
-      const odlicz = p.effective_vat_odliczalny || 'pelny'
       if (odlicz === 'pelny') kwota = netto
       else if (odlicz === 'brak') kwota = brutto
-      else if (odlicz === 'czesciowe_50') kwota = netto + (vat / 2)
-      else kwota = netto // fallback (czesciowe_25 is extremely rare, keep netto as default or do math)
+      else if (odlicz === 'czesciowe_50') {
+        // czesciowe_50: podstawa = netto + nieodliczona ½VAT (art.86a),
+        // koszt KPiR = 75% podstawy (art.23 ust.1 pkt 46a PIT - uzytek mieszany).
+        // To przeliczanie dziala WYLACZNIE na kartach bez kpir_pojazdowe_data
+        // (karty z wykrytym rezimem pojazdowym sa wykluczone z przeliczania),
+        // wiec jedyny realny przypadek czesciowe_50 tutaj to pozycja samochodowa
+        // bez wykrytego rezimu - domyslny mnoznik 75% (uzytek mieszany) jest wlasciwy.
+        // Enum 20% (pojazd prywatny) zawsze idzie z kpir_pojazdowe_data, wiec nie trafia tu.
+        kwota = 0.75 * (netto + vat * 0.5)
+      }
+      else kwota = netto // fallback
     }
     
     result[colDef.klucz] += kwota
