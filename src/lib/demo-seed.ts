@@ -123,13 +123,10 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
         wartosc_netto: p.wartosc_netto,
         stawka_vat: p.stawkaVat,
         wartosc_brutto: p.wartosc_brutto,
-        // Wypełniamy effective_ i ai_ zeby mechanizmy UI dzialaly i mozna bylo zmieniac
+        // Wypełniamy tylko ai_* - kolumny effective_* są wyliczane przez bazę z (final_*, ai_*)
         ai_kolumna_kpir: p.kolumna_kpir,
         ai_kup_status: p.kup_status,
         ai_vat_odliczalny: p.vat_odliczalny,
-        effective_kolumna_kpir: p.kolumna_kpir,
-        effective_kup_status: p.kup_status,
-        effective_vat_odliczalny: p.vat_odliczalny,
       })
       if (pErr) {
         result.errors.push(`Faktura #${fIndex + 1} poz #${pIndex + 1}: ${pErr.message} ${pErr.details || ''}`)
