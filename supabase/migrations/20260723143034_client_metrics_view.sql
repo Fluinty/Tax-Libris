@@ -1,4 +1,4 @@
-CREATE OR REPLACE VIEW client_metrics_view AS
+CREATE OR REPLACE VIEW fluinty.client_metrics_view AS
 SELECT 
   client_nip,
   COUNT(*) FILTER (WHERE status IN ('pending', 'pending_review')) AS pending_count,
@@ -9,8 +9,8 @@ SELECT
       final_kwoty_per_kolumna IS NOT NULL 
       OR final_zapis_vat_data IS NOT NULL 
       OR pozycje_vat_edited = true 
-      OR resolved_opis != ai_proponowany_opis
+      OR (resolved_opis IS NOT NULL AND resolved_opis IS DISTINCT FROM ai_proponowany_opis)
     )
   ) AS decisions_count
-FROM exceptions_queue
+FROM fluinty.exceptions_queue
 GROUP BY client_nip;
