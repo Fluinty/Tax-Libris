@@ -15,11 +15,14 @@ export const dynamic = 'force-dynamic'
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ nip: string }> }) {
   const { nip } = await params
-  const { nips, isAdmin, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // Authorization check: non-admin can only view their assigned NIPs
   // Also block ryczalt clients for everyone
   if (ryczaltNips.includes(nip)) {
+    notFound()
+  }
+  if (!isAdmin && nips === null && demoNips.includes(nip)) {
     notFound()
   }
   if (!isAdmin && nips && !nips.includes(nip)) {

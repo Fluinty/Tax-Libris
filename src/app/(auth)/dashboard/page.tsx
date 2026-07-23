@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const selectedPeriod = params.period ?? '7d'
   const days = periodToDays(selectedPeriod)
   const supabase = createSupabaseAdmin()
-  const { nips, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // ========== METRICS ==========
 
@@ -49,7 +49,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('nip, nazwa, is_demo')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: allClients } = await clientsQuery
   const clientMap = new Map((allClients ?? []).map(c => [c.nip, c.nazwa]))
@@ -70,7 +70,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .in('status', ['pending', 'pending_review'])
   if (selectedClient) pendingQuery = pendingQuery.eq('client_nip', selectedClient)
   else pendingQuery = pendingQuery.in('client_nip', targetNips)
-  pendingQuery = applyNipFilter(pendingQuery, nips, 'client_nip', ryczaltNips)
+  pendingQuery = applyNipFilter(pendingQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   const { count: pendingExceptions } = await pendingQuery
 
   // Pending trend
@@ -83,7 +83,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .lte('created_at', formatDateSQL(days))
     if (selectedClient) prevPendingQuery = prevPendingQuery.eq('client_nip', selectedClient)
     else prevPendingQuery = prevPendingQuery.in('client_nip', targetNips)
-    prevPendingQuery = applyNipFilter(prevPendingQuery, nips, 'client_nip', ryczaltNips)
+    prevPendingQuery = applyNipFilter(prevPendingQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
     const { count: prevPending } = await prevPendingQuery
     exceptionsTrend = (pendingExceptions ?? 0) - (prevPending ?? 0)
   }
@@ -97,7 +97,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .gte('miesiac', firstDayOfMonth)
   if (selectedClient) autoRateQuery = autoRateQuery.eq('client_nip', selectedClient)
   else autoRateQuery = autoRateQuery.in('client_nip', targetNips)
-  autoRateQuery = applyNipFilter(autoRateQuery, nips, 'client_nip', ryczaltNips)
+  autoRateQuery = applyNipFilter(autoRateQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   const { data: autoRateData } = await autoRateQuery
 
   const sumAuto = (autoRateData ?? []).reduce((acc, r) => acc + (Number(r.auto_cnt) || 0), 0)
@@ -119,7 +119,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (selectedClient) recentQuery = recentQuery.eq('client_nip', selectedClient)
   // else recentQuery = recentQuery.in('client_nip', targetNips) // audit log is filtered by applyNipFilter below anyway, but could be filtered here if we wanted to hide demo audit logs from admin. The prompt said "zero regresji dla admina", let's keep it as is since it wasn't using nonDemoNips before.
   if (days) recentQuery = recentQuery.gte('timestamp', formatDateSQL(days))
-  recentQuery = applyNipFilter(recentQuery, nips, 'client_nip', ryczaltNips)
+  recentQuery = applyNipFilter(recentQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: recentRaw } = await recentQuery
 
@@ -145,7 +145,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('nip, nazwa')
     .eq('forma_opodatkowania', 'kpir')
     .eq('aktywny', true)
-  kpirClientsQuery = applyNipFilter(kpirClientsQuery, nips, 'nip', ryczaltNips)
+  kpirClientsQuery = applyNipFilter(kpirClientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
   if (selectedClient) kpirClientsQuery = kpirClientsQuery.eq('nip', selectedClient)
   const { data: kpirClientsData } = await kpirClientsQuery
 

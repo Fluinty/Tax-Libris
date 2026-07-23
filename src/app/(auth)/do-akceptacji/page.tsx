@@ -20,7 +20,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const params = await searchParams
   const typFilter = params.typ ?? 'all'
   const supabase = createSupabaseAdmin()
-  const { nips, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // 1. Fetch all relevant exceptions (pending + pending_review only)
   const today = new Date()

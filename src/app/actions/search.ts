@@ -12,14 +12,14 @@ export interface SearchData {
 
 export async function getGlobalSearchData(): Promise<SearchData> {
   const supabase = createSupabaseAdmin()
-  const { nips, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // Klienci (bez ryczałtowców)
   let clientsQuery = supabase
     .from('clients')
     .select('nip, nazwa')
     .eq('aktywny', true)
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: clientsData } = await clientsQuery
   const clients = clientsData || []
@@ -32,7 +32,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .from('client_opisy')
     .select('id, opis, client_nip')
     .eq('aktywny', true)
-  opisyQuery = applyNipFilter(opisyQuery, nips, 'client_nip', ryczaltNips)
+  opisyQuery = applyNipFilter(opisyQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   const { data: opisyData } = await opisyQuery
 
   const opisy = (opisyData || [])
@@ -49,7 +49,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .from('client_pojazdy')
     .select('id, nr_rejestracyjny, client_nip')
     .eq('aktywny', true)
-  pojazdyQuery = applyNipFilter(pojazdyQuery, nips, 'client_nip', ryczaltNips)
+  pojazdyQuery = applyNipFilter(pojazdyQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   const { data: pojazdyData } = await pojazdyQuery
 
   const pojazdy = (pojazdyData || [])
@@ -67,7 +67,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .not('numer_ksef', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1000)
-  ksefQuery = applyNipFilter(ksefQuery, nips, 'client_nip', ryczaltNips)
+  ksefQuery = applyNipFilter(ksefQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: ksefData } = await ksefQuery
 

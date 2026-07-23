@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function KlienciPage() {
   const supabase = createSupabaseAdmin()
-  const { nips, isAdmin, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // Fetch active clients (filtered by allowed NIPs)
   let clientsQuery = supabase
@@ -15,7 +15,7 @@ export default async function KlienciPage() {
     .select('*')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
-  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: clients } = await clientsQuery
 
@@ -24,7 +24,7 @@ export default async function KlienciPage() {
     .from('exceptions_queue')
     .select('client_nip')
     .in('status', ['pending', 'pending_review'])
-  excCountQuery = applyNipFilter(excCountQuery, nips, 'client_nip', ryczaltNips)
+  excCountQuery = applyNipFilter(excCountQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   const { data: exceptionsCounts } = await excCountQuery
 
   // Aggregate counts

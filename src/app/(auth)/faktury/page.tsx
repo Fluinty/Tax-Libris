@@ -15,7 +15,7 @@ export default async function FakturyPage({ searchParams }: PageProps) {
   const params = await searchParams
   const statusFilter = params.status ?? 'all'
   const adminSupabase = createSupabaseAdmin()
-  const { nips, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   let query = adminSupabase
     .from('exceptions_queue')
@@ -23,7 +23,7 @@ export default async function FakturyPage({ searchParams }: PageProps) {
     .order('created_at', { ascending: false })
     .limit(150)
 
-  query = applyNipFilter(query, nips, 'client_nip', ryczaltNips)
+  query = applyNipFilter(query, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
   if (statusFilter === 'auto') {
     query = query.or('resolved_by.eq.fluinty_auto,auto_created_by.eq.fluinty_auto')

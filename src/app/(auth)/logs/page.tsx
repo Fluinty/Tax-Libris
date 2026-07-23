@@ -16,7 +16,7 @@ export default async function LogsPage({ searchParams }: Props) {
   const offset = (page - 1) * PAGE_SIZE
 
   const adminSupabase = createSupabaseAdmin()
-  const { nips, ryczaltNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
   // ── 1. client_changes_log ──────────────────────────
   // Don't use clients(nazwa) embedded join — FK not exposed via PostgREST in fluinty schema
@@ -25,7 +25,7 @@ export default async function LogsPage({ searchParams }: Props) {
     .select('id, client_nip, field_name, old_value, new_value, changed_by, changed_at', { count: 'exact' })
     .order('changed_at', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
-  changesQuery = applyNipFilter(changesQuery, nips, 'client_nip', ryczaltNips)
+  changesQuery = applyNipFilter(changesQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: changesRaw, count: changesCount, error: changesErr } = await changesQuery
 
@@ -35,7 +35,7 @@ export default async function LogsPage({ searchParams }: Props) {
     .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, details', { count: 'exact' })
     .order('timestamp', { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)
-  auditQuery = applyNipFilter(auditQuery, nips, 'client_nip', ryczaltNips)
+  auditQuery = applyNipFilter(auditQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
   const { data: auditRaw, count: auditCount, error: auditErr } = await auditQuery
 
