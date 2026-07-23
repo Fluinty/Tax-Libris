@@ -91,7 +91,6 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       numer_ksef: f.numer_ksef,
       nazwa_dostawcy: f.nazwa_dostawcy,
       nip_dostawcy: f.nip_dostawcy,
-      nazwa_nabywcy: f.nazwa_nabywcy || demoData.demo_client.nazwa,
       nip_nabywcy: f.nip_nabywcy || DEMO_NIP,
       typ_dokumentu: f.typ_dokumentu,
       data_wystawienia: f.data_wystawienia,
