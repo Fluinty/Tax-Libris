@@ -42,10 +42,43 @@ export async function seedDemo() {
   })
 
   // 4. Dodawanie faktur, pozycji i wyjątków
-  for (const f of demoData.faktury) {
-    // Faktury
+  for (const [fIndex, f] of demoData.faktury.entries()) {
+    
+    // 4a. Exceptions queue - musi być pierwsza
+    const { data: queueData, error: qErr } = await supabase.from('exceptions_queue').insert({
+      client_nip: DEMO_NIP,
+      status: f.status === 'booked' ? 'auto_created' : f.status,
+      ai_confidence: f.ai_confidence || f.confidence_overall,
+      ai_proponowany_opis: f.ai_proponowany_opis,
+      ai_uzasadnienie: f.ai_uzasadnienie,
+      confidence_reasons: f.confidence_reasons,
+      is_potential_duplicate: f.is_potential_duplicate,
+      duplicate_source: f.duplicate_source,
+      ai_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
+      ai_zapis_vat_data: f.zapis_vat,
+      kpir_pojazdowe_data: f.kpir_pojazdowe_data, // bezposrednio z JSON
+      // Denormalizowane pola
+      zapis_id: 900000 + fIndex,
+      ksiegowe_numer: f.ksiegowe_numer,
+      numer_ksef: f.numer_ksef,
+      nazwa_dostawcy: f.nazwa_dostawcy,
+      nip_dostawcy: f.nip_dostawcy,
+      kwota_brutto: f.kwota_brutto,
+      typ_dokumentu: f.typ_dokumentu,
+      data_wystawienia: f.data_wystawienia,
+      data_sprzedazy: f.data_sprzedazy,
+    }).select().single()
+
+    if (qErr || !queueData) {
+      console.error('Błąd przy tworzeniu queue:', qErr)
+      continue
+    }
+
+    // 4b. Faktury (z relacją legacy_queue_id)
     const { data: fakturaData, error: fErr } = await supabase.from('faktury').insert({
       client_nip: DEMO_NIP,
+      legacy_queue_id: queueData.id,
+      ddk_nr: 900000 + fIndex,
       ksiegowe_numer: f.ksiegowe_numer,
       numer_ksef: f.numer_ksef,
       nazwa_dostawcy: f.nazwa_dostawcy,
@@ -56,8 +89,7 @@ export async function seedDemo() {
       data_wystawienia: f.data_wystawienia,
       data_sprzedazy: f.data_sprzedazy,
       kwota_brutto: f.kwota_brutto,
-      // Status to z jsona:
-      status: f.status,
+      status: f.status === 'booked' ? 'auto_created' : f.status,
       confidence_overall: f.confidence_overall,
       final_zapis_vat_data: f.zapis_vat,
       final_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
@@ -70,14 +102,15 @@ export async function seedDemo() {
       continue
     }
 
-    // Pozycje faktury
+    // 4c. Pozycje faktury
     for (const p of f.pozycje) {
       await supabase.from('faktury_pozycje').insert({
         faktura_id: fakturaData.id,
         client_nip: DEMO_NIP,
+        lp: p.lp,
         nazwa: p.nazwa,
         ilosc: p.ilosc,
-        jm: p.jm,
+        jednostka: p.jm,
         wartosc_netto: p.wartosc_netto,
         stawka_vat: p.stawkaVat,
         wartosc_brutto: p.wartosc_brutto,
@@ -90,21 +123,5 @@ export async function seedDemo() {
         effective_vat_odliczalny: p.vat_odliczalny,
       })
     }
-
-    // Exceptions queue
-    await supabase.from('exceptions_queue').insert({
-      faktura_id: fakturaData.id,
-      client_nip: DEMO_NIP,
-      status: f.status,
-      ai_confidence: f.ai_confidence || f.confidence_overall,
-      ai_proponowany_opis: f.ai_proponowany_opis,
-      ai_uzasadnienie: f.ai_uzasadnienie,
-      confidence_reasons: f.confidence_reasons,
-      is_potential_duplicate: f.is_potential_duplicate,
-      duplicate_source: f.duplicate_source,
-      ai_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
-      ai_zapis_vat_data: f.zapis_vat,
-      kpir_pojazdowe_data: f.kpir_pojazdowe_data, // bezposrednio z JSON
-    })
   }
 }
