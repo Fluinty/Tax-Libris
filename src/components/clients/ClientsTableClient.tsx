@@ -96,8 +96,12 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
     if (!confirm('Czy na pewno chcesz zainicjować środowisko DEMO? To utworzy klienta "Demo Firma" i wygeneruje testowe faktury.')) return
     setResettingDemo(true)
     try {
-      await resetDemoClient()
-      toast.success('Pomyślnie zainicjowano środowisko DEMO')
+      const result = await resetDemoClient()
+      if (result.errors && result.errors.length > 0) {
+        toast.error(`Wystąpiły błędy (${result.errors.length})`, { description: result.errors[0] })
+      } else {
+        toast.success(`Utworzono ${result.created} faktur demo`)
+      }
       router.refresh()
     } catch (err) {
       toast.error('Błąd inicjacji DEMO', { description: err instanceof Error ? err.message : 'Nieznany błąd' })

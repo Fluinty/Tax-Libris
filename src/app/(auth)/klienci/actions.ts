@@ -37,8 +37,8 @@ export async function addClient(data: {
 
 export async function resetDemoClient() {
   const { seedDemo } = await import('@/lib/demo-seed')
-  await seedDemo()
+  const result = await seedDemo()
   revalidatePath('/klienci')
   revalidatePath('/do-akceptacji')
-  return true
+  return result
 }

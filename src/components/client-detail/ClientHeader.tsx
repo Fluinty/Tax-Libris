@@ -35,8 +35,12 @@ export function ClientHeader({ client, isAdmin }: { client: any, isAdmin: boolea
     
     setLoading(true)
     try {
-      await resetDemoClient()
-      toast.success('Pomyślnie zresetowano dane DEMO')
+      const result = await resetDemoClient()
+      if (result.errors && result.errors.length > 0) {
+        toast.error(`Wystąpiły błędy (${result.errors.length})`, { description: result.errors[0] })
+      } else {
+        toast.success(`Utworzono ${result.created} faktur demo`)
+      }
       router.refresh()
     } catch (e) {
       toast.error('Wystąpił błąd podczas resetowania DEMO')
