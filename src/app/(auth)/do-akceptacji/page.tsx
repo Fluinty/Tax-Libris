@@ -77,9 +77,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const { data: clientsData } = exceptionNips.length > 0
     ? await supabase
         .from('clients')
-        .select('nip, nazwa, platnik_vat')
+        .select('nip, nazwa, platnik_vat, is_demo')
         .in('nip', exceptionNips)
-    : { data: [] as { nip: string; nazwa: string; platnik_vat: boolean }[] }
+    : { data: [] as { nip: string; nazwa: string; platnik_vat: boolean; is_demo: boolean }[] }
 
   const clientsMap = new Map(
     (clientsData ?? []).map(c => [c.nip, c])
@@ -121,6 +121,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     return {
       ...e,
       client_nazwa: c?.nazwa ?? 'Nieznany',
+      is_demo: c?.is_demo ?? false,
       client: {
         platnik_vat: c?.platnik_vat ?? true,
       } as any,
@@ -213,7 +214,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   if (missingSidebarNips.length > 0) {
     const { data: extraClients } = await supabase
       .from('clients')
-      .select('nip, nazwa, platnik_vat')
+      .select('nip, nazwa, platnik_vat, is_demo')
       .in('nip', missingSidebarNips)
     for (const c of extraClients ?? []) {
       clientsMap.set(c.nip, c)

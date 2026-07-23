@@ -1,0 +1,255 @@
+{
+  "demo_client": {
+    "nip": "9999999901",
+    "nazwa": "Demo Firma Sp. z o.o.",
+    "opis": "Fikcyjna firma pokazowa - warsztat/handel/uslugi, vatowiec, KPiR",
+    "is_demo": true,
+    "vat_status": "czynny",
+    "pkd_glowny": "45.20.Z"
+  },
+  "demo_pojazd": {
+    "nr_rejestracyjny": "DM 00001",
+    "sposob_rozliczenia_enum": 1,
+    "typ_napedu": "spalinowy",
+    "wartosc_nabycia": 135000.00,
+    "opis": "Toyota Corolla - leasing, uzytek mieszany"
+  },
+  "faktury": [
+    {
+      "scenariusz": "1. PROSTA - telefon, wysoki confidence, jeden klik",
+      "ksiegowe_numer": "FV/2026/07/1001",
+      "numer_ksef": "9999999901-20260706-DEMO00000001-01",
+      "nazwa_dostawcy": "Orange Polska S.A.",
+      "nip_dostawcy": "5260250995",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-06",
+      "data_sprzedazy": "2026-07-06",
+      "kwota_brutto": 184.50,
+      "status": "pending_review",
+      "confidence_overall": 0.97,
+      "ai_confidence": 0.97,
+      "ai_proponowany_opis": "Usługi telekomunikacyjne",
+      "ai_uzasadnienie": "Abonament telefonii komórkowej - stały dostawca, 6 poprzednich faktur zaksięgowanych identycznie (kolumna 13, pełny KUP, pełne odliczenie VAT).",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 150.00},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Abonament Plan Firmowy 07/2026", "ilosc": 1, "jm": "szt", "wartosc_netto": 150.00, "stawkaVat": "Stawka23", "wartosc_brutto": 184.50, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "calkowite"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 150.00, "vat": 34.50, "brutto": 184.50}]}
+    },
+    {
+      "scenariusz": "2. PALIWO - rezim 75/50, pola pojazdowe",
+      "ksiegowe_numer": "F 8812/2026",
+      "numer_ksef": "9999999901-20260708-DEMO00000002-02",
+      "nazwa_dostawcy": "ORLEN S.A.",
+      "nip_dostawcy": "7740001454",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-08",
+      "data_sprzedazy": "2026-07-08",
+      "kwota_brutto": 430.50,
+      "status": "pending_review",
+      "confidence_overall": 0.94,
+      "ai_confidence": 0.94,
+      "ai_proponowany_opis": "Zakup paliwa DM 00001 (75%)",
+      "ai_uzasadnienie": "Tankowanie pojazdu firmowego w użytku mieszanym. Reżim: 50% VAT odliczone + 75% × (netto + ½ nieodliczonego VAT) do KPiR. Pojazd dopasowany po historii księgowań.",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 305.81},
+      "kpir_pojazdowe_data": {
+        "wydatki_dotycza_pojazdu": true,
+        "procent_do_ujecia_w_kosztach": 1,
+        "strategia": "mieszany_50_75",
+        "rezim_proc": "75%",
+        "enum_label": "75% (użytek mieszany)",
+        "pojazd_dopasowany": "DM 00001",
+        "koszt_kpir_obliczony": 305.81,
+        "wydatki_pozostale_wartosc_faktury": 430.50
+      },
+      "pozycje": [
+        {"lp": 1, "nazwa": "Benzyna Pb95", "ilosc": 58.2, "jm": "L", "wartosc_netto": 350.00, "stawkaVat": "Stawka23", "wartosc_brutto": 430.50, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "czesciowe_50"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 350.00, "vat": 80.50, "brutto": 430.50}], "uwaga": "VAT odliczony 50% = 40.25"}
+    },
+    {
+      "scenariusz": "3. RATA LEASINGOWA - proporcja limit/wartosc",
+      "ksiegowe_numer": "LR/26/07/55231",
+      "numer_ksef": "9999999901-20260710-DEMO00000003-03",
+      "nazwa_dostawcy": "PKO Leasing S.A.",
+      "nip_dostawcy": "7272457089",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-10",
+      "data_sprzedazy": "2026-07-10",
+      "kwota_brutto": 2337.00,
+      "status": "pending_review",
+      "confidence_overall": 0.92,
+      "ai_confidence": 0.92,
+      "ai_proponowany_opis": "Rata leasingowa DM 00001",
+      "ai_uzasadnienie": "Faktura od leasingodawcy (PKO Leasing). Wartość nabycia pojazdu 135 000 zł > limit 100 000 zł (spalinowy) → proporcja KUP 74,07%. VAT odliczony 50% bez limitu.",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 1567.90},
+      "kpir_pojazdowe_data": {
+        "wydatki_dotycza_pojazdu": true,
+        "procent_do_ujecia_w_kosztach": 4,
+        "nie_dotyczy_paliwa": true,
+        "strategia": "leasing_proporcja",
+        "rezim_proc": "74.07%",
+        "enum_label": "leasing proporcja 74.07%",
+        "typ_wydatku": "rata_leasingowa",
+        "pojazd_dopasowany": "DM 00001",
+        "wartosc_nabycia_pojazdu": 135000.00,
+        "koszt_kpir_obliczony": 1567.90,
+        "wydatki_pozostale_wartosc_faktury": 2337.00
+      },
+      "pozycje": [
+        {"lp": 1, "nazwa": "Rata leasingowa 31/60 - Toyota Corolla DM 00001", "ilosc": 1, "jm": "szt", "wartosc_netto": 1900.00, "stawkaVat": "Stawka23", "wartosc_brutto": 2337.00, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "czesciowe_50"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 1900.00, "vat": 437.00, "brutto": 2337.00}], "uwaga": "VAT odliczony 50% = 218.50, bez limitu proporcji"}
+    },
+    {
+      "scenariusz": "4. NISKI CONFIDENCE - AI niepewne, ksiegowa decyduje",
+      "ksiegowe_numer": "FS 445/07/2026",
+      "numer_ksef": "9999999901-20260709-DEMO00000004-04",
+      "nazwa_dostawcy": "MULTISERWIS Jan Nowak",
+      "nip_dostawcy": "6349999911",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-09",
+      "data_sprzedazy": "2026-07-09",
+      "kwota_brutto": 3690.00,
+      "status": "pending",
+      "confidence_overall": 0.58,
+      "ai_confidence": 0.58,
+      "ai_proponowany_opis": "Usługi remontowe",
+      "ai_uzasadnienie": "Pozycja 'Prace wykończeniowe wg umowy' - nie można jednoznacznie ustalić czy dotyczy lokalu firmowego (kolumna 13, KUP) czy inwestycji w środek trwały (bez KPiR, amortyzacja). Pierwszy kontakt z tym dostawcą, brak historii. Wymaga decyzji księgowej.",
+      "confidence_reasons": ["Pierwszy raz u tego dostawcy", "Opis pozycji zbyt ogólny", "Kwota może wskazywać na inwestycję"],
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 3000.00},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Prace wykończeniowe wg umowy z dn. 15.06.2026", "ilosc": 1, "jm": "usł", "wartosc_netto": 3000.00, "stawkaVat": "Stawka23", "wartosc_brutto": 3690.00, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "calkowite"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 3000.00, "vat": 690.00, "brutto": 3690.00}]}
+    },
+    {
+      "scenariusz": "5. DUPLIKAT - system chroni przed podwojnym ksiegowaniem",
+      "ksiegowe_numer": "FV/2026/07/1001-KOPIA",
+      "numer_ksef": "9999999901-20260712-DEMO00000005-05",
+      "nazwa_dostawcy": "Orange Polska S.A.",
+      "nip_dostawcy": "5260250995",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-06",
+      "data_sprzedazy": "2026-07-06",
+      "kwota_brutto": 184.50,
+      "status": "pending",
+      "confidence_overall": 0.97,
+      "is_potential_duplicate": true,
+      "duplicate_source": "ta sama kwota, NIP i data co FV/2026/07/1001",
+      "ai_proponowany_opis": "Usługi telekomunikacyjne",
+      "ai_uzasadnienie": "UWAGA: wykryto potencjalny duplikat faktury FV/2026/07/1001 (identyczny NIP dostawcy, kwota 184,50 zł i data wystawienia). Zablokowano automatyczne księgowanie.",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 150.00},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Abonament Plan Firmowy 07/2026", "ilosc": 1, "jm": "szt", "wartosc_netto": 150.00, "stawkaVat": "Stawka23", "wartosc_brutto": 184.50, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "calkowite"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 150.00, "vat": 34.50, "brutto": 184.50}]}
+    },
+    {
+      "scenariusz": "6. SPRZEDAZ ZAGRANICZNA - WDT wykryte",
+      "ksiegowe_numer": "FS/2026/07/044",
+      "numer_ksef": "9999999901-20260711-DEMO00000006-06",
+      "nazwa_dostawcy": "Demo Firma Sp. z o.o.",
+      "nip_dostawcy": "9999999901",
+      "nazwa_nabywcy": "Autoteile München GmbH",
+      "nip_nabywcy": "DE812526315",
+      "typ_dokumentu": "sprzedaz",
+      "data_wystawienia": "2026-07-11",
+      "data_sprzedazy": "2026-07-11",
+      "kwota_brutto": 12400.00,
+      "status": "pending_review",
+      "confidence_overall": 0.91,
+      "ai_proponowany_opis": "Sprzedaż części - WDT Niemcy",
+      "ai_uzasadnienie": "Wykryto transakcję zagraniczną: stawka 0% + nabywca z NIP UE (DE) → Wewnątrzwspólnotowa Dostawa Towarów. Zapis trafi do właściwych pól JPK (K_21), Rachmistrz ujmie w informacji VAT-UE. Wymaga potwierdzenia księgowej.",
+      "ai_kwoty_per_kolumna": {"wartosc_sprzedanych_towarow": 12400.00},
+      "zapis_vat": {"typ_ewidencji": 1, "rejestr_nazwa": "Rejestr sprzedaży VAT", "transakcja_id": 5, "transakcja_nazwa": "Wewnątrzwspólnotowa dostawa towarów", "transakcja_zagraniczna": "stawka 0% + nabywca UE (DE) - WDT", "pozycje_vat": [{"stawka_symbol": "0", "netto": 12400.00, "vat": 0.00, "brutto": 12400.00}]},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Zestaw hamulcowy przód (kpl.) x20", "ilosc": 20, "jm": "kpl", "wartosc_netto": 12400.00, "stawkaVat": "Stawka0", "wartosc_brutto": 12400.00, "kolumna_kpir": "7", "kup_status": null, "vat_odliczalny": null}
+      ]
+    },
+    {
+      "scenariusz": "7. ZWYKLA - materialy, do wolnego klikania",
+      "ksiegowe_numer": "FS 1877/MK",
+      "numer_ksef": "9999999901-20260713-DEMO00000007-07",
+      "nazwa_dostawcy": "Hurtownia Motoryzacyjna AUTO-PARTS Sp. z o.o.",
+      "nip_dostawcy": "6349999922",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-13",
+      "data_sprzedazy": "2026-07-13",
+      "kwota_brutto": 5842.11,
+      "status": "pending_review",
+      "confidence_overall": 0.95,
+      "ai_proponowany_opis": "Zakup towarów handlowych",
+      "ai_uzasadnienie": "Hurtowy zakup części - dostawca regularny (14 faktur w historii), zawsze kolumna 10 (towary handlowe), pełne odliczenie VAT.",
+      "ai_kwoty_per_kolumna": {"zakup_towarow": 4749.68},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Filtry oleju (op. 50 szt)", "ilosc": 2, "jm": "op", "wartosc_netto": 1800.00, "stawkaVat": "Stawka23", "wartosc_brutto": 2214.00, "kolumna_kpir": "10", "kup_status": "kup", "vat_odliczalny": "calkowite"},
+        {"lp": 2, "nazwa": "Klocki hamulcowe (op. 20 kpl)", "ilosc": 3, "jm": "op", "wartosc_netto": 2949.68, "stawkaVat": "Stawka23", "wartosc_brutto": 3628.11, "kolumna_kpir": "10", "kup_status": "kup", "vat_odliczalny": "calkowite"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 4749.68, "vat": 1092.43, "brutto": 5842.11}]}
+    },
+    {
+      "scenariusz": "8. ZWYKLA - media/prad",
+      "ksiegowe_numer": "P/26/07/882134",
+      "numer_ksef": "9999999901-20260705-DEMO00000008-08",
+      "nazwa_dostawcy": "TAURON Sprzedaż sp. z o.o.",
+      "nip_dostawcy": "6762337735",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-05",
+      "data_sprzedazy": "2026-06-30",
+      "kwota_brutto": 892.34,
+      "status": "pending_review",
+      "confidence_overall": 0.96,
+      "ai_proponowany_opis": "Energia elektryczna 06/2026",
+      "ai_uzasadnienie": "Faktura za energię - okres rozliczeniowy czerwiec (data sprzedaży 30.06 ≠ data wystawienia 05.07 - system rozpoznaje okres z pozycji). Kolumna 13, pełne odliczenie.",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 725.48},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Energia elektryczna 01.06-30.06.2026", "ilosc": 1, "jm": "szt", "wartosc_netto": 725.48, "stawkaVat": "Stawka23", "wartosc_brutto": 892.34, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "calkowite"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 725.48, "vat": 166.86, "brutto": 892.34}]}
+    },
+    {
+      "scenariusz": "9. SPRZEDAZ KRAJOWA - usluga warsztatowa",
+      "ksiegowe_numer": "FS/2026/07/045",
+      "numer_ksef": "9999999901-20260714-DEMO00000009-09",
+      "nazwa_dostawcy": "Demo Firma Sp. z o.o.",
+      "nip_dostawcy": "9999999901",
+      "nazwa_nabywcy": "TRANS-POL Logistyka Sp. z o.o.",
+      "nip_nabywcy": "6349999933",
+      "typ_dokumentu": "sprzedaz",
+      "data_wystawienia": "2026-07-14",
+      "data_sprzedazy": "2026-07-14",
+      "kwota_brutto": 3075.00,
+      "status": "pending_review",
+      "confidence_overall": 0.97,
+      "ai_proponowany_opis": "Przegląd i naprawa floty",
+      "ai_uzasadnienie": "Sprzedaż usług serwisowych - kolumna 7 (wartość sprzedanych towarów i usług), VAT należny 23%.",
+      "ai_kwoty_per_kolumna": {"wartosc_sprzedanych_towarow": 2500.00},
+      "zapis_vat": {"typ_ewidencji": 1, "rejestr_nazwa": "Rejestr sprzedaży VAT", "transakcja_nazwa": "Dostawa krajowa", "pozycje_vat": [{"stawka_symbol": "23", "netto": 2500.00, "vat": 575.00, "brutto": 3075.00}]},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Przegląd okresowy + wymiana płynów (3 pojazdy)", "ilosc": 3, "jm": "usł", "wartosc_netto": 2500.00, "stawkaVat": "Stawka23", "wartosc_brutto": 3075.00, "kolumna_kpir": "7", "kup_status": null, "vat_odliczalny": null}
+      ]
+    },
+    {
+      "scenariusz": "10. ZAKSIEGOWANA - pokazuje stan po (historia)",
+      "ksiegowe_numer": "F 7723/2026",
+      "numer_ksef": "9999999901-20260701-DEMO00000010-10",
+      "nazwa_dostawcy": "ORLEN S.A.",
+      "nip_dostawcy": "7740001454",
+      "typ_dokumentu": "zakup",
+      "data_wystawienia": "2026-07-01",
+      "data_sprzedazy": "2026-07-01",
+      "kwota_brutto": 389.20,
+      "status": "booked",
+      "confidence_overall": 0.95,
+      "ai_proponowany_opis": "Zakup paliwa DM 00001 (75%)",
+      "ai_uzasadnienie": "Zaksięgowana wcześniej - widok historyczny.",
+      "ai_kwoty_per_kolumna": {"pozostale_wydatki": 276.48},
+      "kpir_pojazdowe_data": {"wydatki_dotycza_pojazdu": true, "procent_do_ujecia_w_kosztach": 1, "strategia": "mieszany_50_75", "rezim_proc": "75%", "pojazd_dopasowany": "DM 00001", "koszt_kpir_obliczony": 276.48, "wydatki_pozostale_wartosc_faktury": 389.20},
+      "pozycje": [
+        {"lp": 1, "nazwa": "Diesel B7", "ilosc": 51.4, "jm": "L", "wartosc_netto": 316.42, "stawkaVat": "Stawka23", "wartosc_brutto": 389.20, "kolumna_kpir": "13", "kup_status": "kup", "vat_odliczalny": "czesciowe_50"}
+      ],
+      "zapis_vat": {"typ_ewidencji": 2, "rejestr_nazwa": "Rejestr zakupów VAT", "transakcja_nazwa": "Nabycie krajowe", "pozycje_vat": [{"stawka_symbol": "23", "netto": 316.42, "vat": 72.78, "brutto": 389.20}]}
+    }
+  ]
+}

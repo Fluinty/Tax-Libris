@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { toggleAutoWrite } from '@/app/(auth)/wyjatki/actions'
+import { resetDemoClient } from '@/app/(auth)/klienci/actions'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -29,6 +30,21 @@ export function ClientHeader({ client, isAdmin }: { client: any, isAdmin: boolea
     }
   }
 
+  const handleResetDemo = async () => {
+    if (!confirm('Czy na pewno chcesz zresetować dane demo? Spowoduje to przywrócenie danych do stanu początkowego z JSONa.')) return
+    
+    setLoading(true)
+    try {
+      await resetDemoClient()
+      toast.success('Pomyślnie zresetowano dane DEMO')
+      router.refresh()
+    } catch (e) {
+      toast.error('Wystąpił błąd podczas resetowania DEMO')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="bg-white p-6 rounded-xl border border-[#E2E8F0] shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div className="flex items-start gap-4">
@@ -40,6 +56,9 @@ export function ClientHeader({ client, isAdmin }: { client: any, isAdmin: boolea
             <h1 className="text-xl font-bold text-[#1E293B]">{client.nazwa}</h1>
             {client.pilot && (
               <Badge className="bg-[#E0E7FF] text-[#1F3A5F] hover:bg-[#E0E7FF] border-0">Pilot</Badge>
+            )}
+            {client.is_demo && (
+              <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 border-0">DEMO</Badge>
             )}
           </div>
           <div className="flex items-center gap-4 mt-1 text-sm text-[#64748B]">
@@ -74,6 +93,18 @@ export function ClientHeader({ client, isAdmin }: { client: any, isAdmin: boolea
                   disabled={loading}
                 />
                 <Label htmlFor="auto_write" className="text-xs cursor-pointer">Wymuś</Label>
+              </div>
+            )}
+            {isAdmin && client.is_demo && (
+              <div className="flex items-center space-x-2 ml-4 pl-4 border-l border-[#E2E8F0]">
+                <button 
+                  onClick={handleResetDemo}
+                  disabled={loading}
+                  className="text-xs flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium transition-colors"
+                >
+                  <ShieldCheck className="w-3 h-3" /> {/* Może inna ikona np RefreshCw, ale używamy tego co jest w imporcie */}
+                  Resetuj Demo
+                </button>
               </div>
             )}
           </div>

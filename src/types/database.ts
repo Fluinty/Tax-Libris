@@ -57,6 +57,7 @@ export interface Client {
   utworzony: string;
   ostatni_sync: string | null;
   platnik_vat?: boolean;
+  is_demo?: boolean | null;
 }
 
 export interface PozycjaXml {
@@ -327,6 +328,7 @@ export interface ExceptionWithClient extends ExceptionItem {
   walidator_usluga_warningi?: WalidatorWarning[] | null;
   walidator_kup_vat_warningi?: WalidatorKupVatWarning[] | null;
   pozycje_editable?: FakturaPozycja[];
+  is_demo?: boolean;
 }
 
 // Typ dla sidebar z liczbą wyjątków per klient

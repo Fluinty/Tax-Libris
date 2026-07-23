@@ -33,6 +33,8 @@ export default async function FakturyPage({ searchParams }: PageProps) {
     query = query.in('status', ['pending', 'pending_review'])
   } else if (statusFilter === 'ignored') {
     query = query.eq('status', 'ignored')
+  } else if (statusFilter === 'skipped') {
+    query = query.eq('status', 'skipped')
   }
 
   const { data: rawItems } = await query
@@ -70,6 +72,12 @@ export default async function FakturyPage({ searchParams }: PageProps) {
             Odrzucona
           </Badge>
         )}
+        {item.status === 'skipped' && (
+          <Badge className="bg-slate-100 text-slate-800 border-0 flex items-center gap-1" title="Pominięte przez system — do ręcznego księgowania">
+            <XCircle className="w-3.5 h-3.5" />
+            Pominięte
+          </Badge>
+        )}
         {isAuto && (
           <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-purple-600" />
@@ -85,6 +93,7 @@ export default async function FakturyPage({ searchParams }: PageProps) {
     { id: 'resolved', label: 'Zaksięgowane' },
     { id: 'pending', label: 'Oczekujące' },
     { id: 'ignored', label: 'Odrzucone' },
+    { id: 'skipped', label: 'Pominięte' },
     { id: 'auto', label: 'Auto (fluinty_auto)', isPurple: true },
   ]
 

@@ -33,10 +33,10 @@ async function logAudit(
 async function resolveExceptionIds(
   supabase: any,
   exceptionId: number
-): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any }> {
+): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any; isDemo: boolean }> {
   // Deterministycznie, bez .or() - sekwencje id faktury i exceptions_queue nakladaja sie,
   // wiec .or(id.eq.X, legacy_queue_id.eq.X) potrafi zwrocic 2 wiersze i zepsuc maybeSingle().
-  const FAKTURA_COLS = 'id, legacy_queue_id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, client_nip'
+  const FAKTURA_COLS = 'id, legacy_queue_id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, client_nip, clients(is_demo)'
 
   // 1. Priorytet: exceptionId to faktury.id (tak przekazuje karta po F4)
   let { data: faktura } = await supabase
@@ -62,9 +62,17 @@ async function resolveExceptionIds(
 
   const { data: exception } = fakturaId
     ? await supabase.from('exceptions_queue_v2').select('*').eq('id', fakturaId).maybeSingle()
-    : await supabase.from('exceptions_queue').select('*').eq('id', queueId).maybeSingle()
+    : await supabase.from('exceptions_queue').select('*, clients(is_demo)').eq('id', queueId).maybeSingle()
 
-  return { fakturaId, queueId, exception, faktura }
+  // Wyciąganie flagi is_demo z faktury (lub z exception dla starych wpisów)
+  let isDemo = false
+  if (faktura?.clients && !Array.isArray(faktura.clients)) {
+    isDemo = Boolean((faktura.clients as any).is_demo)
+  } else if (exception?.clients && !Array.isArray(exception.clients)) {
+    isDemo = Boolean((exception.clients as any).is_demo)
+  }
+
+  return { fakturaId, queueId, exception, faktura, isDemo }
 }
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
@@ -78,7 +86,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception, faktura } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, faktura, isDemo } = await resolveExceptionIds(supabase, exceptionId)
 
   if (!exception) {
     return { success: false, error: `Exception null dla id=${exceptionId}, supabase schema=${(supabase as any).rest?.schemaName || '?'}` }
@@ -102,12 +110,14 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
 
   const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
 
+  const targetStatus = isDemo ? 'auto_created' : 'approved'
+
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
-        status: 'approved',
+        status: targetStatus,
         resolved_opis: opisDoZapisu,
         final_kwoty_per_kolumna: kwotyDoZapisu,
         final_zapis_vat_data: scalonyVat,
@@ -132,7 +142,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     await supabase
       .from('faktury')
       .update({
-        status: 'approved',
+        status: targetStatus,
         final_opis: opisDoZapisu,
         final_zapis_vat_data: scalonyVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
@@ -150,7 +160,8 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     kwoty: kwotyDoZapisu,
     zapis_vat: scalonyVat,
     source: faktura && 'final_kwoty_per_kolumna' in faktura && faktura.final_kwoty_per_kolumna ? 'monika_edits' : 'ai_default',
-    type: 'ai_accepted'
+    type: 'ai_accepted',
+    ...(isDemo ? { demo: true } : {})
   })
 
   revalidatePath('/do-akceptacji')
@@ -168,17 +179,19 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, isDemo } = await resolveExceptionIds(supabase, exceptionId)
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  const targetStatus = isDemo ? 'auto_created' : 'approved'
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
-        status: 'approved',
+        status: targetStatus,
         resolved_opis: opis,
         final_kwoty_per_kolumna: kwoty,
         resolved_by: userEmail,
@@ -200,7 +213,7 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
     await supabase
       .from('faktury')
       .update({
-        status: 'approved',
+        status: targetStatus,
         final_opis: opis,
         final_kwoty_per_kolumna: kwoty,
         resolved_by: userEmail,
@@ -215,7 +228,8 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
     resolved_by: userEmail,
     opis,
     kwoty,
-    type: 'manual_edit'
+    type: 'manual_edit',
+    ...(isDemo ? { demo: true } : {})
   })
 
   revalidatePath('/do-akceptacji')
@@ -238,7 +252,7 @@ export async function approveExceptionFull(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, isDemo } = await resolveExceptionIds(supabase, exceptionId)
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
@@ -260,11 +274,13 @@ export async function approveExceptionFull(
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
+  const targetStatus = isDemo ? 'auto_created' : 'approved'
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
-        status: 'approved',
+        status: targetStatus,
         resolved_opis: finalOpis,
         final_kwoty_per_kolumna: finalKwotyPerKolumna,
         final_zapis_vat_data: baseVat,
@@ -289,7 +305,7 @@ export async function approveExceptionFull(
     await supabase
       .from('faktury')
       .update({
-        status: 'approved',
+        status: targetStatus,
         final_opis: finalOpis,
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
@@ -299,14 +315,15 @@ export async function approveExceptionFull(
       .eq('id', fakturaId)
   }
 
-  await logAudit(supabase, 'approved_with_edit_full', exception.client_nip, exception.zapis_id ?? null, {
+  await logAudit(supabase, 'approved_with_full_edit', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     resolved_by: userEmail,
     opis: finalOpis,
     kwoty: finalKwotyPerKolumna,
-    zapis_vat: finalZapisVatData,
-    type: 'manual_edit_full'
+    zapis_vat: baseVat,
+    type: 'manual_full_edit',
+    ...(isDemo ? { demo: true } : {})
   })
 
   revalidatePath('/do-akceptacji')

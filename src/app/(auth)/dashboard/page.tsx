@@ -46,13 +46,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // ========== CLIENT MAPPING & LIST ==========
   let clientsQuery = supabase
     .from('clients')
-    .select('nip, nazwa')
+    .select('nip, nazwa, is_demo')
     .eq('aktywny', true)
     .order('nazwa', { ascending: true })
   clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
 
   const { data: allClients } = await clientsQuery
   const clientMap = new Map((allClients ?? []).map(c => [c.nip, c.nazwa]))
+  
+  // NIPy nie-demo do filtrowania metryk globalnych
+  const nonDemoNips = (allClients ?? []).filter(c => !c.is_demo).map(c => c.nip)
 
   // ========== METRICS ==========
 
@@ -62,6 +65,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('id', { count: 'exact' })
     .in('status', ['pending', 'pending_review'])
   if (selectedClient) pendingQuery = pendingQuery.eq('client_nip', selectedClient)
+  else pendingQuery = pendingQuery.in('client_nip', nonDemoNips)
   pendingQuery = applyNipFilter(pendingQuery, nips, 'client_nip', ryczaltNips)
   const { count: pendingExceptions } = await pendingQuery
 
@@ -74,6 +78,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .eq('status', 'pending')
       .lte('created_at', formatDateSQL(days))
     if (selectedClient) prevPendingQuery = prevPendingQuery.eq('client_nip', selectedClient)
+    else prevPendingQuery = prevPendingQuery.in('client_nip', nonDemoNips)
     prevPendingQuery = applyNipFilter(prevPendingQuery, nips, 'client_nip', ryczaltNips)
     const { count: prevPending } = await prevPendingQuery
     exceptionsTrend = (pendingExceptions ?? 0) - (prevPending ?? 0)
@@ -87,6 +92,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('client_nip, miesiac, auto_cnt, procesowalne, pct')
     .gte('miesiac', firstDayOfMonth)
   if (selectedClient) autoRateQuery = autoRateQuery.eq('client_nip', selectedClient)
+  else autoRateQuery = autoRateQuery.in('client_nip', nonDemoNips)
   autoRateQuery = applyNipFilter(autoRateQuery, nips, 'client_nip', ryczaltNips)
   const { data: autoRateData } = await autoRateQuery
 

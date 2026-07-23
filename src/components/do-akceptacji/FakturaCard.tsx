@@ -838,6 +838,11 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             )}
             <User className="w-4 h-4 text-[#64748B]" />
             <span className="font-semibold text-[#1F3A5F]">{exception.client_nazwa}</span>
+            {exception.is_demo && (
+              <Badge className="ml-2 bg-purple-100 text-purple-800 border-purple-200">
+                DEMO
+              </Badge>
+            )}
             <span className="text-[#94A3B8]">·</span>
             <span className="text-[#64748B] text-sm">
               Faktura z: {mounted ? (() => {

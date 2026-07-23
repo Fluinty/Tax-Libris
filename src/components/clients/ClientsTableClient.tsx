@@ -20,7 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { addClient } from '@/app/(auth)/klienci/actions'
+import { addClient, resetDemoClient } from '@/app/(auth)/klienci/actions'
 
 interface Props {
   clients: ClientWithCounts[]
@@ -33,6 +33,7 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
   const [loadingNips, setLoadingNips] = useState<Set<string>>(new Set())
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [resettingDemo, setResettingDemo] = useState(false)
 
   const [formData, setFormData] = useState({
     nip: '',
@@ -91,6 +92,22 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
     }
   }
 
+  const handleInitDemo = async () => {
+    if (!confirm('Czy na pewno chcesz zainicjować środowisko DEMO? To utworzy klienta "Demo Firma" i wygeneruje testowe faktury.')) return
+    setResettingDemo(true)
+    try {
+      await resetDemoClient()
+      toast.success('Pomyślnie zainicjowano środowisko DEMO')
+      router.refresh()
+    } catch (err) {
+      toast.error('Błąd inicjacji DEMO', { description: err instanceof Error ? err.message : 'Nieznany błąd' })
+    } finally {
+      setResettingDemo(false)
+    }
+  }
+
+  const hasDemoClient = clients.some(c => (c as any).is_demo)
+
   return (
     <div>
       {/* Header & Search */}
@@ -104,12 +121,20 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
             className="pl-10 h-10 border-[#E2E8F0]"
           />
         </div>
-        {isAdmin && (
-          <Button onClick={() => setIsAddOpen(true)} className="bg-[#1F3A5F] hover:bg-[#152A45] text-white">
-            <Plus className="w-4 h-4 mr-2" />
-            Dodaj klienta
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && !hasDemoClient && (
+            <Button onClick={handleInitDemo} disabled={resettingDemo} variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50">
+              <Plus className="w-4 h-4 mr-2" />
+              {resettingDemo ? 'Inicjowanie...' : 'Zainicjuj Demo'}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button onClick={() => setIsAddOpen(true)} className="bg-[#1F3A5F] hover:bg-[#152A45] text-white">
+              <Plus className="w-4 h-4 mr-2" />
+              Dodaj klienta
+            </Button>
+          )}
+        </div>
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -190,6 +215,11 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                       {client.pilot && (
                         <Badge className="text-[10px] px-1.5 py-0 h-4 bg-[#4A90E2]/10 text-[#4A90E2] border-0">
                           Pilot
+                        </Badge>
+                      )}
+                      {(client as any).is_demo && (
+                        <Badge className="text-[10px] px-1.5 py-0 h-4 bg-purple-100 text-purple-800 border-0">
+                          DEMO
                         </Badge>
                       )}
                     </div>
