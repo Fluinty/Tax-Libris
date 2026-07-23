@@ -65,6 +65,8 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       ai_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
       zapis_vat_data: f.zapis_vat, // POPRAWKA: było ai_zapis_vat_data
       kpir_pojazdowe_data: f.kpir_pojazdowe_data, // bezposrednio z JSON
+      pozycje_xml_full: f.pozycje_xml_full,
+      ai_klasyfikacja_pozycji: f.ai_klasyfikacja_pozycji,
       // Denormalizowane pola
       zapis_id: 900000 + fIndex,
       ksiegowe_numer: f.ksiegowe_numer,
@@ -91,7 +93,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       numer_ksef: f.numer_ksef,
       nazwa_dostawcy: f.nazwa_dostawcy,
       nip_dostawcy: f.nip_dostawcy,
-      nip_nabywcy: f.nip_nabywcy || DEMO_NIP,
+      nip_nabywcy: (f as any).nip_nabywcy || DEMO_NIP,
       typ_dokumentu: f.typ_dokumentu,
       data_wystawienia: f.data_wystawienia,
       data_sprzedazy: f.data_sprzedazy,
