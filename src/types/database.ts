@@ -157,7 +157,7 @@ export interface ExceptionItem {
   nip_dostawcy: string | null;
   nazwa_dostawcy: string | null;
   kwota_brutto: number | null;
-  status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored';
+  status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored' | 'skipped';
   resolved_opis: string | null;
   resolved_by: string | null;
   auto_created_by?: string | null;
