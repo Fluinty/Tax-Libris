@@ -19,23 +19,23 @@ export default async function KlienciPage() {
 
   const { data: clients } = await clientsQuery
 
-  // Fetch pending exceptions count per client
-  let excCountQuery = supabase
-    .from('exceptions_queue')
-    .select('client_nip')
-    .in('status', ['pending', 'pending_review'])
-  excCountQuery = applyNipFilter(excCountQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { data: exceptionsCounts } = await excCountQuery
+  // Fetch metrics from view
+  let metricsQuery = supabase.from('client_metrics_view').select('*')
+  metricsQuery = applyNipFilter(metricsQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
+  const { data: metricsData } = await metricsQuery
 
-  // Aggregate counts
-  const exceptionsMap = new Map<string, number>()
-  for (const e of exceptionsCounts ?? []) {
-    exceptionsMap.set(e.client_nip, (exceptionsMap.get(e.client_nip) ?? 0) + 1)
+  const metricsMap = new Map<string, any>()
+  for (const m of metricsData ?? []) {
+    metricsMap.set(m.client_nip, m)
   }
 
+  // TODO na pozycje: W przyszłości dodać wliczanie pozycje_vat_edited = true LUB final_* NOT NULL z faktury_pozycje.
+  // Obecnie liczymy tylko wyjątki na poziomie nagłówka.
   const clientsWithCounts: ClientWithCounts[] = (clients ?? []).map((c) => ({
     ...c,
-    exceptions_count: exceptionsMap.get(c.nip) ?? 0,
+    pending_count: metricsMap.get(c.nip)?.pending_count ?? 0,
+    history_count: metricsMap.get(c.nip)?.history_count ?? 0,
+    decisions_count: metricsMap.get(c.nip)?.decisions_count ?? 0,
   }))
 
   const totalActive = clientsWithCounts.length

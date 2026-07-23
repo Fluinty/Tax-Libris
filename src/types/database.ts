@@ -298,7 +298,9 @@ export interface UserProfile {
 
 // Typ dla klienta z agregowanymi danymi
 export interface ClientWithCounts extends Client {
-  exceptions_count: number;
+  pending_count: number;
+  history_count: number;
+  decisions_count: number;
 }
 
 // A3 Final Review types

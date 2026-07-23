@@ -195,11 +195,14 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                 <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
                   NIP
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
-                  Faktur/mies
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Faktury przetworzone od początku współpracy — materiał, na którym system się uczy">
+                  Faktur w bazie
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
-                  Wyjątki
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Decyzje księgowej zapisane w bazie wiedzy — korekty klasyfikacji, kwot, opisów">
+                  Decyzji księgowej
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Czeka na akceptację teraz">
+                  Do akceptacji
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
                   Auto
@@ -232,12 +235,19 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                     {client.nip}
                   </td>
                   <td className="px-4 py-3 text-center text-[#64748B]">
-                    {client.avg_faktur_mies ?? '—'}
+                    {client.history_count}
+                  </td>
+                  <td className="px-4 py-3 text-center text-[#64748B]">
+                    {client.decisions_count > 0 ? (
+                      <span className="font-semibold text-purple-700">{client.decisions_count}</span>
+                    ) : (
+                      '0'
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {client.exceptions_count > 0 ? (
+                    {client.pending_count > 0 ? (
                       <Badge className="bg-[#FEF3C7] text-[#92400E] border-0 font-semibold">
-                        {client.exceptions_count}
+                        {client.pending_count}
                       </Badge>
                     ) : (
                       <span className="inline-flex items-center justify-center">
