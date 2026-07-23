@@ -133,7 +133,10 @@
             "vat": 36.8,
             "brutto": 196.8
           }
-        ]
+        ],
+        "suma_netto": 160.0,
+        "suma_vat": 36.8,
+        "suma_brutto": 196.8
       }
     },
     {
@@ -216,7 +219,10 @@
             "vat": 805.0,
             "brutto": 4305.0
           }
-        ]
+        ],
+        "suma_netto": 3500.0,
+        "suma_vat": 805.0,
+        "suma_brutto": 4305.0
       }
     },
     {
@@ -312,7 +318,10 @@
             "vat": 69.0,
             "brutto": 369.0
           }
-        ]
+        ],
+        "suma_netto": 300.0,
+        "suma_vat": 69.0,
+        "suma_brutto": 369.0
       }
     },
     {
@@ -411,7 +420,10 @@
             "vat": 414.0,
             "brutto": 2214.0
           }
-        ]
+        ],
+        "suma_netto": 1800.0,
+        "suma_vat": 414.0,
+        "suma_brutto": 2214.0
       }
     },
     {
@@ -611,7 +623,10 @@
             "vat": 204.7,
             "brutto": 1094.7
           }
-        ]
+        ],
+        "suma_netto": 890.0,
+        "suma_vat": 204.7,
+        "suma_brutto": 1094.7
       }
     },
     {
@@ -738,7 +753,10 @@
             "vat": 36.8,
             "brutto": 196.8
           }
-        ]
+        ],
+        "suma_netto": 160.0,
+        "suma_vat": 36.8,
+        "suma_brutto": 196.8
       }
     },
     {
@@ -823,7 +841,10 @@
             "vat": 0.0,
             "brutto": 8400.0
           }
-        ]
+        ],
+        "suma_netto": 8400.0,
+        "suma_vat": 0.0,
+        "suma_brutto": 8400.0
       },
       "transakcja_zagraniczna": {
         "rodzaj": 5,
@@ -916,7 +937,10 @@
             "vat": 345.0,
             "brutto": 1845.0
           }
-        ]
+        ],
+        "suma_netto": 1500.0,
+        "suma_vat": 345.0,
+        "suma_brutto": 1845.0
       }
     },
     {
@@ -1041,7 +1065,10 @@
             "vat": 56.58,
             "brutto": 302.58
           }
-        ]
+        ],
+        "suma_netto": 246.0,
+        "suma_vat": 56.58,
+        "suma_brutto": 302.58
       }
     }
   ]
