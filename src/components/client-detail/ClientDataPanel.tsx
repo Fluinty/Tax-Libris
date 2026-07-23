@@ -89,7 +89,7 @@ export function ClientDataPanel({ client, isAdmin }: { client: any, isAdmin: boo
           <h3 className="text-sm font-semibold text-[#64748B] uppercase tracking-wider">
             Dodatkowe info dla AI
           </h3>
-          {!isEditingInfo && (
+          {!isEditingInfo && isAdmin && (
             <Button variant="ghost" size="sm" onClick={() => setIsEditingInfo(true)} className="h-7 text-xs text-[#4A90E2] hover:text-[#1F3A5F]">
               <Pencil className="w-3 h-3 mr-1" /> Edytuj info
             </Button>

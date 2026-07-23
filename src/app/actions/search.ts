@@ -1,6 +1,7 @@
 'use server'
 
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
+import { getAllowedNips, applyNipFilter } from '@/lib/auth-helpers'
 
 export interface SearchData {
   clients: { nip: string; nazwa: string }[]
@@ -11,32 +12,31 @@ export interface SearchData {
 
 export async function getGlobalSearchData(): Promise<SearchData> {
   const supabase = createSupabaseAdmin()
-
-  // Pobierz NIP-y ryczałtowców do wykluczenia
-  const { data: ryczaltData } = await supabase
-    .from('clients')
-    .select('nip')
-    .eq('forma_opodatkowania', 'ryczalt')
-  const ryczaltNips = new Set((ryczaltData ?? []).map(c => c.nip))
+  const { nips, ryczaltNips } = await getAllowedNips()
 
   // Klienci (bez ryczałtowców)
-  const { data: clientsData } = await supabase
+  let clientsQuery = supabase
     .from('clients')
     .select('nip, nazwa')
     .eq('aktywny', true)
-    .neq('forma_opodatkowania', 'ryczalt')
+  clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips)
 
+  const { data: clientsData } = await clientsQuery
   const clients = clientsData || []
   const clientMap = new Map(clients.map(c => [c.nip, c.nazwa]))
 
+  const ryczaltNipsSet = new Set(ryczaltNips)
+
   // Opisy
-  const { data: opisyData } = await supabase
+  let opisyQuery = supabase
     .from('client_opisy')
     .select('id, opis, client_nip')
     .eq('aktywny', true)
+  opisyQuery = applyNipFilter(opisyQuery, nips, 'client_nip', ryczaltNips)
+  const { data: opisyData } = await opisyQuery
 
   const opisy = (opisyData || [])
-    .filter(o => !ryczaltNips.has(o.client_nip))
+    .filter(o => !ryczaltNipsSet.has(o.client_nip))
     .map(o => ({
       id: o.id,
       opis: o.opis,
@@ -45,13 +45,15 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     }))
 
   // Pojazdy
-  const { data: pojazdyData } = await supabase
+  let pojazdyQuery = supabase
     .from('client_pojazdy')
     .select('id, nr_rejestracyjny, client_nip')
     .eq('aktywny', true)
+  pojazdyQuery = applyNipFilter(pojazdyQuery, nips, 'client_nip', ryczaltNips)
+  const { data: pojazdyData } = await pojazdyQuery
 
   const pojazdy = (pojazdyData || [])
-    .filter(p => !ryczaltNips.has(p.client_nip))
+    .filter(p => !ryczaltNipsSet.has(p.client_nip))
     .map(p => ({
       id: p.id,
       nr_rejestracyjny: p.nr_rejestracyjny,
@@ -59,18 +61,20 @@ export async function getGlobalSearchData(): Promise<SearchData> {
       client_nazwa: clientMap.get(p.client_nip) || 'Nieznany',
     }))
 
-  // KSeF (distinct z wyjątków, żeby nie przeciążać bierzemy najnowsze np. 1000)
-  const { data: ksefData } = await supabase
+  let ksefQuery = supabase
     .from('exceptions_queue')
     .select('numer_ksef, client_nip, zapis_id')
     .not('numer_ksef', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1000)
+  ksefQuery = applyNipFilter(ksefQuery, nips, 'client_nip', ryczaltNips)
+
+  const { data: ksefData } = await ksefQuery
 
   // deduplikacja po numer_ksef
   const ksefMap = new Map()
   for (const row of ksefData || []) {
-    if (row.numer_ksef && !ksefMap.has(row.numer_ksef) && !ryczaltNips.has(row.client_nip)) {
+    if (row.numer_ksef && !ksefMap.has(row.numer_ksef) && !ryczaltNipsSet.has(row.client_nip)) {
       ksefMap.set(row.numer_ksef, {
         numer_ksef: row.numer_ksef,
         client_nip: row.client_nip,
