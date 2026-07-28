@@ -100,7 +100,7 @@ export function applyNipFilter<T extends any>(
  * Verify that the currently authenticated user has write permission for the given exceptionId.
  */
 export async function assertCanWrite(exceptionId: number) {
-  const { nips, isAdmin, panelUser } = await getAllowedNips()
+  const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
   if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
   const admin = createSupabaseAdmin()
   let { data } = await admin.from('faktury').select('client_nip, status').eq('id', exceptionId).maybeSingle()
@@ -113,7 +113,10 @@ export async function assertCanWrite(exceptionId: number) {
     data = res.data
   }
   if (!data) throw new Error('Nie znaleziono faktury')
-  if (!isAdmin && !nips?.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  if (!isAdmin) {
+    if (nips !== null && !nips.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+    if (nips === null && demoNips.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  }
   return data
 }
 
@@ -121,11 +124,14 @@ export async function assertCanWrite(exceptionId: number) {
  * Verify that the currently authenticated user has write permission for the given pozycjaId.
  */
 export async function assertCanWritePozycja(pozycjaId: number) {
-  const { nips, isAdmin, panelUser } = await getAllowedNips()
+  const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
   if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
   const admin = createSupabaseAdmin()
   const { data } = await admin.from('faktury_pozycje').select('client_nip, faktura_id').eq('id', pozycjaId).single()
   if (!data) throw new Error('Nie znaleziono pozycji')
-  if (!isAdmin && !nips?.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  if (!isAdmin) {
+    if (nips !== null && !nips.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+    if (nips === null && demoNips.includes(data.client_nip)) throw new Error('Brak dostępu do tego klienta')
+  }
   return data
 }

@@ -34,7 +34,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .in('status', ['pending', 'pending_review']),
     nips,
     'client_nip',
-    ryczaltNips
+    ryczaltNips,
+    demoNips,
+    isAdmin
   )
 
   if (typFilter === 'zakup' || typFilter === 'sprzedaz') {
@@ -182,7 +184,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .gte('created_at', today.toISOString()),
     nips,
     'client_nip',
-    ryczaltNips
+    ryczaltNips,
+    demoNips,
+    isAdmin
   )
 
   const todayStats = todayStatsData ?? []
@@ -203,7 +207,9 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       .in('status', ['pending', 'pending_review']),
     nips,
     'client_nip',
-    ryczaltNips
+    ryczaltNips,
+    demoNips,
+    isAdmin
   )
 
   const filteredItemsForSidebar = allPendingItems ?? []
