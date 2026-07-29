@@ -5,7 +5,7 @@ import type {
   DashboardMetrics,
   RecentActivity,
   AutomationRateClient,
-  WolumenInvoiceRecord,
+  WolumenKpirViewRow,
 } from '@/types/database'
 
 interface PageProps {
@@ -138,7 +138,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .sort((a, b) => b.pct - a.pct || b.auto - a.auto)
     .slice(0, 10)
 
-  // ========== WOLUMEN FAKTUR (KPiR) ==========
+  // ========== WOLUMEN FAKTUR (KPiR) — aggregated SQL view ==========
   // 1. Fetch KPiR client NIPs (forma_opodatkowania = 'kpir')
   let kpirClientsQuery = supabase
     .from('clients')
@@ -155,15 +155,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     kpirClientNames[c.nip] = c.nazwa
   }
 
-  // 2. Fetch invoice records for KPiR clients (all statuses, minimal columns)
-  let wolumenRecords: WolumenInvoiceRecord[] = []
+  // 2. Fetch pre-aggregated metrics from SQL view (no row limit issue)
+  let wolumenViewRows: WolumenKpirViewRow[] = []
   if (kpirNips.length > 0) {
-    const { data: wolumenRaw } = await supabase
-      .from('exceptions_queue')
-      .select('client_nip, status, resolved_by, created_at, auto_created_at')
+    const { data: viewData } = await supabase
+      .from('wolumen_kpir_view')
+      .select('*')
       .in('client_nip', kpirNips)
 
-    wolumenRecords = (wolumenRaw ?? []) as WolumenInvoiceRecord[]
+    wolumenViewRows = (viewData ?? []) as WolumenKpirViewRow[]
   }
 
   return (
@@ -171,8 +171,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       metrics={metrics}
       recentActivity={recentActivity}
       topAutomationClients={topAutomationClients}
-      wolumenRecords={wolumenRecords}
+      wolumenViewRows={wolumenViewRows}
       kpirClientNames={kpirClientNames}
     />
   )
 }
+

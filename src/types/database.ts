@@ -365,6 +365,27 @@ export interface WolumenInvoiceRecord {
   auto_created_at: string | null;
 }
 
+export interface WolumenKpirViewRow {
+  client_nip: string;
+  czekajace: number;
+  nowe_dzis: number;
+  nowe_tydzien: number;
+  nowe_miesiac: number;
+  nowe_total: number;
+  reczne_dzis: number;
+  reczne_tydzien: number;
+  reczne_miesiac: number;
+  reczne_total: number;
+  auto_dzis: number;
+  auto_tydzien: number;
+  auto_miesiac: number;
+  auto_total: number;
+  ext_dzis: number;
+  ext_tydzien: number;
+  ext_miesiac: number;
+  ext_total: number;
+}
+
 // Typ dla wpisu z ostatniej aktywności
 export interface RecentActivity {
   id: number;

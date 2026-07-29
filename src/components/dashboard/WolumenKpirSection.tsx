@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { FileText, BookCheck, Sparkles, Clock } from 'lucide-react'
-import type { WolumenInvoiceRecord } from '@/types/database'
+import type { WolumenKpirViewRow } from '@/types/database'
 
 type PeriodTab = 'today' | 'week' | 'month' | 'all'
 
@@ -12,7 +12,7 @@ interface ClientNameMap {
 }
 
 interface Props {
-  records: WolumenInvoiceRecord[]
+  viewRows: WolumenKpirViewRow[]
   clientNames: ClientNameMap
 }
 
@@ -23,148 +23,45 @@ const PERIOD_TABS: { id: PeriodTab; label: string }[] = [
   { id: 'all', label: 'Łącznie' },
 ]
 
-/**
- * Compute calendar-based period boundaries in Europe/Warsaw timezone.
- *
- * Dziś     = od północy Warsaw time
- * 7 dni    = bieżący tydzień kalendarzowy (poniedziałek 00:00 → teraz)
- * 30 dni   = bieżący miesiąc (1. dnia 00:00 → teraz)
- * Łącznie  = bez ograniczeń
- */
-function getPeriodStart(tab: PeriodTab): Date | null {
-  if (tab === 'all') return null
-
-  // Get Warsaw "now" as local components
-  const nowWarsaw = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Europe/Warsaw' })
-  )
-
-  if (tab === 'today') {
-    nowWarsaw.setHours(0, 0, 0, 0)
-    return nowWarsaw
+function pickPeriod(row: WolumenKpirViewRow, period: PeriodTab) {
+  const suffix = period === 'today' ? '_dzis' : period === 'week' ? '_tydzien' : period === 'month' ? '_miesiac' : '_total'
+  return {
+    nowe: Number(row[`nowe${suffix}` as keyof WolumenKpirViewRow]) || 0,
+    reczne: Number(row[`reczne${suffix}` as keyof WolumenKpirViewRow]) || 0,
+    auto: Number(row[`auto${suffix}` as keyof WolumenKpirViewRow]) || 0,
+    externalBooked: Number(row[`ext${suffix}` as keyof WolumenKpirViewRow]) || 0,
+    czekajace: Number(row.czekajace) || 0, // always current snapshot
   }
-  if (tab === 'week') {
-    // Monday 00:00 of this calendar week
-    const day = nowWarsaw.getDay() // 0=Sun .. 6=Sat
-    const diff = day === 0 ? 6 : day - 1 // days since Monday
-    nowWarsaw.setDate(nowWarsaw.getDate() - diff)
-    nowWarsaw.setHours(0, 0, 0, 0)
-    return nowWarsaw
-  }
-  if (tab === 'month') {
-    nowWarsaw.setDate(1)
-    nowWarsaw.setHours(0, 0, 0, 0)
-    return nowWarsaw
-  }
-  return null
 }
 
-/** Parse a timestamp to Warsaw local Date for comparison */
-function toWarsawDate(iso: string): Date {
-  return new Date(
-    new Date(iso).toLocaleString('en-US', { timeZone: 'Europe/Warsaw' })
-  )
-}
-
-interface Aggregated {
-  nowe: number
-  reczne: number
-  auto: number
-  czekajace: number // always current, ignores period
-  externalBooked: number
-}
-
-function aggregate(
-  records: WolumenInvoiceRecord[],
-  periodStart: Date | null
-): { totals: Aggregated; perClient: Map<string, Aggregated> } {
-  const perClient = new Map<string, Aggregated>()
-
-  const ensure = (nip: string): Aggregated => {
-    let a = perClient.get(nip)
-    if (!a) {
-      a = { nowe: 0, reczne: 0, auto: 0, czekajace: 0, externalBooked: 0 }
-      perClient.set(nip, a)
-    }
-    return a
-  }
-
-  for (const r of records) {
-    const c = ensure(r.client_nip)
-
-    // Czekające — current snapshot, always counted (no period filter)
-    if (r.status === 'pending' || r.status === 'pending_review') {
-      c.czekajace++
-    }
-
-    // Nowe — created_at in period, status != 'skipped'
-    if (r.status !== 'skipped') {
-      const createdWhen = toWarsawDate(r.created_at)
-      if (!periodStart || createdWhen >= periodStart) {
-        c.nowe++
-      }
-    }
-
-    // Zaksięgowane (ręcznie / auto) — status='auto_created', wg auto_created_at
-    if (r.status === 'auto_created' && r.auto_created_at) {
-      const bookedWhen = toWarsawDate(r.auto_created_at)
-      if (!periodStart || bookedWhen >= periodStart) {
-        if (r.resolved_by === 'fluinty_auto') {
-          c.auto++
-        } else {
-          c.reczne++
-        }
-      }
-    }
-
-    // external_booked — poza panelem
-    if (r.status === 'external_booked') {
-      if (r.auto_created_at) {
-        const bookedWhen = toWarsawDate(r.auto_created_at)
-        if (!periodStart || bookedWhen >= periodStart) {
-          c.externalBooked++
-        }
-      } else {
-        const createdWhen = toWarsawDate(r.created_at)
-        if (!periodStart || createdWhen >= periodStart) {
-          c.externalBooked++
-        }
-      }
-    }
-  }
-
-  // Sum totals
-  const totals: Aggregated = { nowe: 0, reczne: 0, auto: 0, czekajace: 0, externalBooked: 0 }
-  for (const a of perClient.values()) {
-    totals.nowe += a.nowe
-    totals.reczne += a.reczne
-    totals.auto += a.auto
-    totals.czekajace += a.czekajace
-    totals.externalBooked += a.externalBooked
-  }
-
-  return { totals, perClient }
-}
-
-export function WolumenKpirSection({ records, clientNames }: Props) {
+export function WolumenKpirSection({ viewRows, clientNames }: Props) {
   const [activePeriod, setActivePeriod] = useState<PeriodTab>('today')
 
   const { totals, clientRows } = useMemo(() => {
-    const periodStart = getPeriodStart(activePeriod)
-    const { totals: t, perClient } = aggregate(records, periodStart)
+    const totalAcc = { nowe: 0, reczne: 0, auto: 0, czekajace: 0, externalBooked: 0 }
+    const rows: { nip: string; nazwa: string; nowe: number; reczne: number; auto: number; czekajace: number; externalBooked: number }[] = []
 
-    // Build sorted rows (only clients with any nonzero value)
-    const rows = Array.from(perClient.entries())
-      .filter(([, a]) => a.nowe > 0 || a.reczne > 0 || a.auto > 0 || a.czekajace > 0)
-      .map(([nip, a]) => ({
-        nip,
-        nazwa: clientNames[nip] ?? nip,
-        ...a,
-      }))
-      .sort((a, b) => b.nowe - a.nowe)
+    for (const row of viewRows) {
+      const p = pickPeriod(row, activePeriod)
+      totalAcc.nowe += p.nowe
+      totalAcc.reczne += p.reczne
+      totalAcc.auto += p.auto
+      totalAcc.czekajace += p.czekajace
+      totalAcc.externalBooked += p.externalBooked
 
-    return { totals: t, clientRows: rows }
-  }, [records, clientNames, activePeriod])
+      if (p.nowe > 0 || p.reczne > 0 || p.auto > 0 || p.czekajace > 0) {
+        rows.push({
+          nip: row.client_nip,
+          nazwa: clientNames[row.client_nip] ?? row.client_nip,
+          ...p,
+        })
+      }
+    }
+
+    rows.sort((a, b) => b.nowe - a.nowe)
+
+    return { totals: totalAcc, clientRows: rows }
+  }, [viewRows, clientNames, activePeriod])
 
   const tiles = [
     {

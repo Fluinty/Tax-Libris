@@ -17,14 +17,14 @@ import type {
   DashboardMetrics,
   RecentActivity,
   AutomationRateClient,
-  WolumenInvoiceRecord,
+  WolumenKpirViewRow,
 } from '@/types/database'
 
 interface Props {
   metrics: DashboardMetrics
   recentActivity: RecentActivity[]
   topAutomationClients?: AutomationRateClient[]
-  wolumenRecords?: WolumenInvoiceRecord[]
+  wolumenViewRows?: WolumenKpirViewRow[]
   kpirClientNames?: Record<string, string>
 }
 
@@ -32,7 +32,7 @@ export function DashboardClient({
   metrics,
   recentActivity,
   topAutomationClients = [],
-  wolumenRecords = [],
+  wolumenViewRows = [],
   kpirClientNames = {},
 }: Props) {
   const router = useRouter()
@@ -115,7 +115,7 @@ export function DashboardClient({
       </Card>
 
       {/* Wolumen faktur (KPiR) */}
-      <WolumenKpirSection records={wolumenRecords} clientNames={kpirClientNames} />
+      <WolumenKpirSection viewRows={wolumenViewRows} clientNames={kpirClientNames} />
 
       {/* Recent Activity */}
       <Card className="p-6 border-[#E2E8F0]">
