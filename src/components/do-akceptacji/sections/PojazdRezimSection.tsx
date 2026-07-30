@@ -75,6 +75,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   const [selRezim, setSelRezim] = useState(effectiveRezim)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [showManualRezim, setShowManualRezim] = useState(false)
 
   const active = clientPojazdy.filter(p => p.aktywny)
   const archived = clientPojazdy.filter(p => !p.aktywny)
@@ -287,7 +288,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
           {kpirPojazdoweData && kpirPojazdoweData.typ_wydatku === 'rata_leasingowa' && (
             <div className="bg-indigo-50/60 border border-indigo-200 rounded-md p-3 space-y-1.5">
               <div className="text-xs font-medium text-indigo-700 uppercase mb-2 flex items-center gap-1.5">
-                📋 Rata leasingowa
+                📋 Opłata leasingowa
               </div>
               <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
                 {kpirPojazdoweData.leasingodawca && (
@@ -314,17 +315,24 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
                 )}
                 {kpirPojazdoweData.rezim_proc && (
                   <>
-                    <span className="text-slate-500">Proporcja KUP:</span>
+                    <span className="text-slate-500">Proporcja:</span>
                     <span className="font-semibold text-indigo-700">{kpirPojazdoweData.rezim_proc}</span>
                   </>
                 )}
-                <span className="text-slate-500">Koszt KPiR:</span>
+                <span className="text-slate-500">Wyliczony koszt:</span>
                 <span className="font-semibold text-emerald-700">
                   {kpirPojazdoweData.koszt_kpir_obliczony?.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
                 </span>
-                <span className="text-slate-500">VAT odliczony:</span>
-                <span className="font-medium text-slate-800">50% (bez limitu)</span>
+                <span className="text-slate-500">Formuła:</span>
+                <span className="font-medium text-slate-800">proporcja × (netto + ½ nieodliczonego VAT), VAT 50/50</span>
               </div>
+              {!showManualRezim && (
+                <div className="mt-3 pt-2">
+                  <button type="button" onClick={() => setShowManualRezim(true)} className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline">
+                    Zmień reżim ręcznie
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -355,17 +363,19 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
           </div>
 
           {/* Regime selection */}
-          <div>
-            <label className="text-xs font-medium text-slate-500 uppercase mb-1.5 block">Reżim VAT i KPiR</label>
-            <div className="space-y-1">
-              {REZIM_OPTIONS.map(o => (
-                <label key={o.value} className={cn("flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors", selRezim === o.value ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300")}>
-                  <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => handleRezimChange(o.value)} disabled={readOnly || saving} className="accent-[#4A90E2] mt-0.5" />
-                  <div><div className="text-sm font-medium text-slate-800">{o.label}</div><div className="text-xs text-slate-500">{o.desc}</div></div>
-                </label>
-              ))}
+          {(!kpirPojazdoweData || kpirPojazdoweData.typ_wydatku !== 'rata_leasingowa' || showManualRezim) && (
+            <div>
+              <label className="text-xs font-medium text-slate-500 uppercase mb-1.5 block">Reżim VAT i KPiR</label>
+              <div className="space-y-1">
+                {REZIM_OPTIONS.map(o => (
+                  <label key={o.value} className={cn("flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors", selRezim === o.value ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300")}>
+                    <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => handleRezimChange(o.value)} disabled={readOnly || saving} className="accent-[#4A90E2] mt-0.5" />
+                    <div><div className="text-sm font-medium text-slate-800">{o.label}</div><div className="text-xs text-slate-500">{o.desc}</div></div>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <details className="text-sm">
             <summary className="cursor-pointer text-slate-500 font-medium">Podgląd obliczeń</summary>

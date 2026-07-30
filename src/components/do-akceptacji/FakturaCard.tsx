@@ -34,7 +34,7 @@ import {
 } from '@/lib/vat'
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
 import { kpirDisplayNum } from '@/lib/kpir-labels'
-import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
+import { mergeInlineEditsVat, mergeInlineEditsPojazd, normalizujRezim } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
 import { AnomalieHistoriiSection } from './sections/AnomalieHistoriiSection'
 import { PozycjeVatSection } from './sections/PozycjeVatSection'
@@ -120,19 +120,52 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   
   const lastKpirClassVersion = useRef(0)
 
-  // Recalculate KPiR amounts on classification change (if not vehicle)
+  const effectiveRezim = useMemo(() => {
+    const aiPojazd = (exception as any).ai_kpir_pojazdowe_data || exception.kpir_pojazdowe_data
+    if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
+      return null
+    }
+    if (exception.pojazd_id_final != null || exception.rezim_paliwowy_final != null) {
+      const inputRezim = exception.rezim_paliwowy_final !== null ? exception.rezim_paliwowy_final : (aiPojazd?.rezim_proc ?? aiPojazd?.strategia)
+      return normalizujRezim(inputRezim)
+    }
+    if (aiPojazd?.wydatki_dotycza_pojazdu) {
+      return normalizujRezim(aiPojazd.rezim_proc ?? aiPojazd.strategia)
+    }
+    return null
+  }, [exception])
+
+  const prevRezimRef = useRef(effectiveRezim)
+  const hasInitializedRezimRecalc = useRef(false)
+
+  // Recalculate KPiR amounts on classification change OR regime change
   useEffect(() => {
-    if (classificationVersion === 0 || classificationVersion === lastKpirClassVersion.current) return
-    lastKpirClassVersion.current = classificationVersion
+    let shouldRecalc = false
     
-    // Disable KPiR auto-recalc if it's a vehicle (managed by worker/PojazdRezimSection)
-    if (exception.kpir_pojazdowe_data) return
+    if (classificationVersion !== 0 && classificationVersion !== lastKpirClassVersion.current) {
+      shouldRecalc = true
+    }
+    if (effectiveRezim !== prevRezimRef.current) {
+      shouldRecalc = true
+    }
+    if (!hasInitializedRezimRecalc.current) {
+      hasInitializedRezimRecalc.current = true
+      if (exception.rezim_edited) {
+        shouldRecalc = true
+      }
+    }
+
+    if (!shouldRecalc) return
+
+    lastKpirClassVersion.current = classificationVersion
+    prevRezimRef.current = effectiveRezim
 
     const { kwoty: computedKwoty, requiresManualRecalc } = computeKpirFromPozycje(
       currentPozycje, 
       exception.typ_dokumentu, 
       exception.ai_kwoty_per_kolumna || {},
-      exception.client?.platnik_vat ?? null
+      exception.client?.platnik_vat ?? null,
+      effectiveRezim
     )
 
     if (!kpirEditedManually && !requiresManualRecalc) {
@@ -141,14 +174,15 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     } else {
       setShowKpirRecalcBanner(true)
     }
-  }, [classificationVersion, currentPozycje, exception, kpirEditedManually])
+  }, [classificationVersion, currentPozycje, exception, kpirEditedManually, effectiveRezim])
 
   const handleKpirRecalcClick = () => {
     const { kwoty: computedKwoty } = computeKpirFromPozycje(
       currentPozycje, 
       exception.typ_dokumentu, 
       exception.ai_kwoty_per_kolumna || {},
-      exception.client?.platnik_vat ?? null
+      exception.client?.platnik_vat ?? null,
+      effectiveRezim
     )
     setCurrentKpirKwoty(computedKwoty)
     setKpirEditedManually(false)
@@ -245,9 +279,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     }
 
     // Check if KPiR changed from AI proposals OR was manually edited
-    // AND it's not a vehicle card (which manages its own KPiR via AI kwoty or modal)
     // We also check exception.pozycje_vat_edited because if they edited VAT, we should probably use full approve just in case (though updateJpkSection handles VAT).
-    const isKpirChanged = !exception.kpir_pojazdowe_data && (
+    const isKpirChanged = (
       kpirEditedManually || 
       JSON.stringify(currentKpirKwoty) !== JSON.stringify(exception.ai_kwoty_per_kolumna || {})
     )
@@ -309,7 +342,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     if (isSubmitting) return
     setIsSubmitting(true)
     const actionId = exception.id
-    const res = await resolveException(actionId, selectedOpis)
+    const res = await resolveException(actionId, selectedOpis, currentKpirKwoty, exception.final_zapis_vat_data || exception.zapis_vat_data)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
       onResolved?.(exception.id)

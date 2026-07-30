@@ -130,17 +130,41 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
 export function normalizujRezim(v: string | null | undefined): '100' | '50_75' | '20' | null {
   if (!v) return null
   const s = String(v).toLowerCase().trim()
-  if (['100', '100%', 'pelne_100', 'sluzbowy_100_100', 'ciezarowy_100_100'].includes(s)) return '100'
-  if (['50_75', '75%', '75', 'mieszany_50_75'].includes(s)) return '50_75'
-  if (['20', '20%', 'prywatne_20', 'prywatny_50_20'].includes(s)) return '20'
+  if (['100', '100%', '100.00%', 'pelne_100', 'sluzbowy_100_100', 'ciezarowy_100_100'].includes(s)) return '100'
+  if (['50_75', '75%', '75.00%', '75', 'mieszany_50_75'].includes(s)) return '50_75'
+  if (['20', '20%', '20.00%', 'prywatne_20', 'prywatny_50_20'].includes(s)) return '20'
   return null
+}
+
+/**
+ * Rounds all numerical values in a record to 2 decimal places.
+ */
+export function roundKwoty(kwoty: Record<string, number>): Record<string, number> {
+  const rounded: Record<string, number> = {}
+  for (const [k, v] of Object.entries(kwoty)) {
+    rounded[k] = Math.round(v * 100) / 100
+  }
+  return rounded
 }
 
 /**
  * Build final_kpir_pojazdowe_data from inline PojazdRezimSection edits.
  */
-export function mergeInlineEditsPojazd(exception: any): any {
+export function mergeInlineEditsPojazd(
+  exception: any,
+  pozycjeEditable: any[] = [],
+  finalKwotyPerKolumna: Record<string, number> = {}
+): any {
   const aiPojazd = exception.ai_kpir_pojazdowe_data || exception.kpir_pojazdowe_data
+
+  // Calculate brutto of vehicle items (all KUP positions since it's a vehicle card)
+  const sumBruttoKup = pozycjeEditable
+    .filter(p => p.effective_kup_status !== 'nkup')
+    .reduce((sum, p) => sum + Number(p.wartosc_brutto || 0), 0)
+    
+  // Koszt KPiR is the amount that goes to WydatkiPozostale
+  const kosztKpir = finalKwotyPerKolumna['WydatkiPozostale'] ?? 0
+
 
   // KRYTYCZNE: jeśli Monika jawnie WYŁĄCZYŁA suwak pojazdu (rezim_edited=true,
   // ale oba final pola = null) → jawne false, wyczyszczone pole, NIE fallback na AI
@@ -174,6 +198,8 @@ export function mergeInlineEditsPojazd(exception: any): any {
       strategia: strategia,
       pojazd_id: exception.pojazd_id_final ?? aiPojazd?.pojazd_id ?? null,
       rezim_proc: norm,
+      wydatki_pozostale_wartosc_faktury: Math.round(sumBruttoKup * 100) / 100,
+      koszt_kpir_obliczony: Math.round(kosztKpir * 100) / 100,
     }
   }
 
@@ -192,6 +218,8 @@ export function mergeInlineEditsPojazd(exception: any): any {
         procent_do_ujecia_w_kosztach: procent,
         strategia: strategia,
         rezim_proc: norm,
+        wydatki_pozostale_wartosc_faktury: Math.round(sumBruttoKup * 100) / 100,
+        koszt_kpir_obliczony: Math.round(kosztKpir * 100) / 100,
       }
     }
   }

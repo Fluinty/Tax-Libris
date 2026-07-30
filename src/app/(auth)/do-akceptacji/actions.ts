@@ -3,7 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { mergeInlineEditsVat, mergeInlineEditsPojazd } from '@/lib/merge-helpers'
+import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
 import { assertCanWrite } from '@/lib/auth-helpers'
 
 // Helper to get authenticated user email
@@ -100,13 +100,14 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
         .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
-  // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
-  const scalonyPojazd = mergeInlineEditsPojazd(exception)
-  const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
-
   // KLUCZ: użyj final_kwoty_per_kolumna z fluinty.faktury (po triggerze)
   // Fallback do ai_kwoty jeśli Monika nie edytowała per-pozycja
-  const kwotyDoZapisu = faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna
+  const kwotyDoZapisuRaw = faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna
+  const kwotyDoZapisu = kwotyDoZapisuRaw ? roundKwoty(kwotyDoZapisuRaw) : kwotyDoZapisuRaw
+
+  // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
+  const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], kwotyDoZapisu)
+  const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
   const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
 
@@ -144,6 +145,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
       .update({
         status: targetStatus,
         final_opis: opisDoZapisu,
+        final_kwoty_per_kolumna: kwotyDoZapisu,
         final_zapis_vat_data: scalonyVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
@@ -185,6 +187,18 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  // Pobierz pozycje faktury dla auto-korekty rodzaj_odliczenia
+  const { data: pozycjeEditable } = fakturaId
+    ? await supabase
+        .from('faktury_pozycje')
+        .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
+        .eq('faktura_id', fakturaId)
+    : { data: [] as any[] }
+
+  const roundedKwoty = kwoty ? roundKwoty(kwoty) : kwoty
+  const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], roundedKwoty)
+  const baseVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
+
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
   if (queueId) {
@@ -193,7 +207,9 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
       .update({
         status: targetStatus,
         resolved_opis: opis,
-        final_kwoty_per_kolumna: kwoty,
+        final_kwoty_per_kolumna: roundedKwoty,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
@@ -215,7 +231,9 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
       .update({
         status: targetStatus,
         final_opis: opis,
-        final_kwoty_per_kolumna: kwoty,
+        final_kwoty_per_kolumna: roundedKwoty,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
@@ -266,10 +284,12 @@ export async function approveExceptionFull(
         .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
+  const roundedKwoty = finalKwotyPerKolumna ? roundKwoty(finalKwotyPerKolumna) : finalKwotyPerKolumna
+
   // Scalenie inline edits z modal edits
   // Modal daje finalKwotyPerKolumna + finalZapisVatData + finalOpis
   // Ale GTU/procedury/pojazd mogą być z inline sections — trzeba scalić
-  const scalonyPojazd = mergeInlineEditsPojazd(exception)
+  const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], roundedKwoty)
   const baseVat = finalZapisVatData
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: finalZapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
@@ -282,7 +302,7 @@ export async function approveExceptionFull(
       .update({
         status: targetStatus,
         resolved_opis: finalOpis,
-        final_kwoty_per_kolumna: finalKwotyPerKolumna,
+        final_kwoty_per_kolumna: roundedKwoty,
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
@@ -378,7 +398,7 @@ export async function updateFinalZapisVAT(
 }
 
 // ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
-export async function resolveException(exceptionId: number, opis: string) {
+export async function resolveException(exceptionId: number, opis: string, kwoty: Record<string, number> = {}, zapisVatData: any = null) {
   try {
     await assertCanWrite(exceptionId)
   } catch (e: unknown) {
@@ -394,12 +414,28 @@ export async function resolveException(exceptionId: number, opis: string) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  const { data: pozycjeEditable } = fakturaId
+    ? await supabase
+        .from('faktury_pozycje')
+        .select('effective_vat_odliczalny, effective_kup_status, stawka_vat, wartosc_netto, wartosc_brutto')
+        .eq('faktura_id', fakturaId)
+    : { data: [] as any[] }
+
+  const roundedKwoty = kwoty ? roundKwoty(kwoty) : kwoty
+  const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], roundedKwoty)
+  const baseVat = zapisVatData
+    ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: zapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
+    : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
         status: 'resolved',
         resolved_opis: opis,
+        final_kwoty_per_kolumna: roundedKwoty,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })
@@ -421,6 +457,9 @@ export async function resolveException(exceptionId: number, opis: string) {
       .update({
         status: 'resolved',
         final_opis: opis,
+        final_kwoty_per_kolumna: roundedKwoty,
+        final_zapis_vat_data: baseVat,
+        final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString()
       })

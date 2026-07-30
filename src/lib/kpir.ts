@@ -44,7 +44,8 @@ export function computeKpirFromPozycje(
   pozycje: FakturaPozycja[],
   typDokumentu: string | null,
   aiKwoty: Record<string, number>,
-  isVatPayerKarta: boolean | null
+  isVatPayerKarta: boolean | null,
+  rezimPojazdowy: '100' | '50_75' | '20' | null = null
 ): { kwoty: Record<string, number>; requiresManualRecalc: boolean } {
   const result: Record<string, number> = {}
   const kolumny = getKolumnyForTyp(typDokumentu)
@@ -102,27 +103,33 @@ export function computeKpirFromPozycje(
     const odlicz = p.effective_vat_odliczalny || 'pelny'
     
     if (!isVatPayer) {
-      if (odlicz === 'czesciowe_50') {
-        // Dla nie-vatowca cały VAT jest kosztem, więc podstawa = brutto.
-        // Mnożnik 75% z uwagi na użytek mieszany (analogicznie do vatowca).
+      if (rezimPojazdowy === '50_75') {
+        kwota = 0.75 * brutto
+      } else if (rezimPojazdowy === '20') {
+        kwota = 0.20 * brutto
+      } else if (rezimPojazdowy === '100') {
+        kwota = brutto
+      } else if (odlicz === 'czesciowe_50') {
         kwota = 0.75 * brutto
       } else {
         kwota = brutto
       }
     } else {
-      if (odlicz === 'pelny') kwota = netto
-      else if (odlicz === 'brak') kwota = brutto
-      else if (odlicz === 'czesciowe_50') {
-        // czesciowe_50: podstawa = netto + nieodliczona ½VAT (art.86a),
-        // koszt KPiR = 75% podstawy (art.23 ust.1 pkt 46a PIT - uzytek mieszany).
-        // To przeliczanie dziala WYLACZNIE na kartach bez kpir_pojazdowe_data
-        // (karty z wykrytym rezimem pojazdowym sa wykluczone z przeliczania),
-        // wiec jedyny realny przypadek czesciowe_50 tutaj to pozycja samochodowa
-        // bez wykrytego rezimu - domyslny mnoznik 75% (uzytek mieszany) jest wlasciwy.
-        // Enum 20% (pojazd prywatny) zawsze idzie z kpir_pojazdowe_data, wiec nie trafia tu.
+      if (rezimPojazdowy === '100') {
+        kwota = netto
+      } else if (rezimPojazdowy === '50_75') {
         kwota = 0.75 * (netto + vat * 0.5)
+      } else if (rezimPojazdowy === '20') {
+        kwota = 0.20 * (netto + vat * 0.5)
+      } else if (odlicz === 'pelny') {
+        kwota = netto
+      } else if (odlicz === 'brak') {
+        kwota = brutto
+      } else if (odlicz === 'czesciowe_50') {
+        kwota = 0.75 * (netto + vat * 0.5)
+      } else {
+        kwota = netto // fallback
       }
-      else kwota = netto // fallback
     }
     
     result[colDef.klucz] += kwota
