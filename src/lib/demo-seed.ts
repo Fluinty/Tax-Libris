@@ -57,6 +57,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       client_nip: DEMO_NIP,
       status: f.status === 'booked' ? 'auto_created' : f.status,
       ai_confidence: f.ai_confidence || f.confidence_overall,
+      confidence_overall: f.confidence_overall,
       ai_proponowany_opis: f.ai_proponowany_opis,
       ai_uzasadnienie: f.ai_uzasadnienie,
       confidence_reasons: f.confidence_reasons,
@@ -77,6 +78,17 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       typ_dokumentu: f.typ_dokumentu,
       data_wystawienia: f.data_wystawienia,
       data_sprzedazy: f.data_sprzedazy,
+      // Pola v3.1 — weryfikacja kontrahenta, confidence, dane adresowe
+      pozycja_xml: f.pozycja_xml,
+      adres_sprzedawcy: f.adres_sprzedawcy,
+      adres_nabywcy: f.adres_nabywcy,
+      rachunek_z_faktury: f.rachunek_z_faktury,
+      vendor_vat_active: f.vendor_vat_active,
+      vendor_first_occurrence: f.vendor_first_occurrence,
+      vendor_invoice_count: f.vendor_invoice_count,
+      vendor_vat_checked_at: f.vendor_vat_checked_at,
+      rachunek_match_status: f.rachunek_match_status,
+      rachunek_match_reason: f.rachunek_match_reason,
     }).select().single()
 
     if (qErr || !queueData) {

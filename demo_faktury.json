@@ -60,7 +60,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -76,7 +76,7 @@
         {
           "lp": "2",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -137,7 +137,17 @@
         "suma_netto": 160.0,
         "suma_vat": 36.8,
         "suma_brutto": 196.8
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Abonament komórkowy BIZNES 2 numery",
+      "adres_sprzedawcy": "Al. Jerozolimskie 160, 02-326 Warszawa",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-06T08:15:00.000000"
     },
     {
       "scenariusz": "idealna_sprzedaz",
@@ -154,7 +164,38 @@
       "confidence_overall": 0.96,
       "ai_proponowany_opis": "Sprzedaż usług informatycznych",
       "ai_uzasadnienie": "Faktura sprzedażowa za usługi wdrożeniowe — przychód z działalności podstawowej (kol. 7).",
-      "confidence_reasons": null,
+      "confidence_reasons": [
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "AI pewny klasyfikacji (0.96)",
+          "score": 0.96
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Faktura sprzedażowa - przychód z działalności podstawowej",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
+      ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
       "kpir_pojazdowe_data": null,
@@ -176,7 +217,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -223,7 +264,17 @@
         "suma_netto": 3500.0,
         "suma_vat": 805.0,
         "suma_brutto": 4305.0
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Wdrożenie systemu CRM — etap II",
+      "adres_sprzedawcy": "ul. Przykładowa 12, 40-001 Katowice",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": null,
+      "vendor_vat_checked_at": "2026-07-08T08:15:00.000000"
     },
     {
       "scenariusz": "paliwo_75_50",
@@ -240,7 +291,43 @@
       "confidence_overall": 0.93,
       "ai_proponowany_opis": "Zakup paliwa",
       "ai_uzasadnienie": "Tankowanie pojazdu firmowego w użytku mieszanym: 50% VAT do odliczenia, do KPiR 75% × (netto + ½ nieodliczonego VAT).",
-      "confidence_reasons": null,
+      "confidence_reasons": [
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "AI pewny klasyfikacji (0.93)",
+          "score": 0.93
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "pojazd",
+          "msg": "Wykryto wydatek pojazdowy - reżim 75/50 z kartoteki pojazdu DM 00001",
+          "score": 0.93
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Znany kontrahent (11 wcześniejszych faktur), kategoria: Paliwo",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
+      ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
       "kpir_pojazdowe_data": {
@@ -273,7 +360,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "61.2",
+          "ilosc": "61,200",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -322,7 +409,17 @@
         "suma_netto": 300.0,
         "suma_vat": 69.0,
         "suma_brutto": 369.0
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "ON EFECTA DIESEL",
+      "adres_sprzedawcy": "ul. Chemików 7, 09-411 Płock",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-10T08:15:00.000000"
     },
     {
       "scenariusz": "rata_leasingowa",
@@ -339,7 +436,43 @@
       "confidence_overall": 0.91,
       "ai_proponowany_opis": "Rata leasingowa — pojazd DM 00001",
       "ai_uzasadnienie": "Rata leasingu operacyjnego pojazdu o wartości 180 000 zł. Limit kosztowy 100 000 zł → proporcja 55,56% × (netto + ½ VAT). VAT odliczany w 50%.",
-      "confidence_reasons": null,
+      "confidence_reasons": [
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "AI pewny klasyfikacji (0.91)",
+          "score": 0.91
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "pojazd",
+          "msg": "Rata leasingowa - proporcja 55,56% (wartość 180 000 zł > limit 100 000 zł)",
+          "score": 0.91
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Znany leasingodawca (Siemens Finance)",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
+      ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
       "kpir_pojazdowe_data": {
@@ -375,7 +508,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -424,7 +557,17 @@
         "suma_netto": 1800.0,
         "suma_vat": 414.0,
         "suma_brutto": 2214.0
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Rata leasingowa nr 14 — część kapitałowa",
+      "adres_sprzedawcy": "ul. Żupnicza 11, 03-821 Warszawa",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-12T08:15:00.000000"
     },
     {
       "scenariusz": "bledny_opis",
@@ -442,8 +585,36 @@
       "ai_proponowany_opis": "Usługi gastronomiczne — reprezentacja (NKUP)",
       "ai_uzasadnienie": "Usługa cateringowa — brak informacji o celu; zakładam reprezentację (NKUP, bez odliczenia VAT — art. 88 ust. 1 pkt 4). Jeśli catering dotyczył szkolenia pracowników, koszt jest KUP.",
       "confidence_reasons": [
-        "Niejednoznaczny cel zakupu: reprezentacja vs szkolenie wewnętrzne",
-        "Usługi gastronomiczne — art. 88 ograniczenie odliczenia"
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "Niejednoznaczny cel zakupu: reprezentacja (NKUP) vs szkolenie pracowników (KUP) - wymagana decyzja",
+          "score": 0.72
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Pierwsza faktura od tego dostawcy - brak historii księgowań",
+          "score": 0.7
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
       ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
@@ -466,7 +637,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -497,7 +668,36 @@
       "ai_kwoty_per_kolumna": {
         "WydatkiPozostale": 0.0
       },
-      "zapis_vat": null
+      "zapis_vat": {
+        "typ_ewidencji": 2,
+        "rejestr_nazwa": "Rejestr zakupów VAT",
+        "transakcja_nazwa": "Nabycie krajowe",
+        "rodzaj_odliczenia": 3,
+        "sposob_naliczania_kwoty_do_odliczenia": 0,
+        "pozycje_vat": [
+          {
+            "stawka_symbol": "8",
+            "stawka_id": null,
+            "netto": 450.0,
+            "vat": 36.0,
+            "brutto": 486.0
+          }
+        ],
+        "suma_netto": 450.0,
+        "suma_vat": 36.0,
+        "suma_brutto": 486.0
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": true,
+      "vendor_invoice_count": 0,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "walidator_kup_vat_warningi": null,
+      "pozycja_xml": "Catering — lunch szkoleniowy 15 osób",
+      "adres_sprzedawcy": "ul. Karmelicka 29, 31-131 Kraków",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-14T08:15:00.000000"
     },
     {
       "scenariusz": "bledna_kolumna",
@@ -515,7 +715,36 @@
       "ai_proponowany_opis": "Zakup towarów handlowych",
       "ai_uzasadnienie": "Meble — zaklasyfikowano jako towar handlowy (kol. 10). UWAGA: jeśli biurko i fotel są wyposażeniem biura firmy (nie na odsprzedaż), właściwa jest kol. 15.",
       "confidence_reasons": [
-        "Meble mogą być towarem handlowym lub wyposażeniem — zależnie od profilu firmy"
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "Meble: towar handlowy (kol. 10) czy wyposażenie biura (kol. 15)? Wybrano 10 wg profilu, do potwierdzenia",
+          "score": 0.81
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Znany kontrahent (3 wcześniejsze faktury)",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
       ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
@@ -550,7 +779,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -566,7 +795,7 @@
         {
           "lp": "2",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -627,7 +856,17 @@
         "suma_netto": 890.0,
         "suma_vat": 204.7,
         "suma_brutto": 1094.7
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Biurko BEKANT 160x80",
+      "adres_sprzedawcy": "Pl. Szwedzki 3, 05-090 Raszyn",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-15T08:15:00.000000"
     },
     {
       "scenariusz": "duplikat",
@@ -645,7 +884,31 @@
       "ai_proponowany_opis": "Usługi telekomunikacyjne",
       "ai_uzasadnienie": "UWAGA: wykryto potencjalny DUPLIKAT — faktura o identycznym numerze, NIP-ie wystawcy i kwocie została już wprowadzona do systemu. Nie księgować przed wyjaśnieniem.",
       "confidence_reasons": [
-        "Duplikat: identyczny numer, NIP i kwota jak FV/2026/07/2001 (już w systemie)"
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "Klasyfikacja poprawna, ale wykryto duplikat",
+          "score": 0.35
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "DUPLIKAT: identyczny numer, NIP wystawcy i kwota jak FV/2026/07/2001 (już w systemie)",
+          "score": 0.05
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
       ],
       "is_potential_duplicate": true,
       "duplicate_source": "FV/2026/07/2001 (5260250995, 196,80 zł)",
@@ -680,7 +943,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -696,7 +959,7 @@
         {
           "lp": "2",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -757,7 +1020,17 @@
         "suma_netto": 160.0,
         "suma_vat": 36.8,
         "suma_brutto": 196.8
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Abonament komórkowy BIZNES 2 numery",
+      "adres_sprzedawcy": "Al. Jerozolimskie 160, 02-326 Warszawa",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-06T08:15:00.000000"
     },
     {
       "scenariusz": "wdt",
@@ -775,7 +1048,36 @@
       "ai_proponowany_opis": "WDT — dostawa towarów do DE",
       "ai_uzasadnienie": "Nabywca z niemieckim NIP UE (DE812345678), stawka 0% — wewnątrzwspólnotowa dostawa towarów (WDT). Wymagane potwierdzenie wywozu dla stawki 0%.",
       "confidence_reasons": [
-        "Transakcja zagraniczna — zweryfikuj rodzaj transakcji VAT (WDT) i dokumentację wywozu"
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "AI pewny klasyfikacji (0.88)",
+          "score": 0.88
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "transakcja",
+          "msg": "WDT - nabywca DE812345678; wymagana dokumentacja wywozu dla stawki 0%",
+          "score": 0.85
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
       ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
@@ -798,7 +1100,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "400",
+          "ilosc": "400,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -850,7 +1152,17 @@
         "rodzaj": 5,
         "nazwa": "Wewnątrzwspólnotowa dostawa towarów",
         "nip_ue_nabywcy": "DE812345678"
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Komponenty elektroniczne — partia B2",
+      "adres_sprzedawcy": "ul. Przykładowa 12, 40-001 Katowice",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": null,
+      "vendor_vat_checked_at": "2026-07-16T08:15:00.000000"
     },
     {
       "scenariusz": "niski_confidence",
@@ -868,8 +1180,36 @@
       "ai_proponowany_opis": "Usługi obce",
       "ai_uzasadnienie": "Pozycja 'Usługa zgodnie z umową' bez szczegółów — nie można ustalić charakteru kosztu. Wymagana decyzja księgowej: czy to podwykonawstwo (kol. 15), remont (kol. 15) czy inwestycja (środek trwały — poza KPiR).",
       "confidence_reasons": [
-        "Ogólnikowa nazwa pozycji — brak możliwości klasyfikacji",
-        "Brak historii zakupów u tego dostawcy"
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "Ogólnikowa nazwa pozycji ('Usługa zgodnie z umową') - brak możliwości jednoznacznej klasyfikacji",
+          "score": 0.55
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Pierwsza faktura od tego dostawcy - brak historii księgowań",
+          "score": 0.6
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
       ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
@@ -892,7 +1232,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -941,7 +1281,17 @@
         "suma_netto": 1500.0,
         "suma_vat": 345.0,
         "suma_brutto": 1845.0
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": true,
+      "vendor_invoice_count": 0,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Usługa zgodnie z umową nr 4/2026",
+      "adres_sprzedawcy": "ul. Warsztatowa 4, 42-200 Częstochowa",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-18T08:15:00.000000"
     },
     {
       "scenariusz": "zaksiegowana",
@@ -958,7 +1308,38 @@
       "confidence_overall": 0.98,
       "ai_proponowany_opis": "Materiały biurowe",
       "ai_uzasadnienie": "Standardowy zakup materiałów biurowych — koszt bieżącej działalności.",
-      "confidence_reasons": null,
+      "confidence_reasons": [
+        {
+          "dim": "ai_klasyfikacja",
+          "msg": "AI pewny klasyfikacji (0.98)",
+          "score": 0.98
+        },
+        {
+          "dim": "biala_lista",
+          "msg": "Sprzedawca - czynny podatnik VAT",
+          "score": 1.0
+        },
+        {
+          "dim": "duplikat",
+          "msg": "Brak duplikatów",
+          "score": 1.0
+        },
+        {
+          "dim": "data",
+          "msg": "Data w normie",
+          "score": 1.0
+        },
+        {
+          "dim": "kontrahent",
+          "msg": "Znany kontrahent (22 wcześniejsze faktury), kategoria: Materiały biurowe",
+          "score": 1.0
+        },
+        {
+          "dim": "rachunek",
+          "msg": "Kwota < 15 000 zł - sprawdzanie nieobowiązkowe",
+          "score": 1.0
+        }
+      ],
       "is_potential_duplicate": false,
       "duplicate_source": null,
       "kpir_pojazdowe_data": null,
@@ -992,7 +1373,7 @@
         {
           "lp": "1",
           "gtu": null,
-          "ilosc": "10",
+          "ilosc": "10,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -1008,7 +1389,7 @@
         {
           "lp": "2",
           "gtu": null,
-          "ilosc": "1",
+          "ilosc": "1,000",
           "kodCN": "",
           "pkWiU": "",
           "maOpis": false,
@@ -1069,7 +1450,17 @@
         "suma_netto": 246.0,
         "suma_vat": 56.58,
         "suma_brutto": 302.58
-      }
+      },
+      "vendor_vat_active": true,
+      "vendor_first_occurrence": false,
+      "vendor_invoice_count": 8,
+      "rachunek_match_status": "below_threshold",
+      "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
+      "pozycja_xml": "Papier ksero A4 80g (10 ryz)",
+      "adres_sprzedawcy": "ul. Obornicka 229, 60-650 Poznań",
+      "adres_nabywcy": null,
+      "rachunek_z_faktury": "40102010260000110205185006",
+      "vendor_vat_checked_at": "2026-07-03T08:15:00.000000"
     }
   ]
 }
