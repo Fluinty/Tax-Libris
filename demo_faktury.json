@@ -272,9 +272,11 @@
       "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
       "pozycja_xml": "Wdrożenie systemu CRM — etap II",
       "adres_sprzedawcy": "ul. Przykładowa 12, 40-001 Katowice",
-      "adres_nabywcy": null,
+      "adres_nabywcy": "ul. Modelarska 18, 40-142 Katowice",
       "rachunek_z_faktury": null,
-      "vendor_vat_checked_at": "2026-07-08T08:15:00.000000"
+      "vendor_vat_checked_at": "2026-07-08T08:15:00.000000",
+      "nip_nabywcy": "6342779353",
+      "nazwa_nabywcy": "Provex Systemy Sp. z o.o."
     },
     {
       "scenariusz": "paliwo_75_50",
@@ -1160,9 +1162,11 @@
       "rachunek_match_reason": "Kwota < 15 000 zł — sprawdzanie nie jest obowiązkowe",
       "pozycja_xml": "Komponenty elektroniczne — partia B2",
       "adres_sprzedawcy": "ul. Przykładowa 12, 40-001 Katowice",
-      "adres_nabywcy": null,
+      "adres_nabywcy": "Industriestraße 44, 20537 Hamburg, DE",
       "rachunek_z_faktury": null,
-      "vendor_vat_checked_at": "2026-07-16T08:15:00.000000"
+      "vendor_vat_checked_at": "2026-07-16T08:15:00.000000",
+      "nip_nabywcy": "DE812345678",
+      "nazwa_nabywcy": "Bauteile Nord GmbH"
     },
     {
       "scenariusz": "niski_confidence",
