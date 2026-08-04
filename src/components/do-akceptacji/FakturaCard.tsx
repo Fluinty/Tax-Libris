@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CalcInput } from '@/components/ui/calc-input'
-import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2, RefreshCw } from 'lucide-react'
+import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2, RefreshCw, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { EditModal } from './EditModal'
@@ -51,6 +51,7 @@ import { WalidatorKupVatBadge } from './sections/WalidatorKupVatBadge'
 import { getLatestReview } from '@/lib/ai-review'
 import type { ExceptionWithClient, ClientPojazd, PozycjaXml, KlasyfikacjaAiPozycja, TypDokumentu, ZapisVATData, PozycjaVAT } from '@/types/database'
 import { FakturaPreview } from './sections/FakturaPreview'
+import { FakturaEventsDrawer } from './sections/FakturaEventsDrawer'
 
 interface ClientOpis {
   id: number
@@ -107,6 +108,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [mounted, setMounted] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [showEventsDrawer, setShowEventsDrawer] = useState(false)
   const [currentPozycje, setCurrentPozycje] = useState(exception.pozycje_editable ?? [])
   const [classificationVersion, setClassificationVersion] = useState(0)
 
@@ -960,6 +962,16 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <Maximize2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Powiększ</span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowEventsDrawer(true)}
+            className="h-7 px-2 text-xs gap-1 text-[#94A3B8] hover:text-[#1F3A5F] hover:bg-blue-50"
+            title="Historia faktury"
+          >
+            <History className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Historia</span>
+          </Button>
         </div>
       </div>
 
@@ -1478,6 +1490,15 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Events timeline drawer */}
+      <FakturaEventsDrawer
+        open={showEventsDrawer}
+        onOpenChange={setShowEventsDrawer}
+        fakturaId={exception.id}
+        currentStatus={exception.status}
+        ksiegoweNumer={exception.ksiegowe_numer}
+      />
     </Card>
   )
 }

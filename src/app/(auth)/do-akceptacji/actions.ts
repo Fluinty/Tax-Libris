@@ -29,6 +29,73 @@ async function logAudit(
   })
 }
 
+// ── Oś czasu faktury: logowanie zdarzeń ──────────────────────
+async function logFakturaEvent(
+  supabase: any,
+  fakturaId: number | null,
+  queueId: number | null,
+  clientNip: string,
+  eventType: string,
+  actor: string,
+  payload: Record<string, unknown> = {}
+) {
+  if (!fakturaId && !queueId) return
+  await supabase.from('faktura_events').insert({
+    faktura_id: fakturaId,
+    queue_id: queueId,
+    client_nip: clientNip,
+    event_type: eventType,
+    actor,
+    payload,
+  })
+}
+
+// Build a diff object comparing final values vs AI originals.
+// Returns null if nothing changed.
+function buildEditDiff(
+  exception: any,
+  finalOpis: string | null,
+  finalKwoty: Record<string, number> | null,
+  finalVat: any | null,
+  finalPojazd: any | null,
+): Record<string, { z: unknown; na: unknown }> | null {
+  const diff: Record<string, { z: unknown; na: unknown }> = {}
+
+  // Opis
+  const aiOpis = exception.ai_proponowany_opis
+  if (finalOpis && aiOpis && finalOpis !== aiOpis) {
+    diff['opis'] = { z: aiOpis, na: finalOpis }
+  }
+
+  // Kwoty KPiR
+  const aiKwoty = exception.ai_kwoty_per_kolumna || {}
+  if (finalKwoty) {
+    const allKeys = new Set([...Object.keys(aiKwoty), ...Object.keys(finalKwoty)])
+    for (const k of allKeys) {
+      const z = aiKwoty[k] ?? 0
+      const na = finalKwoty[k] ?? 0
+      if (z !== na) diff[`kwota_${k}`] = { z, na }
+    }
+  }
+
+  // Pozycje VAT edytowane
+  if (exception.pozycje_vat_edited) {
+    diff['pozycje_vat'] = { z: 'AI', na: 'edytowane' }
+  }
+
+  // GTU edytowane
+  if (exception.gtu_edited_by_user) {
+    diff['gtu'] = { z: exception.gtu_bitmask ?? null, na: exception.gtu_bitmask_final ?? null }
+  }
+
+  // Procedury JPK edytowane
+  if (exception.jpk_procedury_edited) {
+    diff['procedura_jpk'] = { z: exception.procedura_jpk ?? null, na: exception.procedura_jpk_final ?? null }
+  }
+
+  return Object.keys(diff).length > 0 ? diff : null
+}
+
 // Helper to resolve fakturaId, queueId and coalesced exception object
 async function resolveExceptionIds(
   supabase: any,
@@ -166,6 +233,15 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     ...(isDemo ? { demo: true } : {})
   })
 
+  // ── Oś czasu: edited → approved ──
+  const diff1 = buildEditDiff(exception, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
+  if (diff1) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 })
+  if (exception.rezim_edited) {
+    const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
+    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+  }
+  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: opisDoZapisu, kwoty_final: kwotyDoZapisu ?? null })
+
   revalidatePath('/do-akceptacji')
   return { success: true }
 }
@@ -249,6 +325,15 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
     type: 'manual_edit',
     ...(isDemo ? { demo: true } : {})
   })
+
+  // ── Oś czasu: edited → approved ──
+  const diff2 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  if (diff2) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff2 })
+  if (exception.rezim_edited) {
+    const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
+    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+  }
+  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null })
 
   revalidatePath('/do-akceptacji')
   return { success: true }
@@ -345,6 +430,15 @@ export async function approveExceptionFull(
     type: 'manual_full_edit',
     ...(isDemo ? { demo: true } : {})
   })
+
+  // ── Oś czasu: edited → approved ──
+  const diff3 = buildEditDiff(exception, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
+  if (diff3) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 })
+  if (exception.rezim_edited) {
+    const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
+    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+  }
+  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: finalOpis, kwoty_final: roundedKwoty ?? null })
 
   revalidatePath('/do-akceptacji')
   return { success: true }
@@ -474,6 +568,15 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     type: 'manual_resolve'
   })
 
+  // ── Oś czasu: edited → approved ──
+  const diff4 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  if (diff4) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 })
+  if (exception.rezim_edited) {
+    const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
+    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+  }
+  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null })
+
   revalidatePath('/do-akceptacji')
   return { success: true }
 }
@@ -526,6 +629,9 @@ export async function ignoreFaktura(exceptionId: number) {
     faktura_id: fakturaId,
     resolved_by: userEmail
   })
+
+  // ── Oś czasu: skipped ──
+  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'skipped', userEmail, { reason: 'panel', by: userEmail })
 
   revalidatePath('/do-akceptacji')
   return { success: true }
@@ -597,6 +703,10 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
     user: userEmail,
     exception_id: exceptionId
   })
+
+  // ── Oś czasu: opis_added_to_list ──
+  const { fakturaId: fId2, queueId: qId2 } = await resolveExceptionIds(supabase, exceptionId)
+  await logFakturaEvent(supabase, fId2, qId2, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
 
   return { success: true, message: 'Opis dodany poprawnie.' }
 }
@@ -746,4 +856,19 @@ export async function checkExceptionStatus(exceptionId: number): Promise<{ statu
     .maybeSingle()
 
   return { status: queueData?.status ?? null }
+}
+
+/**
+ * Pobierz zdarzenia osi czasu faktury.
+ */
+export async function fetchFakturaEvents(fakturaId: number) {
+  const supabase = createSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('faktura_events')
+    .select('id, event_type, actor, payload, created_at')
+    .eq('faktura_id', fakturaId)
+    .order('created_at', { ascending: true })
+
+  if (error) return { events: [], error: error.message }
+  return { events: data || [], error: null }
 }
