@@ -861,13 +861,27 @@ export async function checkExceptionStatus(exceptionId: number): Promise<{ statu
 /**
  * Pobierz zdarzenia osi czasu faktury.
  */
-export async function fetchFakturaEvents(fakturaId: number) {
+export async function fetchFakturaEvents(params: { fakturaId?: number; queueId?: number }) {
+  const { fakturaId, queueId } = params;
+  if (!fakturaId && !queueId) return { events: [], error: 'Brak ID faktury' };
+
   const supabase = createSupabaseAdmin()
-  const { data, error } = await supabase
+  
+  let query = supabase
     .from('faktura_events')
     .select('id, event_type, actor, payload, created_at')
-    .eq('faktura_id', fakturaId)
+  
+  if (fakturaId && queueId) {
+    query = query.or(`faktura_id.eq.${fakturaId},queue_id.eq.${queueId}`)
+  } else if (fakturaId) {
+    query = query.eq('faktura_id', fakturaId)
+  } else if (queueId) {
+    query = query.eq('queue_id', queueId)
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: true })
+    .limit(200)
 
   if (error) return { events: [], error: error.message }
   return { events: data || [], error: null }

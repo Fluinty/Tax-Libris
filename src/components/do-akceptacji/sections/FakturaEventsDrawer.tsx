@@ -133,15 +133,17 @@ interface FakturaEvent {
 interface FakturaEventsDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  fakturaId: number
-  currentStatus: string
-  ksiegoweNumer: string | null
+  fakturaId?: number
+  queueId?: number
+  currentStatus?: string
+  ksiegoweNumer?: string | null
 }
 
 export function FakturaEventsDrawer({
   open,
   onOpenChange,
   fakturaId,
+  queueId,
   currentStatus,
   ksiegoweNumer,
 }: FakturaEventsDrawerProps) {
@@ -157,7 +159,7 @@ export function FakturaEventsDrawer({
     setError(null)
 
     const load = async () => {
-      const result = await fetchFakturaEvents(fakturaId)
+      const result = await fetchFakturaEvents({ fakturaId, queueId })
 
       if (cancelled) return
 
@@ -172,7 +174,7 @@ export function FakturaEventsDrawer({
 
     load()
     return () => { cancelled = true }
-  }, [open, fakturaId])
+  }, [open, fakturaId, queueId])
 
   const statusLabel: Record<string, string> = {
     pending: 'Oczekuje',
@@ -195,9 +197,11 @@ export function FakturaEventsDrawer({
               <Badge variant="outline" className="text-xs">
                 {ksiegoweNumer || '(brak numeru)'}
               </Badge>
-              <Badge className="text-xs bg-slate-100 text-slate-700 border-none">
-                {statusLabel[currentStatus] || currentStatus}
-              </Badge>
+              {currentStatus && (
+                <Badge className="text-xs bg-slate-100 text-slate-700 border-none">
+                  {statusLabel[currentStatus] || currentStatus}
+                </Badge>
+              )}
             </span>
           </SheetDescription>
         </SheetHeader>

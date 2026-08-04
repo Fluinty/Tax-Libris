@@ -4,6 +4,7 @@ import { FileText, CheckCircle2, Clock, XCircle, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import type { ExceptionItem } from '@/types/database'
+import { FakturaHistoryButton } from '@/components/do-akceptacji/sections/FakturaHistoryButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,6 +142,7 @@ export default async function FakturyPage({ searchParams }: PageProps) {
                 <th className="px-6 py-4 font-semibold">Kontrahent</th>
                 <th className="px-6 py-4 font-semibold text-right">Kwota brutto</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold w-12"></th>
               </tr>
             </thead>
             <tbody>
@@ -174,6 +176,13 @@ export default async function FakturyPage({ searchParams }: PageProps) {
                   </td>
                   <td className="px-6 py-4">
                     {getStatusBadge(item)}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <FakturaHistoryButton
+                      queueId={item.id}
+                      currentStatus={item.status}
+                      ksiegoweNumer={item.ksiegowe_numer}
+                    />
                   </td>
                 </tr>
               ))}

@@ -1496,6 +1496,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
         open={showEventsDrawer}
         onOpenChange={setShowEventsDrawer}
         fakturaId={exception.id}
+        queueId={exception.legacy_id}
         currentStatus={exception.status}
         ksiegoweNumer={exception.ksiegowe_numer}
       />

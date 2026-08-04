@@ -10,6 +10,7 @@ import { PojazdyTable } from '@/components/client-detail/PojazdyTable'
 import { OpisyTable } from '@/components/client-detail/OpisyTable'
 import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
 import { AutoWriteSection } from '@/components/client-detail/AutoWriteSection'
+import { RecentExceptionsTable } from '@/components/client-detail/RecentExceptionsTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +131,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   const isCandidate = totalCount >= 50 && editRatePct < 5
   const candidateStats = { isCandidate, editRatePct, totalCount }
 
+  const { data: recentExceptions } = await supabase
+    .from('exceptions_queue')
+    .select('*')
+    .eq('client_nip', nip)
+    .order('id', { ascending: false })
+    .limit(20)
+
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <Link href="/klienci" className="inline-flex items-center text-sm font-medium text-[#64748B] hover:text-[#1F3A5F]">
@@ -147,6 +155,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
       </div>
 
       <div className="grid grid-cols-1 gap-6">
+        <RecentExceptionsTable items={recentExceptions || []} />
         <PojazdyTable nip={nip} pojazdy={pojazdy || []} />
         <OpisyTable nip={nip} opisy={opisy || []} />
         <ClientChangesLog logs={logs || []} />
