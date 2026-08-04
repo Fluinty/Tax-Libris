@@ -1499,6 +1499,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
         queueId={exception.legacy_id}
         currentStatus={exception.status}
         ksiegoweNumer={exception.ksiegowe_numer}
+        nazwaDostawcy={exception.nazwa_dostawcy || exception.ai_proponowany_opis}
       />
     </Card>
   )

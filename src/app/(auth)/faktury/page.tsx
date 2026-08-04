@@ -182,6 +182,7 @@ export default async function FakturyPage({ searchParams }: PageProps) {
                       queueId={item.id}
                       currentStatus={item.status}
                       ksiegoweNumer={item.ksiegowe_numer}
+                      nazwaDostawcy={item.nazwa_dostawcy}
                     />
                   </td>
                 </tr>

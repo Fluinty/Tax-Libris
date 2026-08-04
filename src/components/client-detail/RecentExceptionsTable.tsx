@@ -91,6 +91,7 @@ export function RecentExceptionsTable({ items }: { items: ExceptionItem[] }) {
                       queueId={item.id}
                       currentStatus={item.status}
                       ksiegoweNumer={item.ksiegowe_numer}
+                      nazwaDostawcy={item.nazwa_dostawcy}
                     />
                   </td>
                 </tr>

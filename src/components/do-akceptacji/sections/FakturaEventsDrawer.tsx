@@ -137,6 +137,7 @@ interface FakturaEventsDrawerProps {
   queueId?: number
   currentStatus?: string
   ksiegoweNumer?: string | null
+  nazwaDostawcy?: string | null
 }
 
 export function FakturaEventsDrawer({
@@ -146,6 +147,7 @@ export function FakturaEventsDrawer({
   queueId,
   currentStatus,
   ksiegoweNumer,
+  nazwaDostawcy,
 }: FakturaEventsDrawerProps) {
   const [events, setEvents] = useState<FakturaEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -197,6 +199,11 @@ export function FakturaEventsDrawer({
               <Badge variant="outline" className="text-xs">
                 {ksiegoweNumer || '(brak numeru)'}
               </Badge>
+              {nazwaDostawcy && (
+                <Badge variant="outline" className="text-xs max-w-[200px] truncate" title={nazwaDostawcy}>
+                  {nazwaDostawcy}
+                </Badge>
+              )}
               {currentStatus && (
                 <Badge className="text-xs bg-slate-100 text-slate-700 border-none">
                   {statusLabel[currentStatus] || currentStatus}

@@ -11,6 +11,7 @@ interface FakturaHistoryButtonProps {
   fakturaId?: number
   currentStatus?: string
   ksiegoweNumer?: string | null
+  nazwaDostawcy?: string | null
 }
 
 export function FakturaHistoryButton({
@@ -18,6 +19,7 @@ export function FakturaHistoryButton({
   fakturaId,
   currentStatus,
   ksiegoweNumer,
+  nazwaDostawcy,
 }: FakturaHistoryButtonProps) {
   const [open, setOpen] = useState(false)
 
@@ -50,6 +52,7 @@ export function FakturaHistoryButton({
           fakturaId={fakturaId}
           currentStatus={currentStatus}
           ksiegoweNumer={ksiegoweNumer}
+          nazwaDostawcy={nazwaDostawcy}
         />
       )}
     </>
