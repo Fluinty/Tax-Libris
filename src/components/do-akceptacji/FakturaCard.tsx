@@ -42,6 +42,7 @@ import { PojazdRezimSection } from './sections/PojazdRezimSection'
 import { WeryfikacjaKontrahentaSection } from './sections/WeryfikacjaKontrahentaSection'
 import { ProceduryJpkSection } from './sections/ProceduryJpkSection'
 import { GtuSection } from './sections/GtuSection'
+import { PelnaFakturaSection } from './sections/PelnaFakturaSection'
 import { SrodekTrwalySection } from './sections/SrodekTrwalySection'
 import { TransakcjaZagranicznaSection } from './sections/TransakcjaZagranicznaSection'
 import { AiReviewSection, AiReviewBadge } from './sections/AiReviewSection'
@@ -492,6 +493,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
     return (
       <div className="mt-4 space-y-3">
+        {/* Pełna faktura KSeF */}
+        <PelnaFakturaSection exception={exception} officialVatTable={officialVatTable} />
+        
         {/* Pozycje VAT — ukryj dla klientów zwolnionych z VAT */}
         {isClientVatPayer && (
           <PozycjeVatSection

@@ -177,6 +177,7 @@ export interface ExceptionItem {
   ai_klasyfikacja_pozycji: KlasyfikacjaAiPozycja[] | null;
   zapis_vat_data: ZapisVATData | null;
   final_zapis_vat_data: ZapisVATData | null;
+  podglad_faktury?: any | null;
   kpir_pojazdowe_data: {
     wydatki_dotycza_pojazdu: boolean;
     procent_do_ujecia_w_kosztach: number;
@@ -421,6 +422,8 @@ export interface ClientPojazd {
   data_rozpoczecia_uzytkowania: string | null;
   typ_napedu: 'spalinowy' | 'hybrydowy' | 'elektryczny' | null;
   wartosc_nabycia: number | null;
+  leasingodawca_nip?: string | null;
+  vat26?: boolean;
 }
 
 

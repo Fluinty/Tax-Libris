@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Car } from 'lucide-react'
+import { Plus, Pencil, Car, Trash2, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -14,9 +14,13 @@ import { toast } from 'sonner'
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser'
 
 export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: any[], isAdmin?: boolean }) {
-  const [isAdminState, setIsAdminState] = useState<boolean>(isAdmin ?? false)
+  const [canEdit, setCanEdit] = useState<boolean>(isAdmin ?? false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  
+  const activePojazdy = pojazdy.filter(p => p.aktywny)
+  const inactivePojazdy = pojazdy.filter(p => !p.aktywny)
+  const [showInactive, setShowInactive] = useState(false)
   
   const [draft, setDraft] = useState<{
     nr_rejestracyjny: string
@@ -34,6 +38,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
     data_rozpoczecia_uzytkowania: string | null
     typ_napedu: string | null
     wartosc_nabycia: number | string | null
+    leasingodawca_nip: string
+    vat26: boolean
   }>({
     nr_rejestracyjny: '',
     marka_model: '',
@@ -50,11 +56,13 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
     data_rozpoczecia_uzytkowania: null,
     typ_napedu: 'spalinowy',
     wartosc_nabycia: null,
+    leasingodawca_nip: '',
+    vat26: false,
   })
 
   useEffect(() => {
     if (isAdmin !== undefined) {
-      setIsAdminState(isAdmin)
+      setCanEdit(isAdmin)
       return
     }
     const checkAdmin = async () => {
@@ -68,8 +76,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
           .eq('email', user.email)
           .eq('aktywny', true)
           .single()
-        if (profile?.rola === 'admin') {
-          setIsAdminState(true)
+        if (profile?.rola === 'admin' || profile?.rola === 'ksiegowa') {
+          setCanEdit(true)
         }
       } catch (err) {
         console.error('Błąd weryfikacji roli w PojazdyTable:', err)
@@ -96,6 +104,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       data_rozpoczecia_uzytkowania: null,
       typ_napedu: 'spalinowy',
       wartosc_nabycia: null,
+      leasingodawca_nip: '',
+      vat26: false,
     })
     setIsModalOpen(true)
   }
@@ -118,6 +128,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       data_rozpoczecia_uzytkowania: p.data_rozpoczecia_uzytkowania ?? null,
       typ_napedu: p.typ_napedu ?? 'spalinowy',
       wartosc_nabycia: p.wartosc_nabycia ?? null,
+      leasingodawca_nip: p.leasingodawca_nip || '',
+      vat26: p.vat26 ?? false,
     })
     setIsModalOpen(true)
   }
@@ -141,6 +153,8 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
         data_rozpoczecia_uzytkowania: draft.data_rozpoczecia_uzytkowania || null,
         typ_napedu: draft.typ_napedu || null,
         wartosc_nabycia: draft.wartosc_nabycia === null || draft.wartosc_nabycia === '' ? null : Number(draft.wartosc_nabycia),
+        leasingodawca_nip: draft.leasingodawca_nip || null,
+        vat26: draft.vat26,
       }
       if (editingId) {
         await updatePojazd(editingId, nip, payload)
@@ -152,6 +166,31 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       setIsModalOpen(false)
     } catch (e) {
       toast.error('Błąd zapisywania')
+    }
+  }
+
+  const handleDelete = async (p: any) => {
+    if (!window.confirm('Pojazd zostanie dezaktywowany — historyczne faktury pozostaną nietknięte. Kontynuować?')) return
+    try {
+      await updatePojazd(p.id, nip, { 
+        aktywny: false, 
+        data_zakonczenia: new Date().toISOString() 
+      })
+      toast.success('Pojazd został dezaktywowany')
+    } catch (e) {
+      toast.error('Błąd usuwania pojazdu')
+    }
+  }
+
+  const handleRestore = async (p: any) => {
+    try {
+      await updatePojazd(p.id, nip, { 
+        aktywny: true, 
+        data_zakonczenia: null 
+      })
+      toast.success('Pojazd został reaktywowany')
+    } catch (e) {
+      toast.error('Błąd przywracania pojazdu')
     }
   }
 
@@ -211,9 +250,9 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
       <div className="p-4 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
         <h2 className="font-bold text-[#1E293B] flex items-center gap-2">
           <Car className="w-4 h-4 text-[#4A90E2]" />
-          Pojazdy klienta ({pojazdy.length})
+          Aktywne pojazdy ({activePojazdy.length})
         </h2>
-        {isAdminState && (
+        {canEdit && (
           <Button onClick={openAdd} size="sm" className="h-8 bg-[#1F3A5F] text-white">
             <Plus className="w-3 h-3 mr-1" /> Dodaj pojazd
           </Button>
@@ -226,21 +265,22 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
             <tr className="bg-white border-b border-[#E2E8F0]">
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Nr rej</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Marka/model</th>
-              <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Leasing</th>
-              <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Rozliczenie</th>
+              <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Rozliczenie (Enum)</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Napęd</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Własność</th>
               <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Zastosowanie</th>
-              <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Aktywny</th>
-              {isAdminState && <th className="text-right px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Akcje</th>}
+              <th className="text-right px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Wartość nabycia</th>
+              {canEdit && <th className="text-right px-4 py-3 font-semibold text-[#64748B] text-xs uppercase">Akcje</th>}
             </tr>
           </thead>
           <tbody>
-            {pojazdy.map(p => (
-              <tr key={p.id} className={`border-b border-[#F1F5F9] hover:bg-[#F8FAFC] ${!p.aktywny ? 'opacity-60' : ''}`}>
-                <td className="px-4 py-3 font-medium text-[#1E293B]">{p.nr_rejestracyjny}</td>
+            {activePojazdy.map(p => (
+              <tr key={p.id} className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC]">
+                <td className="px-4 py-3 font-medium text-[#1E293B]">
+                  {p.nr_rejestracyjny}
+                  {p.vat26 && <Badge variant="secondary" className="ml-2 text-[10px] h-4 bg-purple-50 text-purple-700">VAT-26</Badge>}
+                </td>
                 <td className="px-4 py-3 text-[#64748B]">{p.marka_model || '-'}</td>
-                <td className="px-4 py-3 text-[#64748B]">{p.nr_umowy_leasingu || '-'}</td>
                 <td className="px-4 py-3">
                   <Badge variant="outline" className="text-xs font-normal bg-white">
                     {getRozliczenieEnumLabel(p.sposob_rozliczenia_enum)}
@@ -251,28 +291,67 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
                 </td>
                 <td className="px-4 py-3 text-[#64748B]">
                   {wlasnoscLabels[p.forma_wlasnosci] || p.forma_wlasnosci || '-'}
+                  {p.forma_wlasnosci === 'leasing' && p.leasingodawca_nip && <div className="text-[10px] text-slate-400">NIP: {p.leasingodawca_nip}</div>}
                 </td>
                 <td className="px-4 py-3 text-[#64748B]">
                   {zastosowanieLabels[p.zastosowanie] || p.zastosowanie || '-'}
                 </td>
-                <td className="px-4 py-3 text-center">
-                  {p.aktywny ? <span className="text-green-500">✓</span> : <span className="text-slate-300">-</span>}
+                <td className="px-4 py-3 text-right font-medium text-[#1E293B]">
+                  {p.wartosc_nabycia ? `${p.wartosc_nabycia.toLocaleString('pl-PL')} zł` : '-'}
                 </td>
-                {isAdminState && (
-                  <td className="px-4 py-3 text-right">
+                {canEdit && (
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-[#64748B] hover:text-[#4A90E2]" onClick={() => openEdit(p)}>
                       <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-[#64748B] hover:text-red-500 ml-1" onClick={() => handleDelete(p)}>
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </td>
                 )}
               </tr>
             ))}
-            {pojazdy.length === 0 && (
-              <tr><td colSpan={isAdminState ? 9 : 8} className="text-center py-8 text-[#64748B]">Brak dodanych pojazdów</td></tr>
+            {activePojazdy.length === 0 && (
+              <tr><td colSpan={canEdit ? 8 : 7} className="text-center py-8 text-[#64748B]">Brak dodanych aktywnych pojazdów</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Nieaktywne pojazdy */}
+      {inactivePojazdy.length > 0 && (
+        <div className="mt-4 border-t border-[#E2E8F0]">
+          <button 
+            className="w-full text-left p-3 text-sm font-medium text-slate-500 hover:bg-slate-50 flex items-center justify-between"
+            onClick={() => setShowInactive(!showInactive)}
+          >
+            <span>Nieaktywne pojazdy ({inactivePojazdy.length})</span>
+            <span>{showInactive ? 'Zwiń' : 'Rozwiń'}</span>
+          </button>
+          {showInactive && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm opacity-60">
+                <tbody>
+                  {inactivePojazdy.map(p => (
+                    <tr key={p.id} className="border-t border-[#F1F5F9] bg-slate-50/50">
+                      <td className="px-4 py-3 font-medium text-[#1E293B]">{p.nr_rejestracyjny}</td>
+                      <td className="px-4 py-3 text-[#64748B]">{p.marka_model || '-'}</td>
+                      <td className="px-4 py-3 text-[#64748B]">Zakończono: {p.data_zakonczenia?.split('T')[0] || '-'}</td>
+                      {canEdit && (
+                        <td className="px-4 py-3 text-right">
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleRestore(p)}>
+                            <RotateCcw className="w-3 h-3 mr-1" /> Reaktywuj
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
@@ -290,9 +369,16 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
                 <Input value={draft.marka_model} onChange={e => setDraft({...draft, marka_model: e.target.value})} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Nr umowy leasingu</Label>
-              <Input value={draft.nr_umowy_leasingu} onChange={e => setDraft({...draft, nr_umowy_leasingu: e.target.value})} />
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>NIP leasingodawcy</Label>
+                <Input value={draft.leasingodawca_nip} onChange={e => setDraft({...draft, leasingodawca_nip: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nr umowy leasingu</Label>
+                <Input value={draft.nr_umowy_leasingu} onChange={e => setDraft({...draft, nr_umowy_leasingu: e.target.value})} />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -350,9 +436,9 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
               </select>
             </div>
 
-            {isAdminState && (
+            {canEdit && (
               <div className="border-t border-[#E2E8F0] pt-4 space-y-4">
-                <h4 className="font-semibold text-xs text-[#64748B] uppercase tracking-wider">Dane podatkowe (tylko Admin)</h4>
+                <h4 className="font-semibold text-xs text-[#64748B] uppercase tracking-wider">Dane księgowe</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Rozliczenie reżimu (enum)</Label>
@@ -435,12 +521,21 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 pt-1">
-                  <Switch
-                    checked={!!draft.ewidencja_przebiegu}
-                    onCheckedChange={c => setDraft({ ...draft, ewidencja_przebiegu: c })}
-                  />
-                  <Label>Ewidencja przebiegu</Label>
+                <div className="flex flex-col gap-3 pt-1">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={!!draft.ewidencja_przebiegu}
+                      onCheckedChange={c => setDraft({ ...draft, ewidencja_przebiegu: c })}
+                    />
+                    <Label>Ewidencja przebiegu</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={!!draft.vat26}
+                      onCheckedChange={c => setDraft({ ...draft, vat26: c })}
+                    />
+                    <Label>VAT-26 (pełne odliczenie VAT)</Label>
+                  </div>
                 </div>
               </div>
             )}
