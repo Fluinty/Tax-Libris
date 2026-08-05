@@ -203,7 +203,7 @@ export function mergeInlineEditsPojazd(
     const norm = normalizujRezim(inputRezim)
     if (norm === null) {
       console.warn('Nieznana wartość reżimu w mergeInlineEditsPojazd (inline edit):', inputRezim)
-      return aiPojazd || null
+      return null
     }
     const procent = mapRezimToProcentEnum(norm)
     const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatny_50_20' : 'mieszany_50_75'
@@ -225,7 +225,7 @@ export function mergeInlineEditsPojazd(
       const norm = normalizujRezim(inputRezim)
       if (norm === null) {
         console.warn('Nieznana wartość reżimu w mergeInlineEditsPojazd (AI fallback):', inputRezim)
-        return aiPojazd
+        return null
       }
       const procent = mapRezimToProcentEnum(norm)
       const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatny_50_20' : 'mieszany_50_75'

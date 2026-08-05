@@ -169,7 +169,12 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
 
   // KLUCZ: użyj final_kwoty_per_kolumna z fluinty.faktury (po triggerze)
   // Fallback do ai_kwoty jeśli Monika nie edytowała per-pozycja
-  const kwotyDoZapisuRaw = faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna
+  // ALE: jeśli reżim był edytowany i kwoty zostały wyczyszczone (inline save → null),
+  // zachowaj null — worker (S47) przeliczy z klasyfikacji
+  const rezimClearedKwoty = exception.rezim_edited === true && faktura?.final_kwoty_per_kolumna == null
+  const kwotyDoZapisuRaw = rezimClearedKwoty
+    ? null
+    : (faktura?.final_kwoty_per_kolumna ?? faktura?.ai_kwoty_per_kolumna ?? exception.ai_kwoty_per_kolumna)
   const kwotyDoZapisu = kwotyDoZapisuRaw ? roundKwoty(kwotyDoZapisuRaw) : kwotyDoZapisuRaw
 
   // Scalenie inline edits (GTU, procedury, pozycje VAT, pojazd)
