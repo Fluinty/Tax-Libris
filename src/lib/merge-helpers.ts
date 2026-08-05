@@ -130,9 +130,30 @@ export function mergeInlineEditsVat(exception: any, pozycjeEditable?: any[], sca
 export function normalizujRezim(v: string | null | undefined): '100' | '50_75' | '20' | null {
   if (!v) return null
   const s = String(v).toLowerCase().trim()
+  // Direct matches — known enum values and common legacy formats
   if (['100', '100%', '100.00%', 'pelne_100', 'sluzbowy_100_100', 'ciezarowy_100_100'].includes(s)) return '100'
   if (['50_75', '75%', '75.00%', '75', 'mieszany_50_75'].includes(s)) return '50_75'
-  if (['20', '20%', '20.00%', 'prywatne_20', 'prywatny_50_20'].includes(s)) return '20'
+  if (['20', '20%', '20.00%', '20_50', 'prywatne_20', 'prywatny_50_20'].includes(s)) return '20'
+  // Leasing enum_label patterns: "leasing proporcja 100.00%", "leasing_proporcja" etc.
+  if (s.includes('leasing')) {
+    const numMatch = s.match(/([\d.]+)\s*%?/)
+    if (numMatch) {
+      const pct = parseFloat(numMatch[1])
+      if (pct >= 95) return '100'
+      if (pct >= 50) return '50_75'
+      if (pct > 0) return '20'
+    }
+    return '100' // leasing without number → default 100% (limit < wartość nabycia)
+  }
+  // Generic percentage parsing: extract number from strings like "75.00%", "20%"
+  const pctMatch = s.match(/^([\d.]+)\s*%?$/)
+  if (pctMatch) {
+    const pct = parseFloat(pctMatch[1])
+    if (pct >= 95) return '100'
+    if (pct >= 50) return '50_75'
+    if (pct > 0) return '20'
+  }
+  // Unrecognized → null, never guess
   return null
 }
 
@@ -149,38 +170,34 @@ export function roundKwoty(kwoty: Record<string, number>): Record<string, number
 
 /**
  * Build final_kpir_pojazdowe_data from inline PojazdRezimSection edits.
+ *
+ * Returns null in 3 cases:
+ *   1. User explicitly disabled vehicle regime (rezim_edited=true, both finals null) — DEFEKT 1
+ *   2. Leasing card (typ_wydatku='rata_leasingowa' / strategia='leasing_proporcja') — DEFEKT 4
+ *   3. No AI data and no inline edits
+ *
+ * Does NOT include worker-only fields (koszt_kpir_obliczony, wydatki_pozostale_wartosc_faktury,
+ * wartosc_nabycia_pojazdu, pojazd_dopasowany) — those are computed by worker.
  */
 export function mergeInlineEditsPojazd(
   exception: any,
-  pozycjeEditable: any[] = [],
-  finalKwotyPerKolumna: Record<string, number> = {}
+  _pozycjeEditable: any[] = [],
+  _finalKwotyPerKolumna: Record<string, number> = {}
 ): any {
   const aiPojazd = exception.ai_kpir_pojazdowe_data || exception.kpir_pojazdowe_data
 
-  // Calculate brutto of vehicle items (all KUP positions since it's a vehicle card)
-  const sumBruttoKup = pozycjeEditable
-    .filter(p => p.effective_kup_status !== 'nkup')
-    .reduce((sum, p) => sum + Number(p.wartosc_brutto || 0), 0)
-    
-  // Koszt KPiR is the amount that goes to WydatkiPozostale
-  const kosztKpir = finalKwotyPerKolumna['WydatkiPozostale'] ?? 0
-
-
-  // KRYTYCZNE: jeśli Monika jawnie WYŁĄCZYŁA suwak pojazdu (rezim_edited=true,
-  // ale oba final pola = null) → jawne false, wyczyszczone pole, NIE fallback na AI
-  if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
-    return {
-      ...(aiPojazd || {}),
-      wydatki_dotycza_pojazdu: false,
-      procent_do_ujecia_w_kosztach: 1,
-      wydatki_pozostale_wartosc_faktury: 0,
-      strategia: null,
-      pojazd_id: null,
-      rezim_proc: null,
-    }
+  // ── DEFEKT 4: Leasing card — panel MUST NOT produce final_kpir_pojazdowe_data.
+  // Worker has dedicated path (S46 guard) and computes the proportion from vehicle value.
+  if (aiPojazd?.typ_wydatku === 'rata_leasingowa' || aiPojazd?.strategia === 'leasing_proporcja') {
+    return null
   }
 
-  // If Monika edited inline (pojazd_id_final or rezim_paliwowy_final or rezim_edited is true with a regime)
+  // ── DEFEKT 1: User explicitly DISABLED vehicle regime → null (not a frankenstein object)
+  if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
+    return null
+  }
+
+  // ── User edited regime inline (pojazd_id_final or rezim_paliwowy_final set)
   if (exception.pojazd_id_final != null || exception.rezim_paliwowy_final != null) {
     const inputRezim = exception.rezim_paliwowy_final !== null ? exception.rezim_paliwowy_final : (aiPojazd?.rezim_proc ?? aiPojazd?.strategia)
     const norm = normalizujRezim(inputRezim)
@@ -189,20 +206,19 @@ export function mergeInlineEditsPojazd(
       return aiPojazd || null
     }
     const procent = mapRezimToProcentEnum(norm)
-    const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatne_20' : 'mieszany_50_75'
+    const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatny_50_20' : 'mieszany_50_75'
 
     return {
-      ...(aiPojazd || {}),
       wydatki_dotycza_pojazdu: true,
       procent_do_ujecia_w_kosztach: procent,
       strategia: strategia,
       pojazd_id: exception.pojazd_id_final ?? aiPojazd?.pojazd_id ?? null,
-      rezim_proc: norm,
-      wydatki_pozostale_wartosc_faktury: Math.round(sumBruttoKup * 100) / 100,
-      koszt_kpir_obliczony: Math.round(kosztKpir * 100) / 100,
+      nie_dotyczy_paliwa: aiPojazd?.nie_dotyczy_paliwa ?? true,
+      typ_wydatku: aiPojazd?.typ_wydatku ?? null,
     }
   }
 
+  // ── AI fallback: no inline edit, AI says vehicle
   if (aiPojazd && aiPojazd.wydatki_dotycza_pojazdu === true) {
     const inputRezim = aiPojazd.rezim_proc ?? aiPojazd.strategia
     if (inputRezim) {
@@ -212,14 +228,14 @@ export function mergeInlineEditsPojazd(
         return aiPojazd
       }
       const procent = mapRezimToProcentEnum(norm)
-      const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatne_20' : 'mieszany_50_75'
+      const strategia = norm === '100' ? 'pelne_100' : norm === '20' ? 'prywatny_50_20' : 'mieszany_50_75'
       return {
-        ...aiPojazd,
+        wydatki_dotycza_pojazdu: true,
         procent_do_ujecia_w_kosztach: procent,
         strategia: strategia,
-        rezim_proc: norm,
-        wydatki_pozostale_wartosc_faktury: Math.round(sumBruttoKup * 100) / 100,
-        koszt_kpir_obliczony: Math.round(kosztKpir * 100) / 100,
+        pojazd_id: aiPojazd.pojazd_id ?? null,
+        nie_dotyczy_paliwa: aiPojazd.nie_dotyczy_paliwa ?? true,
+        typ_wydatku: aiPojazd.typ_wydatku ?? null,
       }
     }
   }

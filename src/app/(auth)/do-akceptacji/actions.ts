@@ -726,7 +726,8 @@ const ALLOWED_JPK_KEYS = [
   'procedura_jpk_final', 'typ_dokumentu_jpk_final', 'jpk_procedury_edited',
   'pozycje_vat_final', 'pozycje_vat_edited',
   'pojazd_id_final', 'rezim_paliwowy_final', 'rezim_edited',
-  'ksieguj_jako_st'
+  'ksieguj_jako_st',
+  'final_kwoty_per_kolumna',
 ]
 
 // Generic update for any JPK section — pass the exact columns to SET

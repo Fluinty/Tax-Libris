@@ -64,7 +64,9 @@ function mapSposobToRezim(s: string): string {
 }
 
 export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPojazdId, aiRezim, pojazdIdFinal, rezimFinal, isEdited, readOnly = false, kwotaBrutto, kpirPojazdoweData }: Props) {
-  // BUG 2 fix: initialize from kpirPojazdoweData if available
+  // DEFEKT 4: Detect leasing card — full lockdown, read-only panel only
+  const isLeasing = kpirPojazdoweData?.typ_wydatku === 'rata_leasingowa' || kpirPojazdoweData?.strategia === 'leasing_proporcja'
+
   const workerSaysVehicle = kpirPojazdoweData?.wydatki_dotycza_pojazdu === true
 
   const isExplicitFalse = isEdited && pojazdIdFinal === null && rezimFinal === null
@@ -75,7 +77,6 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   const [selRezim, setSelRezim] = useState(effectiveRezim)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const [showManualRezim, setShowManualRezim] = useState(false)
 
   const active = clientPojazdy.filter(p => p.aktywny)
   const archived = clientPojazdy.filter(p => !p.aktywny)
@@ -90,10 +91,12 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
     setDirty(true)
     setSaving(true)
     try {
+      // DEFEKT 2: atomically null final_kwoty_per_kolumna — worker recalculates
       const res = await updateJpkSection(exceptionId, {
         pojazd_id_final: v ? selId : null,
         rezim_paliwowy_final: v ? selRezim : null,
-        rezim_edited: true
+        rezim_edited: true,
+        final_kwoty_per_kolumna: null,
       })
       if (!res?.success) {
         toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
@@ -124,10 +127,12 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
     setDirty(true)
     setSaving(true)
     try {
+      // DEFEKT 2: atomically null final_kwoty_per_kolumna — worker recalculates
       const res = await updateJpkSection(exceptionId, {
         pojazd_id_final: p.id,
         rezim_paliwowy_final: newRezim,
-        rezim_edited: true
+        rezim_edited: true,
+        final_kwoty_per_kolumna: null,
       })
       if (!res?.success) {
         toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
@@ -155,10 +160,12 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
     setDirty(true)
     setSaving(true)
     try {
+      // DEFEKT 2: atomically null final_kwoty_per_kolumna — worker recalculates
       const res = await updateJpkSection(exceptionId, {
         pojazd_id_final: selId,
         rezim_paliwowy_final: val,
-        rezim_edited: true
+        rezim_edited: true,
+        final_kwoty_per_kolumna: null,
       })
       if (!res?.success) {
         toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
@@ -184,7 +191,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
     const prevDirty = dirty
     setSaving(true)
     try {
-      const res = await updateJpkSection(exceptionId, { pojazd_id_final: enabled ? selId : null, rezim_paliwowy_final: enabled ? selRezim : null, rezim_edited: true })
+      // DEFEKT 2: atomically null final_kwoty_per_kolumna — worker recalculates
+      const res = await updateJpkSection(exceptionId, { pojazd_id_final: enabled ? selId : null, rezim_paliwowy_final: enabled ? selRezim : null, rezim_edited: true, final_kwoty_per_kolumna: null })
       if (!res?.success) {
         toast.error(`Nie zapisano zmiany: ${res?.error || 'Błąd zapisu'}`)
         setEnabled(prevEnabled)
@@ -242,7 +250,56 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
   const badge = badgeText ? <Badge variant="outline" className="text-[10px] h-5 font-normal text-orange-700 border-orange-200 bg-orange-50">{badgeText}</Badge> : null
 
   return (
-    <CollapsibleJpkSection title="Pojazd i reżim paliwowy" badge={badge} defaultOpen={isEdited || effectiveId !== null || workerSaysVehicle} icon={<Car className="w-4 h-4" />}>
+    <CollapsibleJpkSection title="Pojazd i reżim paliwowy" badge={badge} defaultOpen={isEdited || effectiveId !== null || workerSaysVehicle || isLeasing} icon={<Car className="w-4 h-4" />}>
+      {/* DEFEKT 4: Leasing lockdown — read-only panel, no controls */}
+      {isLeasing ? (
+        <div className="space-y-4">
+          <div className="bg-indigo-50/60 border border-indigo-200 rounded-md p-3 space-y-1.5">
+            <div className="text-xs font-medium text-indigo-700 uppercase mb-2 flex items-center gap-1.5">
+              📋 Rata leasingowa — proporcja automatyczna
+            </div>
+            <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+              {kpirPojazdoweData?.leasingodawca && (
+                <>
+                  <span className="text-slate-500">Leasingodawca:</span>
+                  <span className="font-medium text-slate-800">{kpirPojazdoweData.leasingodawca}</span>
+                </>
+              )}
+              {(kpirPojazdoweData?.pojazd_nr_rej) && (
+                <>
+                  <span className="text-slate-500">Pojazd:</span>
+                  <span className="font-medium text-slate-800">{kpirPojazdoweData.pojazd_nr_rej}</span>
+                </>
+              )}
+              {kpirPojazdoweData?.wartosc_nabycia_pojazdu != null && (
+                <>
+                  <span className="text-slate-500">Wartość nabycia:</span>
+                  <span className="font-medium text-slate-800">
+                    {kpirPojazdoweData.wartosc_nabycia_pojazdu.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
+                  </span>
+                </>
+              )}
+              {kpirPojazdoweData?.rezim_proc && (
+                <>
+                  <span className="text-slate-500">Proporcja:</span>
+                  <span className="font-semibold text-indigo-700">{kpirPojazdoweData.rezim_proc}</span>
+                </>
+              )}
+              <span className="text-slate-500">Wyliczony koszt:</span>
+              <span className="font-semibold text-emerald-700">
+                {kpirPojazdoweData?.koszt_kpir_obliczony?.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
+              </span>
+              <span className="text-slate-500">Formuła:</span>
+              <span className="font-medium text-slate-800">proporcja × (netto + ½ nieodliczonego VAT), VAT 50/50</span>
+            </div>
+            <p className="text-xs text-indigo-600 mt-3 pt-2 border-t border-indigo-100">
+              Rata leasingowa — proporcja liczona automatycznie z wartości pojazdu. Nie wymaga korekty ręcznej.
+              Jeśli to nie jest rata leasingowa — pomiń kartę i zgłoś błąd klasyfikacji.
+            </p>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-sm text-slate-700">Faktura dotyczy pojazdu?</span>
         <Switch checked={enabled} onCheckedChange={handleSwitchChange} disabled={readOnly || saving} size="sm" />
@@ -284,57 +341,7 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
             </div>
           )}
 
-          {/* Leasing rate dedicated section */}
-          {kpirPojazdoweData && kpirPojazdoweData.typ_wydatku === 'rata_leasingowa' && (
-            <div className="bg-indigo-50/60 border border-indigo-200 rounded-md p-3 space-y-1.5">
-              <div className="text-xs font-medium text-indigo-700 uppercase mb-2 flex items-center gap-1.5">
-                📋 Opłata leasingowa
-              </div>
-              <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
-                {kpirPojazdoweData.leasingodawca && (
-                  <>
-                    <span className="text-slate-500">Leasingodawca:</span>
-                    <span className="font-medium text-slate-800">{kpirPojazdoweData.leasingodawca}</span>
-                  </>
-                )}
-                {(kpirPojazdoweData.pojazd_nr_rej || selPojazd) && (
-                  <>
-                    <span className="text-slate-500">Pojazd:</span>
-                    <span className="font-medium text-slate-800">
-                      {selPojazd ? `${selPojazd.marka_model || ''} ${selPojazd.nr_rejestracyjny}` : kpirPojazdoweData.pojazd_nr_rej}
-                    </span>
-                  </>
-                )}
-                {kpirPojazdoweData.wartosc_nabycia_pojazdu != null && (
-                  <>
-                    <span className="text-slate-500">Wartość nabycia:</span>
-                    <span className="font-medium text-slate-800">
-                      {kpirPojazdoweData.wartosc_nabycia_pojazdu.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
-                    </span>
-                  </>
-                )}
-                {kpirPojazdoweData.rezim_proc && (
-                  <>
-                    <span className="text-slate-500">Proporcja:</span>
-                    <span className="font-semibold text-indigo-700">{kpirPojazdoweData.rezim_proc}</span>
-                  </>
-                )}
-                <span className="text-slate-500">Wyliczony koszt:</span>
-                <span className="font-semibold text-emerald-700">
-                  {kpirPojazdoweData.koszt_kpir_obliczony?.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł
-                </span>
-                <span className="text-slate-500">Formuła:</span>
-                <span className="font-medium text-slate-800">proporcja × (netto + ½ nieodliczonego VAT), VAT 50/50</span>
-              </div>
-              {!showManualRezim && (
-                <div className="mt-3 pt-2">
-                  <button type="button" onClick={() => setShowManualRezim(true)} className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline">
-                    Zmień reżim ręcznie
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Old leasing section removed — leasing is handled by lockdown above */}
 
           {/* TODO: Alert "leasing_bez_danych" — czeka na flagę z workera */}
 
@@ -363,19 +370,18 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
           </div>
 
           {/* Regime selection */}
-          {(!kpirPojazdoweData || kpirPojazdoweData.typ_wydatku !== 'rata_leasingowa' || showManualRezim) && (
-            <div>
-              <label className="text-xs font-medium text-slate-500 uppercase mb-1.5 block">Reżim VAT i KPiR</label>
-              <div className="space-y-1">
-                {REZIM_OPTIONS.map(o => (
-                  <label key={o.value} className={cn("flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors", selRezim === o.value ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300")}>
-                    <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => handleRezimChange(o.value)} disabled={readOnly || saving} className="accent-[#4A90E2] mt-0.5" />
-                    <div><div className="text-sm font-medium text-slate-800">{o.label}</div><div className="text-xs text-slate-500">{o.desc}</div></div>
-                  </label>
-                ))}
-              </div>
+          {/* Regime selection — always shown for non-leasing cards */}
+          <div>
+            <label className="text-xs font-medium text-slate-500 uppercase mb-1.5 block">Reżim VAT i KPiR</label>
+            <div className="space-y-1">
+              {REZIM_OPTIONS.map(o => (
+                <label key={o.value} className={cn("flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors", selRezim === o.value ? "border-[#4A90E2] bg-blue-50/50" : "border-slate-200 hover:border-slate-300")}>
+                  <input type="radio" name={`rezim-${exceptionId}`} checked={selRezim === o.value} onChange={() => handleRezimChange(o.value)} disabled={readOnly || saving} className="accent-[#4A90E2] mt-0.5" />
+                  <div><div className="text-sm font-medium text-slate-800">{o.label}</div><div className="text-xs text-slate-500">{o.desc}</div></div>
+                </label>
+              ))}
             </div>
-          )}
+          </div>
 
           <details className="text-sm">
             <summary className="cursor-pointer text-slate-500 font-medium">Podgląd obliczeń</summary>
@@ -391,6 +397,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
           <div className="flex-1" />
           <Button size="sm" onClick={handleSave} disabled={saving || !dirty} className="bg-[#1F3A5F] hover:bg-[#2A4D7C] text-white text-xs">{saving ? 'Zapisuję...' : 'Zapisz'}</Button>
         </div>
+      )}
+      </>
       )}
     </CollapsibleJpkSection>
   )

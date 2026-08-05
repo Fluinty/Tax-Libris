@@ -124,6 +124,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
   const effectiveRezim = useMemo(() => {
     const aiPojazd = (exception as any).ai_kpir_pojazdowe_data || exception.kpir_pojazdowe_data
+    // DEFEKT 4: Leasing cards — regime is computed by worker, not by front-end
+    if (aiPojazd?.typ_wydatku === 'rata_leasingowa' || aiPojazd?.strategia === 'leasing_proporcja') {
+      return null
+    }
     if (exception.rezim_edited === true && exception.pojazd_id_final == null && exception.rezim_paliwowy_final == null) {
       return null
     }
