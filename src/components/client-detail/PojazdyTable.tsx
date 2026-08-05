@@ -70,13 +70,21 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
         const supabase = createSupabaseBrowserClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user?.email) return
-        const { data: profile } = await supabase
+        
+        const { data: profile, error } = await supabase
+          .schema('fluinty')
           .from('panel_users')
           .select('rola')
           .eq('email', user.email)
           .eq('aktywny', true)
           .single()
-        if (profile?.rola === 'admin' || profile?.rola === 'ksiegowa') {
+          
+        if (error || !profile) {
+          console.warn(`[PojazdyTable] Fallback-check failed for email: ${user.email}. Result:`, { profile, error })
+          return
+        }
+        
+        if (profile.rola === 'admin' || profile.rola === 'ksiegowa') {
           setCanEdit(true)
         }
       } catch (err) {
