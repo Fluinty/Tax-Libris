@@ -49,7 +49,7 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   if (officialVatTable && Object.keys(officialVatTable).length > 0) {
     vatTableBrutto = 0
     Object.values(officialVatTable).forEach((vals: any) => {
-      vatTableBrutto += vals.brutto || 0
+      vatTableBrutto += parseAmount(vals?.brutto)
     })
   }
 
@@ -70,6 +70,11 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   return (
     <CollapsibleJpkSection title="Pełna faktura (KSeF)" icon={<FileText className="w-4 h-4" />}>
       <div className="space-y-4 text-sm">
+        {/* DEBUG INFO */}
+        <div className="bg-red-100 text-red-800 p-2 text-xs font-mono rounded">
+          DEBUG: doZaplaty={doZaplaty}, vatTableBrutto={vatTableBrutto}, diff={rozrachunkiDiff}, layer2Diff={layer2Diff}, showL2={showLayer2Row ? '1' : '0'}, maDodatkowe={dodatkoweRozliczenia.length}
+        </div>
+
         {/* NAGŁÓWEK / PODSUMOWANIE */}
         <div className="bg-slate-50 p-3 rounded-md border border-slate-100 flex flex-wrap gap-4 items-start">
           <div className="flex-1 min-w-[200px]">
