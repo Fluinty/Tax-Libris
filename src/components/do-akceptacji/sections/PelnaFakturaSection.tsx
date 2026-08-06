@@ -1,3 +1,16 @@
+'use client'
+
+/**
+ * ZASADY MODYFIKACJI WIDOKU FAKTURY KSEF:
+ * 
+ * Ta aplikacja korzysta z DWÓCH bliźniaczych komponentów do renderowania podglądu faktury:
+ * 1. FakturaPreview.tsx - "Sticky" panel boczny z podsumowaniem (kanoniczny widok dla księgowej na co dzień).
+ * 2. PelnaFakturaSection.tsx (TEN PLIK) - Zwijana, pełna sekcja KSeF na dole formularza.
+ * 
+ * Wszelkie zmiany wizualne i logiczne w prezentacji faktury (np. warstwy rozliczeń, nowe pola)
+ * należy implementować W OBU PLIKACH, aby utrzymać spójność.
+ */
+
 import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Car, AlertTriangle } from 'lucide-react'
@@ -70,11 +83,6 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   return (
     <CollapsibleJpkSection title="Pełna faktura (KSeF)" icon={<FileText className="w-4 h-4" />}>
       <div className="space-y-4 text-sm">
-        {/* DEBUG INFO */}
-        <div className="bg-red-100 text-red-800 p-2 text-xs font-mono rounded">
-          DEBUG: doZaplaty={doZaplaty}, vatTableBrutto={vatTableBrutto}, diff={rozrachunkiDiff}, layer2Diff={layer2Diff}, showL2={showLayer2Row ? '1' : '0'}, maDodatkowe={dodatkoweRozliczenia.length}
-        </div>
-
         {/* NAGŁÓWEK / PODSUMOWANIE */}
         <div className="bg-slate-50 p-3 rounded-md border border-slate-100 flex flex-wrap gap-4 items-start">
           <div className="flex-1 min-w-[200px]">

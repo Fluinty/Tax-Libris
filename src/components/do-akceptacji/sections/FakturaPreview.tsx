@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * ZASADY MODYFIKACJI WIDOKU FAKTURY KSEF:
+ * 
+ * Ta aplikacja korzysta z DWÓCH bliźniaczych komponentów do renderowania podglądu faktury:
+ * 1. FakturaPreview.tsx (TEN PLIK) - "Sticky" panel boczny z podsumowaniem (kanoniczny widok dla księgowej na co dzień).
+ * 2. PelnaFakturaSection.tsx - Zwijana, pełna sekcja KSeF na dole formularza.
+ * 
+ * Wszelkie zmiany wizualne i logiczne w prezentacji faktury (np. warstwy rozliczeń, nowe pola)
+ * należy implementować W OBU PLIKACH, aby utrzymać spójność.
+ */
+
 import type { ExceptionWithClient, PozycjaXml, PozycjaVAT } from '@/types/database'
 
 interface FakturaPreviewProps {
@@ -9,8 +20,8 @@ interface FakturaPreviewProps {
 // ── Helpers ──────────────────────────────────────────
 
 function fmtKwota(n: number | string | null | undefined): string {
-  const v = Number(n || 0)
-  if (isNaN(v)) return '0,00 zł'
+  const parsed = typeof n === 'string' ? parseFloat(n.replace(',', '.').replace('−', '-')) : Number(n)
+  const v = isNaN(parsed) ? 0 : parsed
   return v.toLocaleString('pl-PL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -230,6 +241,21 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
   const sumaVat = pozycjeVat.reduce((a, p) => a + p.vat, 0) || null
   const sumaBrutto = pozycjeVat.reduce((a, p) => a + p.brutto, 0) || e.kwota_brutto
 
+  // ── Rozliczenia poza fakturą (KSeF Layer 1 & 2) ──
+  const podglad = (e.podglad_faktury as any) || {}
+  const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
+  let sumaDodatkowych = 0
+  dodatkoweRozliczenia.forEach((roz: any) => {
+    const parsed = typeof roz.kwota === 'string' ? parseFloat(roz.kwota.replace(',', '.').replace('−', '-')) : Number(roz.kwota)
+    if (!isNaN(parsed)) sumaDodatkowych += parsed
+  })
+
+  const doZaplaty = e.kwota_brutto ?? 0
+  const rozrachunkiDiff = doZaplaty - (sumaBrutto ?? 0)
+  const showLayer2 = Math.abs(rozrachunkiDiff) > 0.02
+  const layer2Diff = dodatkoweRozliczenia.length > 0 ? (rozrachunkiDiff - sumaDodatkowych) : rozrachunkiDiff
+  const showLayer2Row = showLayer2 && Math.abs(layer2Diff) > 0.02
+
   // ── Payment info ──────────────────────────────────
   const { termin, forma } = extractPaymentInfo(e)
 
@@ -362,6 +388,34 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
         </div>
       )}
 
+      {/* ── Dodatkowe rozliczenia (Warstwa 1) ──────────────────────── */}
+      {dodatkoweRozliczenia.length > 0 && (
+        <div className="border-b border-slate-200">
+          <div className="bg-slate-50/60 px-3 py-1.5 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider flex justify-between items-center">
+            <span>Rozliczenia</span>
+            <span className="text-[9px] font-normal text-slate-400 normal-case hidden sm:inline">Pozycje rozrachunkowe — nie stanowią kosztu ani przychodu, nie podlegają księgowaniu.</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-3 py-1.5 text-left font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Typ</th>
+                <th className="px-3 py-1.5 text-left font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Opis</th>
+                <th className="px-3 py-1.5 text-right font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Kwota</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dodatkoweRozliczenia.map((roz: any, idx: number) => (
+                <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                  <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{roz.typ || 'Inne'}</td>
+                  <td className="px-3 py-1.5 text-slate-800">{roz.opis || '-'}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">{fmtKwota(roz.kwota)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* ── Payment info / Footer ──────────────────── */}
       {(termin || forma) && (
         <div className="px-5 py-2.5 bg-slate-50/80 border-b border-slate-200 text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -370,11 +424,26 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
           {forma && <span>Forma: <strong className="text-slate-700">{forma}</strong></span>}
         </div>
       )}
-      <div className="px-5 py-3 bg-slate-50 flex items-center justify-end gap-3">
-        <span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">Do zapłaty:</span>
-        <span className="text-lg font-bold text-slate-800 tabular-nums">
-          {fmtKwota(e.kwota_brutto)}
-        </span>
+      <div className="px-5 py-3 bg-slate-50 flex flex-col items-end gap-1">
+        {showLayer2Row && (
+          <div 
+            className="text-[11px] text-slate-500" 
+            title={layer2Diff > 0 ? "Raty, zaległości lub inne rozrachunki doliczone przez wystawcę — nie stanowią kosztu." : "Wystawca rozliczył nadpłatę — kwota do zapłaty jest niższa niż wartość faktury."}
+          >
+            {dodatkoweRozliczenia.length > 0 
+              ? "Pozostałe saldo:" 
+              : (layer2Diff > 0 ? "Rozliczenia/saldo poza fakturą:" : "Nadpłata/saldo na koncie:")} 
+            <span className="font-medium text-slate-700 ml-1">
+              {layer2Diff > 0 ? '+' : ''}{fmtKwota(layer2Diff)}
+            </span>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">Do zapłaty:</span>
+          <span className="text-lg font-bold text-slate-800 tabular-nums whitespace-nowrap">
+            {fmtKwota(e.kwota_brutto)}
+          </span>
+        </div>
       </div>
     </div>
   )
