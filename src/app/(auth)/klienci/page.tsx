@@ -1,11 +1,26 @@
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { getAllowedNips, applyNipFilter } from '@/lib/auth-helpers'
 import { ClientsTableClient } from '@/components/clients/ClientsTableClient'
-import type { ClientWithCounts } from '@/types/database'
+import type { ClientWithCounts, ClientMetricsRow } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
-export default async function KlienciPage() {
+const OKRES_MAP: Record<string, () => string | null> = {
+  'dzis': () => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d.toISOString()
+  },
+  '7d': () => new Date(Date.now() - 7 * 86400_000).toISOString(),
+  '30d': () => new Date(Date.now() - 30 * 86400_000).toISOString(),
+  'all': () => null,
+}
+
+export default async function KlienciPage({ searchParams }: { searchParams: Promise<{ okres?: string }> }) {
+  const params = await searchParams
+  const okresKey = params.okres || 'all'
+  const since = (OKRES_MAP[okresKey] ?? OKRES_MAP['all'])()
+
   const supabase = createSupabaseAdmin()
   const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
@@ -19,23 +34,34 @@ export default async function KlienciPage() {
 
   const { data: clients } = await clientsQuery
 
-  // Fetch metrics from view
-  let metricsQuery = supabase.from('client_metrics_view').select('*')
-  metricsQuery = applyNipFilter(metricsQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { data: metricsData } = await metricsQuery
+  // Fetch metrics from RPC (schemat fluinty — jawnie)
+  const { data: metricsData, error: metricsError } = await supabase
+    .schema('fluinty')
+    .rpc('client_metrics', { since })
 
-  const metricsMap = new Map<string, any>()
-  for (const m of metricsData ?? []) {
+  if (metricsError) {
+    console.error('[KlienciPage] RPC client_metrics error:', metricsError)
+  }
+
+  // NIP-filtrowanie metryk po stronie JS (jak dotąd dla views)
+  const allowedNipSet = nips ? new Set(nips) : null
+  const metricsMap = new Map<string, ClientMetricsRow>()
+  for (const m of (metricsData ?? []) as ClientMetricsRow[]) {
+    if (allowedNipSet && !allowedNipSet.has(m.client_nip)) continue
     metricsMap.set(m.client_nip, m)
   }
 
-  // TODO na pozycje: W przyszłości dodać wliczanie pozycje_vat_edited = true LUB final_* NOT NULL z faktury_pozycje.
-  // Obecnie liczymy tylko wyjątki na poziomie nagłówka.
   const clientsWithCounts: ClientWithCounts[] = (clients ?? []).map((c) => ({
     ...c,
     pending_count: metricsMap.get(c.nip)?.pending_count ?? 0,
-    history_count: metricsMap.get(c.nip)?.history_count ?? 0,
-    decisions_count: metricsMap.get(c.nip)?.decisions_count ?? 0,
+    ai_count: metricsMap.get(c.nip)?.ai_count ?? 0,
+    external_count: metricsMap.get(c.nip)?.external_count ?? 0,
+    skipped_count: metricsMap.get(c.nip)?.skipped_count ?? 0,
+    czyste_ksiegowo: metricsMap.get(c.nip)?.czyste_ksiegowo ?? 0,
+    decyzje_ksiegowe: metricsMap.get(c.nip)?.decyzje_ksiegowe ?? 0,
+    decyzje_realne: metricsMap.get(c.nip)?.decyzje_realne ?? 0,
+    pct_ksiegowa: metricsMap.get(c.nip)?.pct_ksiegowa ?? null,
+    auto_verdict: metricsMap.get(c.nip)?.auto_verdict ?? null,
   }))
 
   const totalActive = clientsWithCounts.length
@@ -56,6 +82,7 @@ export default async function KlienciPage() {
       <ClientsTableClient
         clients={clientsWithCounts}
         isAdmin={isAdmin}
+        okres={okresKey}
       />
     </div>
   )

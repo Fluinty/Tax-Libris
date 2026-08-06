@@ -96,6 +96,28 @@ function buildEditDiff(
   return Object.keys(diff).length > 0 ? diff : null
 }
 
+// Whitelist kluczy z buildEditDiff, które dotyczą TYLKO opisu (nie są korektą księgową).
+// Weryfikacja: buildEditDiff produkuje klucze: 'opis', 'kwota_${k}', 'pozycje_vat', 'gtu', 'procedura_jpk'.
+const OPIS_ONLY_KEYS = new Set(['opis'])
+
+// Oblicza flagi edycji na podstawie diffa, reżimu i pozycji VAT.
+// edycja_realna  = cokolwiek zmienione (opis, kwoty, VAT, GTU, procedury, reżim, pozycje VAT)
+// edycja_ksiegowa = jak wyżej, ALE BEZ zmian samego opisu
+function computeEditFlags(
+  diff: Record<string, { z: unknown; na: unknown }> | null,
+  rezimEdited: boolean,
+  pozycjeVatEdited: boolean,
+): { edycja_realna: boolean; edycja_ksiegowa: boolean } {
+  const hasDiff = diff !== null
+  const edycja_realna = hasDiff || rezimEdited || pozycjeVatEdited
+
+  const diffKeys = diff ? Object.keys(diff) : []
+  const hasNonOpisChange = diffKeys.some(k => !OPIS_ONLY_KEYS.has(k))
+  const edycja_ksiegowa = hasNonOpisChange || rezimEdited || pozycjeVatEdited
+
+  return { edycja_realna, edycja_ksiegowa }
+}
+
 // Helper to resolve fakturaId, queueId and coalesced exception object
 async function resolveExceptionIds(
   supabase: any,
@@ -185,6 +207,10 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
 
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
+  // ── Oblicz diff i flagi edycji PRZED zapisem ──
+  const diff1 = buildEditDiff(exception, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
+  const editFlags = computeEditFlags(diff1, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
@@ -196,7 +222,9 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
         final_zapis_vat_data: scalonyVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', queueId)
       .in('status', ['pending_review', 'pending'])
@@ -221,7 +249,9 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
         final_zapis_vat_data: scalonyVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', fakturaId)
   }
@@ -239,7 +269,6 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   })
 
   // ── Oś czasu: edited → approved ──
-  const diff1 = buildEditDiff(exception, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
   if (diff1) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 })
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -282,6 +311,10 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
 
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
+  // ── Oblicz diff i flagi edycji PRZED zapisem ──
+  const diff2 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  const editFlags = computeEditFlags(diff2, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
@@ -292,7 +325,9 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', queueId)
       .in('status', ['pending_review', 'pending'])
@@ -316,7 +351,9 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', fakturaId)
   }
@@ -332,7 +369,6 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   })
 
   // ── Oś czasu: edited → approved ──
-  const diff2 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
   if (diff2) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff2 })
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -386,6 +422,10 @@ export async function approveExceptionFull(
 
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
+  // ── Oblicz diff i flagi edycji PRZED zapisem ──
+  const diff3 = buildEditDiff(exception, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
+  const editFlags = computeEditFlags(diff3, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
@@ -396,7 +436,9 @@ export async function approveExceptionFull(
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', queueId)
       .in('status', ['pending_review', 'pending'])
@@ -420,7 +462,9 @@ export async function approveExceptionFull(
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', fakturaId)
   }
@@ -437,7 +481,6 @@ export async function approveExceptionFull(
   })
 
   // ── Oś czasu: edited → approved ──
-  const diff3 = buildEditDiff(exception, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
   if (diff3) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 })
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -526,6 +569,10 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: zapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
+  // ── Oblicz diff i flagi edycji PRZED zapisem ──
+  const diff4 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  const editFlags = computeEditFlags(diff4, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
@@ -536,7 +583,9 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', queueId)
       .in('status', ['pending_review', 'pending'])
@@ -560,7 +609,9 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
         final_zapis_vat_data: baseVat,
         final_kpir_pojazdowe_data: scalonyPojazd,
         resolved_by: userEmail,
-        resolved_at: new Date().toISOString()
+        resolved_at: new Date().toISOString(),
+        edycja_realna: editFlags.edycja_realna,
+        edycja_ksiegowa: editFlags.edycja_ksiegowa,
       })
       .eq('id', fakturaId)
   }
@@ -574,7 +625,6 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   })
 
   // ── Oś czasu: edited → approved ──
-  const diff4 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
   if (diff4) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 })
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null

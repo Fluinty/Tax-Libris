@@ -25,9 +25,53 @@ import { addClient, resetDemoClient } from '@/app/(auth)/klienci/actions'
 interface Props {
   clients: ClientWithCounts[]
   isAdmin: boolean
+  okres: string
 }
 
-export function ClientsTableClient({ clients, isAdmin }: Props) {
+const OKRES_OPTIONS = [
+  { key: 'dzis', label: 'Dziś' },
+  { key: '7d', label: '7 dni' },
+  { key: '30d', label: '30 dni' },
+  { key: 'all', label: 'Wszystko' },
+]
+
+function CzystoscBadge({ pct, czyste, ai }: { pct: number | null; czyste: number; ai: number }) {
+  if (ai === 0 || pct === null) {
+    return <span className="text-slate-400">—</span>
+  }
+  let color = 'text-red-600 bg-red-50'
+  if (pct >= 70) color = 'text-emerald-700 bg-emerald-50'
+  else if (pct >= 50) color = 'text-amber-700 bg-amber-50'
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${color}`}>
+      {pct.toFixed(1)}%
+      <span className="font-normal text-[10px] opacity-70">({czyste}/{ai})</span>
+    </span>
+  )
+}
+
+function AutoBadge({ verdict }: { verdict: string | null }) {
+  // '-' and null = no badge
+  if (!verdict || verdict === '-') return null
+  if (verdict === 'TAK') {
+    return (
+      <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]" title="≥50 faktur AI i >50% czystości księgowej w wybranym okresie">
+        Gotowy do auto
+      </Badge>
+    )
+  }
+  if (verdict === 'blisko') {
+    return (
+      <Badge className="bg-amber-100 text-amber-800 border-0 text-[10px]" title="≥50 faktur AI i >50% czystości księgowej w wybranym okresie">
+        Blisko progu
+      </Badge>
+    )
+  }
+  return null
+}
+
+export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [loadingNips, setLoadingNips] = useState<Set<string>>(new Set())
@@ -72,6 +116,22 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
     router.push(`/klienci/${nip}`)
   }
 
+  const handlePendingClick = (e: React.MouseEvent, nip: string) => {
+    e.stopPropagation()
+    router.push(`/do-akceptacji?nip=${nip}`)
+  }
+
+  const handleOkresChange = (key: string) => {
+    const params = new URLSearchParams(window.location.search)
+    if (key === 'all') {
+      params.delete('okres')
+    } else {
+      params.set('okres', key)
+    }
+    const qs = params.toString()
+    router.push(`/klienci${qs ? `?${qs}` : ''}`)
+  }
+
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.nip.length !== 10) {
@@ -112,6 +172,15 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
 
   const hasDemoClient = clients.some(c => (c as any).is_demo)
 
+  // Summary row calculations
+  const sumAi = filtered.reduce((s, c) => s + c.ai_count, 0)
+  const sumExt = filtered.reduce((s, c) => s + c.external_count, 0)
+  const sumKorekty = filtered.reduce((s, c) => s + c.decyzje_ksiegowe, 0)
+  const sumPending = filtered.reduce((s, c) => s + c.pending_count, 0)
+  const sumSkipped = filtered.reduce((s, c) => s + c.skipped_count, 0)
+  const sumCzyste = filtered.reduce((s, c) => s + c.czyste_ksiegowo, 0)
+  const avgPct = sumAi > 0 ? (sumCzyste / sumAi) * 100 : null
+
   return (
     <div>
       {/* Header & Search */}
@@ -139,6 +208,23 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Segmented time filter */}
+      <div className="flex items-center gap-1 mb-4 p-1 bg-slate-100 rounded-lg w-fit">
+        {OKRES_OPTIONS.map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => handleOkresChange(opt.key)}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              okres === opt.key
+                ? 'bg-white text-[#1E293B] shadow-sm'
+                : 'text-[#64748B] hover:text-[#1E293B]'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -192,19 +278,25 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                 <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
                   Klient
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
-                  NIP
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Faktury zaksięgowane przez system w wybranym okresie">
+                  Zaksięg. AI
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Faktury przetworzone od początku współpracy — materiał, na którym system się uczy">
-                  Faktur w bazie
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Zaksięgowane przez księgową poza systemem — nie wliczają się do oceny AI">
+                  Ręcznie
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Decyzje księgowej zapisane w bazie wiedzy — korekty klasyfikacji, kwot, opisów">
-                  Decyzji księgowej
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Odsetek zaksięgowanych BEZ korekt wpływających na KPiR/VAT. Poprawki samego opisu nie są korektą księgową.">
+                  Czystość księg.
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Czeka na akceptację teraz">
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Korekty wpływające na KPiR/VAT">
+                  Korekty
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Czeka na akceptację teraz (all-time)">
                   Do akceptacji
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Pominięte faktury w wybranym okresie">
+                  Pominięte
+                </th>
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="≥50 faktur AI i >50% czystości księgowej w wybranym okresie">
                   Auto
                 </th>
               </tr>
@@ -231,22 +323,25 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[#64748B] font-mono text-xs">
-                    {client.nip}
+                  <td className="px-4 py-3 text-center text-[#64748B]">
+                    {client.ai_count}
                   </td>
                   <td className="px-4 py-3 text-center text-[#64748B]">
-                    {client.history_count}
-                  </td>
-                  <td className="px-4 py-3 text-center text-[#64748B]">
-                    {client.decisions_count > 0 ? (
-                      <span className="font-semibold text-purple-700">{client.decisions_count}</span>
-                    ) : (
-                      '0'
-                    )}
+                    {client.external_count}
                   </td>
                   <td className="px-4 py-3 text-center">
+                    <CzystoscBadge pct={client.pct_ksiegowa} czyste={client.czyste_ksiegowo} ai={client.ai_count} />
+                  </td>
+                  <td className="px-4 py-3 text-center" title={`z opisami: ${client.decyzje_realne}`}>
+                    {client.decyzje_ksiegowe > 0 ? (
+                      <span className="font-semibold text-purple-700">{client.decyzje_ksiegowe}</span>
+                    ) : (
+                      <span className="text-slate-400">0</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center" onClick={(e) => handlePendingClick(e, client.nip)}>
                     {client.pending_count > 0 ? (
-                      <Badge className="bg-[#FEF3C7] text-[#92400E] border-0 font-semibold">
+                      <Badge className="bg-[#FEF3C7] text-[#92400E] border-0 font-semibold cursor-pointer hover:bg-[#FDE68A]">
                         {client.pending_count}
                       </Badge>
                     ) : (
@@ -255,20 +350,24 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-center text-[#64748B]">
+                    {client.skipped_count > 0 ? client.skipped_count : <span className="text-slate-400">0</span>}
+                  </td>
                   <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                     {isAdmin ? (
-                      <Switch
-                        checked={client.auto_write_enabled}
-                        onCheckedChange={(checked) =>
-                          handleToggleAuto(client.nip, checked)
-                        }
-                        disabled={loadingNips.has(client.nip)}
-                        className="cursor-pointer"
-                      />
-                    ) : client.auto_write_enabled ? (
-                      <Check className="w-4 h-4 text-[#22C55E] mx-auto" />
+                      <div className="flex items-center justify-center gap-2">
+                        <AutoBadge verdict={client.auto_verdict} />
+                        <Switch
+                          checked={client.auto_write_enabled}
+                          onCheckedChange={(checked) =>
+                            handleToggleAuto(client.nip, checked)
+                          }
+                          disabled={loadingNips.has(client.nip)}
+                          className="cursor-pointer"
+                        />
+                      </div>
                     ) : (
-                      <X className="w-4 h-4 text-[#94A3B8] mx-auto" />
+                      <AutoBadge verdict={client.auto_verdict} />
                     )}
                   </td>
                 </tr>
@@ -276,7 +375,7 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-4 py-12 text-center text-[#64748B]"
                   >
                     Brak wyników wyszukiwania
@@ -284,6 +383,25 @@ export function ClientsTableClient({ clients, isAdmin }: Props) {
                 </tr>
               )}
             </tbody>
+            {/* Summary row */}
+            {filtered.length > 0 && (
+              <tfoot>
+                <tr className="bg-[#F8FAFC] border-t-2 border-[#E2E8F0] font-semibold text-[#1E293B]">
+                  <td className="px-4 py-3 text-xs uppercase text-[#64748B]">
+                    Suma ({filtered.length} klientów)
+                  </td>
+                  <td className="px-4 py-3 text-center">{sumAi}</td>
+                  <td className="px-4 py-3 text-center">{sumExt}</td>
+                  <td className="px-4 py-3 text-center">
+                    <CzystoscBadge pct={avgPct} czyste={sumCzyste} ai={sumAi} />
+                  </td>
+                  <td className="px-4 py-3 text-center">{sumKorekty}</td>
+                  <td className="px-4 py-3 text-center">{sumPending}</td>
+                  <td className="px-4 py-3 text-center">{sumSkipped}</td>
+                  <td className="px-4 py-3"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

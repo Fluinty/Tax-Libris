@@ -297,11 +297,31 @@ export interface UserProfile {
   biuro_klienci_nipy: string[] | null;
 }
 
-// Typ dla klienta z agregowanymi danymi
+// Kontrakt RPC client_metrics
+export interface ClientMetricsRow {
+  client_nip: string;
+  pending_count: number;
+  ai_count: number;
+  external_count: number;
+  skipped_count: number;
+  czyste_ksiegowo: number;
+  decyzje_ksiegowe: number;
+  decyzje_realne: number;
+  pct_ksiegowa: number | null;
+  auto_verdict: string | null; // 'TAK' | 'blisko' | '-'
+}
+
+// Typ dla klienta z agregowanymi danymi z RPC
 export interface ClientWithCounts extends Client {
   pending_count: number;
-  history_count: number;
-  decisions_count: number;
+  ai_count: number;
+  external_count: number;
+  skipped_count: number;
+  czyste_ksiegowo: number;
+  decyzje_ksiegowe: number;
+  decyzje_realne: number;
+  pct_ksiegowa: number | null;
+  auto_verdict: string | null;
 }
 
 // A3 Final Review types
