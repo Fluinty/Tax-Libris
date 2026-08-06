@@ -45,6 +45,25 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
     sumBruttoWiersze += parseAmount(it.wartoscBrutto)
   })
 
+  let vatTableBrutto = sumBruttoWiersze
+  if (officialVatTable && Object.keys(officialVatTable).length > 0) {
+    vatTableBrutto = 0
+    Object.values(officialVatTable).forEach((vals: any) => {
+      vatTableBrutto += vals.brutto || 0
+    })
+  }
+
+  const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
+  let sumaDodatkowych = 0
+  dodatkoweRozliczenia.forEach((roz: any) => {
+    sumaDodatkowych += parseAmount(roz.kwota)
+  })
+
+  const rozrachunkiDiff = doZaplaty - vatTableBrutto
+  const showLayer2 = Math.abs(rozrachunkiDiff) > 0.02
+  const layer2Diff = dodatkoweRozliczenia.length > 0 ? (rozrachunkiDiff - sumaDodatkowych) : rozrachunkiDiff
+  const showLayer2Row = showLayer2 && Math.abs(layer2Diff) > 0.02
+
   // Diff rounding (to avoid float issues)
   const discountDiff = Math.abs(sumBruttoWiersze - doZaplaty) > 0.02 ? (sumBruttoWiersze - doZaplaty) : 0
 
@@ -61,10 +80,23 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
             </div>
           </div>
           <div className="text-right">
+            {showLayer2Row && (
+              <div 
+                className="text-[11px] text-slate-500 mb-1" 
+                title={layer2Diff > 0 ? "Raty, zaległości lub inne rozrachunki doliczone przez wystawcę — nie stanowią kosztu." : "Wystawca rozliczył nadpłatę — kwota do zapłaty jest niższa niż wartość faktury."}
+              >
+                {dodatkoweRozliczenia.length > 0 
+                  ? "Pozostałe saldo:" 
+                  : (layer2Diff > 0 ? "Rozliczenia/saldo poza fakturą:" : "Nadpłata/saldo na koncie:")} 
+                <span className="font-medium text-slate-700 ml-1">
+                  {layer2Diff > 0 ? '+' : ''}{layer2Diff.toFixed(2)} {kodWaluty || 'PLN'}
+                </span>
+              </div>
+            )}
             <div className="text-xs text-slate-500">Do zapłaty:</div>
-            <div className="font-bold text-lg text-slate-900">{doZaplaty.toFixed(2)} {kodWaluty || 'PLN'}</div>
+            <div className="font-bold text-lg text-slate-900 whitespace-nowrap">{doZaplaty.toFixed(2)} {kodWaluty || 'PLN'}</div>
             {Math.abs(naleznosc - doZaplaty) > 0.01 && (
-              <div className="text-xs text-slate-500">Ogółem: {naleznosc.toFixed(2)}</div>
+              <div className="text-xs text-slate-500 mt-1">Ogółem: {naleznosc.toFixed(2)}</div>
             )}
           </div>
         </div>
@@ -168,6 +200,36 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
                   <div className="text-right font-medium text-slate-800">{vals.brutto.toFixed(2)}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* DODATKOWE ROZLICZENIA (Warstwa 1) */}
+        {dodatkoweRozliczenia.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Rozliczenia poza fakturą VAT</div>
+            <div className="bg-slate-50 rounded-md border border-slate-100 overflow-hidden">
+              <table className="w-full text-left text-sm border-collapse">
+                <tbody>
+                  {dodatkoweRozliczenia.map((roz: any, i: number) => {
+                    const kwotaRoz = parseAmount(roz.kwota)
+                    return (
+                      <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                        <td className="py-2 px-3 text-slate-700">
+                          {roz.opis || '-'}
+                          {roz.typ && <span className="text-xs text-slate-400 ml-2">({roz.typ})</span>}
+                        </td>
+                        <td className="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">
+                          {kwotaRoz > 0 ? '+' : ''}{kwotaRoz.toFixed(2)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1.5 px-1">
+              Pozycje rozrachunkowe — nie stanowią kosztu ani przychodu, nie podlegają księgowaniu.
             </div>
           </div>
         )}
