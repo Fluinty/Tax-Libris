@@ -247,7 +247,10 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
   let sumaDodatkowych = 0
   dodatkoweRozliczenia.forEach((roz: any) => {
     const parsed = typeof roz.kwota === 'string' ? parseFloat(roz.kwota.replace(',', '.').replace('−', '-')) : Number(roz.kwota)
-    if (!isNaN(parsed)) sumaDodatkowych += parsed
+    if (!isNaN(parsed)) {
+      const isOdliczenie = roz.typ?.toLowerCase().includes('odliczenie')
+      sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
+    }
   })
 
   const doZaplaty = e.kwota_brutto ?? 0

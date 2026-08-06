@@ -69,7 +69,11 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
   let sumaDodatkowych = 0
   dodatkoweRozliczenia.forEach((roz: any) => {
-    sumaDodatkowych += parseAmount(roz.kwota)
+    const parsed = parseAmount(roz.kwota)
+    if (!isNaN(parsed)) {
+      const isOdliczenie = roz.typ?.toLowerCase().includes('odliczenie')
+      sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
+    }
   })
 
   const rozrachunkiDiff = doZaplaty - vatTableBrutto
