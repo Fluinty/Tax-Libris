@@ -34,8 +34,11 @@ export async function resetDemo() {
 
   // 3. Usunięcie z anomalie_historii (jeśli istnieje, ignorujemy błąd braku tabeli)
   const { error: anomErr } = await supabase.schema('fluinty').from('anomalie_historii').delete().eq('client_nip', DEMO_NIP)
-  if (anomErr && anomErr.code !== '42P01') {
-    checkError('anomalie_historii', anomErr)
+  if (anomErr) {
+    const isTableMissing = anomErr.code === 'PGRST205' || anomErr.code === '42P01' || (anomErr.message && anomErr.message.includes('Could not find the table'))
+    if (!isTableMissing) {
+      checkError('anomalie_historii', anomErr)
+    }
   }
 
   // 4. Kolejne tabele - ściśle po client_nip
