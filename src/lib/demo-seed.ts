@@ -51,11 +51,22 @@ export async function resetDemo() {
   const { error: fakturyErr } = await supabase.schema('fluinty').from('faktury').delete().eq('client_nip', DEMO_NIP)
   checkError('faktury', fakturyErr)
 
+  // 5. Dziennik zmian klienta (FK do clients) - czyscimy przed pojazdami;
+  // tolerancja braku tabeli jak przy anomaliach (rozne srodowiska)
+  const { error: logErr } = await supabase.schema('fluinty').from('client_changes_log').delete().eq('client_nip', DEMO_NIP)
+  if (logErr) {
+    const isTableMissing = logErr.code === 'PGRST205' || logErr.code === '42P01' || (logErr.message && logErr.message.includes('Could not find the table'))
+    if (!isTableMissing) {
+      checkError('client_changes_log', logErr)
+    }
+  }
+
   const { error: pojazdyErr } = await supabase.schema('fluinty').from('client_pojazdy').delete().eq('client_nip', DEMO_NIP)
   checkError('client_pojazdy', pojazdyErr)
 
-  const { error: clientsErr } = await supabase.schema('fluinty').from('clients').delete().eq('nip', DEMO_NIP)
-  checkError('clients', clientsErr)
+  // ARCHITEKTURA (06.08): wiersza clients NIE kasujemy NIGDY - kazda nowa tabela
+  // z FK do clients lamala reset (faktura_events -> anomalie -> client_changes_log).
+  // Klient demo zyje na stale, seedDemo robi na nim upsert(onConflict: 'nip').
 }
 
 export async function seedDemo(): Promise<{ created: number, errors: string[] }> {
