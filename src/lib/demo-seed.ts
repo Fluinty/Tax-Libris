@@ -6,13 +6,53 @@ const DEMO_NIP = demoData.demo_client.nip
 export async function resetDemo() {
   const supabase = createSupabaseAdmin()
 
-  // Usuwamy z clients - powinno kaskadowo usunąć wszystko, jeśli są ustawione kaskady,
-  // ale bezpieczniej jest usunąć ręcznie powiązane tabele.
-  await supabase.from('faktury_pozycje').delete().eq('client_nip', DEMO_NIP)
-  await supabase.from('exceptions_queue').delete().eq('client_nip', DEMO_NIP)
-  await supabase.from('faktury').delete().eq('client_nip', DEMO_NIP)
-  await supabase.from('client_pojazdy').delete().eq('client_nip', DEMO_NIP)
-  await supabase.from('clients').delete().eq('nip', DEMO_NIP)
+  // 1. Pobranie IDków do usunięcia powiązanych eventów
+  const { data: queueIds } = await supabase.schema('fluinty').from('exceptions_queue').select('id').eq('client_nip', DEMO_NIP)
+  const { data: fakturaIds } = await supabase.schema('fluinty').from('faktury').select('id').eq('client_nip', DEMO_NIP)
+
+  const checkError = (step: string, error: any) => {
+    if (error) {
+      throw new Error(`Reset przerwany: nie można usunąć ${step} — ${error.message} ${error.details || ''}`)
+    }
+  }
+
+  // 2. Usunięcie z faktura_events (3 filtry)
+  if (queueIds && queueIds.length > 0) {
+    const ids = queueIds.map(q => q.id)
+    const { error } = await supabase.schema('fluinty').from('faktura_events').delete().in('queue_id', ids)
+    checkError('faktura_events (po queue_id)', error)
+  }
+
+  if (fakturaIds && fakturaIds.length > 0) {
+    const ids = fakturaIds.map(f => f.id)
+    const { error } = await supabase.schema('fluinty').from('faktura_events').delete().in('faktura_id', ids)
+    checkError('faktura_events (po faktura_id)', error)
+  }
+
+  const { error: evErr } = await supabase.schema('fluinty').from('faktura_events').delete().eq('client_nip', DEMO_NIP)
+  checkError('faktura_events (po client_nip)', evErr)
+
+  // 3. Usunięcie z anomalie_historii (jeśli istnieje, ignorujemy błąd braku tabeli)
+  const { error: anomErr } = await supabase.schema('fluinty').from('anomalie_historii').delete().eq('client_nip', DEMO_NIP)
+  if (anomErr && anomErr.code !== '42P01') {
+    checkError('anomalie_historii', anomErr)
+  }
+
+  // 4. Kolejne tabele - ściśle po client_nip
+  const { error: pozErr } = await supabase.schema('fluinty').from('faktury_pozycje').delete().eq('client_nip', DEMO_NIP)
+  checkError('faktury_pozycje', pozErr)
+
+  const { error: queueErr } = await supabase.schema('fluinty').from('exceptions_queue').delete().eq('client_nip', DEMO_NIP)
+  checkError('exceptions_queue', queueErr)
+
+  const { error: fakturyErr } = await supabase.schema('fluinty').from('faktury').delete().eq('client_nip', DEMO_NIP)
+  checkError('faktury', fakturyErr)
+
+  const { error: pojazdyErr } = await supabase.schema('fluinty').from('client_pojazdy').delete().eq('client_nip', DEMO_NIP)
+  checkError('client_pojazdy', pojazdyErr)
+
+  const { error: clientsErr } = await supabase.schema('fluinty').from('clients').delete().eq('nip', DEMO_NIP)
+  checkError('clients', clientsErr)
 }
 
 export async function seedDemo(): Promise<{ created: number, errors: string[] }> {
@@ -20,10 +60,15 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
   const result = { created: 0, errors: [] as string[] }
   
   // 1. Upewnij się, że mamy czystą kartę
-  await resetDemo()
+  try {
+    await resetDemo()
+  } catch (err: any) {
+    result.errors.push(err.message)
+    return result
+  }
 
-  // 2. Dodanie klienta
-  const { error: clientErr } = await supabase.from('clients').insert({
+  // 2. Dodanie klienta (upsert jako pas bezpieczeństwa)
+  const { error: clientErr } = await supabase.schema('fluinty').from('clients').upsert({
     nip: demoData.demo_client.nip,
     nazwa: demoData.demo_client.nazwa,
     nazwa_bazy_rachmistrz: 'DEMO_FIRMA',
@@ -31,19 +76,35 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
     pilot: false,
     auto_write_enabled: true,
     is_demo: demoData.demo_client.is_demo,
-  })
+  }, { onConflict: 'nip' })
   if (clientErr) {
     result.errors.push(`Błąd klienta: ${clientErr.message} ${clientErr.details || ''}`)
   }
 
-  // 3. Dodanie pojazdu
-  const { error: pojazdErr } = await supabase.from('client_pojazdy').insert({
+  // 3. Dodanie pojazdu (sprawdzamy czy istnieje po client_nip i nr_rejestracyjny, by emulować upsert na złożonym kluczu)
+  const { data: existingPojazd } = await supabase.schema('fluinty').from('client_pojazdy')
+    .select('id')
+    .eq('client_nip', DEMO_NIP)
+    .eq('nr_rejestracyjny', demoData.demo_pojazd.nr_rejestracyjny)
+    .maybeSingle()
+
+  const pojazdPayload = {
     client_nip: DEMO_NIP,
     nr_rejestracyjny: demoData.demo_pojazd.nr_rejestracyjny,
     sposob_rozliczenia_enum: demoData.demo_pojazd.sposob_rozliczenia_enum,
     typ_napedu: demoData.demo_pojazd.typ_napedu,
     wartosc_nabycia: demoData.demo_pojazd.wartosc_nabycia,
-  })
+  }
+
+  let pojazdErr = null
+  if (existingPojazd) {
+    const { error } = await supabase.schema('fluinty').from('client_pojazdy').update(pojazdPayload).eq('id', existingPojazd.id)
+    pojazdErr = error
+  } else {
+    const { error } = await supabase.schema('fluinty').from('client_pojazdy').insert(pojazdPayload)
+    pojazdErr = error
+  }
+  
   if (pojazdErr) {
     result.errors.push(`Błąd pojazdu: ${pojazdErr.message} ${pojazdErr.details || ''}`)
   }
@@ -53,7 +114,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
     let hasError = false;
     
     // 4a. Exceptions queue - musi być pierwsza
-    const { data: queueData, error: qErr } = await supabase.from('exceptions_queue').insert({
+    const { data: queueData, error: qErr } = await supabase.schema('fluinty').from('exceptions_queue').insert({
       client_nip: DEMO_NIP,
       status: f.status === 'booked' ? 'auto_created' : f.status,
       ai_confidence: f.ai_confidence || f.confidence_overall,
@@ -97,7 +158,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
     }
 
     // 4b. Faktury (z relacją legacy_queue_id)
-    const { data: fakturaData, error: fErr } = await supabase.from('faktury').insert({
+    const { data: fakturaData, error: fErr } = await supabase.schema('fluinty').from('faktury').insert({
       client_nip: DEMO_NIP,
       legacy_queue_id: queueData.id,
       ddk_nr: 900000 + fIndex,
@@ -135,7 +196,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
 
     // 4c. Pozycje faktury
     for (const [pIndex, p] of f.pozycje.entries()) {
-      const { error: pErr } = await supabase.from('faktury_pozycje').insert({
+      const { error: pErr } = await supabase.schema('fluinty').from('faktury_pozycje').insert({
         faktura_id: fakturaData.id,
         client_nip: DEMO_NIP,
         lp: p.lp,
