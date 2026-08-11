@@ -158,7 +158,11 @@ export function ClientsTableClient({ clients, isAdmin, okres, autoWriteGlobal }:
     }
     setAdding(true)
     try {
-      await addClient(formData)
+      const result = await addClient(formData)
+      if (!result.success) {
+        toast.error('Błąd', { description: result.error ?? 'Nie udało się dodać klienta' })
+        return
+      }
       toast.success('Dodano klienta')
       setIsAddOpen(false)
       setFormData({ nip: '', nazwa: '', nazwa_bazy_rachmistrz: '', pkd_glowny: '', forma_dzialalnosci: '', pilot: false })

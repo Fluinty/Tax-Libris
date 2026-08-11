@@ -97,6 +97,31 @@ export function applyNipFilter<T extends any>(
 }
 
 /**
+ * Verify that the currently authenticated user may modify data of the given client.
+ * Model (docs/DECISIONS.md 2026-08-11): admin i księgowa = pełne prawo edycji
+ * (księgowa w zakresie przypisanych NIP-ów, jak w assertCanWrite); rola 'klient'
+ * = zero akcji modyfikujących. Waliduje też NIP: format 10 cyfr + istnienie
+ * w fluinty.clients — nic nie jest przyjmowane na wiarę z propsów.
+ * Rzuca Error — akcje łapią i zwracają { success: false, error } (wzorzec bramki).
+ */
+export async function assertCanWriteClient(clientNip: string) {
+  if (!/^\d{10}$/.test(clientNip ?? '')) {
+    throw new Error(`Nieprawidłowy NIP „${clientNip}" — oczekiwane dokładnie 10 cyfr`)
+  }
+  const { nips, isAdmin, panelUser, demoNips, email } = await getAllowedNips()
+  if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
+  const admin = createSupabaseAdmin()
+  const { data, error } = await admin.from('clients').select('nip').eq('nip', clientNip).maybeSingle()
+  if (error) throw new Error(`Błąd odczytu klienta (clients): ${error.message}`)
+  if (!data) throw new Error(`Nie znaleziono klienta o NIP ${clientNip} (clients)`)
+  if (!isAdmin) {
+    if (nips !== null && !nips.includes(clientNip)) throw new Error('Brak dostępu do tego klienta')
+    if (nips === null && demoNips.includes(clientNip)) throw new Error('Brak dostępu do tego klienta')
+  }
+  return { email, isAdmin }
+}
+
+/**
  * Verify that the currently authenticated user has write permission for the given exceptionId.
  */
 export async function assertCanWrite(exceptionId: number) {

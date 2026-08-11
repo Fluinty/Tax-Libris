@@ -36,13 +36,14 @@ export function OpisyTable({ nip, opisy }: { nip: string, opisy: any[] }) {
   const handleSave = async () => {
     if (!draft.opis) return toast.error('Opis jest wymagany')
     try {
-      if (editingId) {
-        await updateOpis(editingId, nip, draft)
-        toast.success('Zaktualizowano opis')
-      } else {
-        await addOpis(nip, draft.opis, draft.typ_dokumentu)
-        toast.success('Dodano opis')
+      const result = editingId
+        ? await updateOpis(editingId, nip, draft)
+        : await addOpis(nip, draft.opis, draft.typ_dokumentu)
+      if (!result.success) {
+        toast.error('Błąd zapisywania', { description: result.error })
+        return
       }
+      toast.success(editingId ? 'Zaktualizowano opis' : 'Dodano opis')
       setIsModalOpen(false)
     } catch (e) {
       toast.error('Błąd zapisywania')

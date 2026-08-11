@@ -302,6 +302,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     
     if (res.success) {
       toast.success('Zatwierdzono do księgowania')
+      if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
       router.refresh()
     } else {
@@ -333,6 +334,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await approveExceptionFull(actionId, kwoty, zapisVat, opis)
     if (res.success) {
       toast.success('Zapisano z edytowanymi kwotami')
+      if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
       router.refresh()
     } else {
@@ -352,6 +354,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await resolveException(actionId, selectedOpis, currentKpirKwoty, exception.final_zapis_vat_data || exception.zapis_vat_data)
     if (res.success) {
       toast.success('Wyjątek rozwiązany')
+      if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
       router.refresh()
     } else {
@@ -367,6 +370,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await ignoreFaktura(actionId)
     if (res.success) {
       toast.success('Faktura pominięta')
+      if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
       router.refresh()
     } else {
@@ -382,6 +386,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const res = await addProponowanyToClientOpisy(actionId)
     if (res.success) {
       toast.success(res.message)
+      if (res.warning) toast.warning('Uwaga', { description: res.warning })
       router.refresh()
       setSelectedOpis(exception.ai_proponowany_opis || '')
     } else {

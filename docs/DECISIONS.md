@@ -35,3 +35,15 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | portal klienta koncowego to osobny przyszly modul z wlasnym zakresem.
 - 2026-08-11 | DDL wykonuje czlowiek z plikow migrations/; agent ma (docelowo)
   MCP read-only | jedna baza = produkcja; introspekcja tak, zapis do schematu nie.
+- 2026-08-11 | Wszystkie akcje modyfikujace modulu klienci przechodza przez
+  assertCanWriteClient (admin: pelny dostep; ksiegowa: w zakresie przypisanych
+  NIP-ow, demo tylko gdy jawnie przypisane; rola 'klient': blokada calkowita;
+  NIP walidowany — format 10 cyfr + istnienie w clients); addClient i reset demo
+  wylacznie admin; payload/patch sanityzowany (whitelist kolumn w
+  updateClientData, client_nip/id wycinane z payloadow pojazdow/opisow) | server
+  actions to publiczne endpointy POST, a service_role omija RLS — kontrola musi
+  byc jawna, server-side, z panel_users po emailu sesji, i obejmowac TRESC
+  patcha, nie tylko parametr nip (mass assignment).
+- 2026-08-11 | logFakturaEvent nie polyka bledow: console.error + pole `warning`
+  w zwrotce akcji (toast.warning), operacja glowna przechodzi | approve nie moze
+  padac przez os czasu, ale znikajace zdarzenia lamaly regule niepolykania bledow.

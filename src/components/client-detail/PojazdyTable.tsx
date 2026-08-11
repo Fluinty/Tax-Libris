@@ -164,13 +164,14 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
         leasingodawca_nip: draft.leasingodawca_nip || null,
         vat26: draft.vat26,
       }
-      if (editingId) {
-        await updatePojazd(editingId, nip, payload)
-        toast.success('Zaktualizowano pojazd')
-      } else {
-        await addPojazd(nip, payload)
-        toast.success('Dodano pojazd')
+      const result = editingId
+        ? await updatePojazd(editingId, nip, payload)
+        : await addPojazd(nip, payload)
+      if (!result.success) {
+        toast.error('Błąd zapisywania', { description: result.error })
+        return
       }
+      toast.success(editingId ? 'Zaktualizowano pojazd' : 'Dodano pojazd')
       setIsModalOpen(false)
     } catch (e) {
       toast.error('Błąd zapisywania')
@@ -180,10 +181,14 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
   const handleDelete = async (p: any) => {
     if (!window.confirm('Pojazd zostanie dezaktywowany — historyczne faktury pozostaną nietknięte. Kontynuować?')) return
     try {
-      await updatePojazd(p.id, nip, { 
-        aktywny: false, 
-        data_zakonczenia: new Date().toISOString() 
+      const result = await updatePojazd(p.id, nip, {
+        aktywny: false,
+        data_zakonczenia: new Date().toISOString()
       })
+      if (!result.success) {
+        toast.error('Błąd usuwania pojazdu', { description: result.error })
+        return
+      }
       toast.success('Pojazd został dezaktywowany')
     } catch (e) {
       toast.error('Błąd usuwania pojazdu')
@@ -192,10 +197,14 @@ export function PojazdyTable({ nip, pojazdy, isAdmin }: { nip: string, pojazdy: 
 
   const handleRestore = async (p: any) => {
     try {
-      await updatePojazd(p.id, nip, { 
-        aktywny: true, 
-        data_zakonczenia: null 
+      const result = await updatePojazd(p.id, nip, {
+        aktywny: true,
+        data_zakonczenia: null
       })
+      if (!result.success) {
+        toast.error('Błąd przywracania pojazdu', { description: result.error })
+        return
+      }
       toast.success('Pojazd został reaktywowany')
     } catch (e) {
       toast.error('Błąd przywracania pojazdu')

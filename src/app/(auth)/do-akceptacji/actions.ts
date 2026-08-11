@@ -30,6 +30,9 @@ async function logAudit(
 }
 
 // ── Oś czasu faktury: logowanie zdarzeń ──────────────────────
+// Zwraca komunikat ostrzeżenia (albo null) — błąd zapisu zdarzenia NIE przerywa
+// operacji głównej, ale nie znika po cichu: ląduje w console.error (logi Vercel)
+// i jako pole `warning` w zwrotce akcji (toast.warning u konsumenta).
 async function logFakturaEvent(
   supabase: any,
   fakturaId: number | null,
@@ -38,9 +41,9 @@ async function logFakturaEvent(
   eventType: string,
   actor: string,
   payload: Record<string, unknown> = {}
-) {
-  if (!fakturaId && !queueId) return
-  await supabase.from('faktura_events').insert({
+): Promise<string | null> {
+  if (!fakturaId && !queueId) return null
+  const { error } = await supabase.from('faktura_events').insert({
     faktura_id: fakturaId,
     queue_id: queueId,
     client_nip: clientNip,
@@ -48,6 +51,12 @@ async function logFakturaEvent(
     actor,
     payload,
   })
+  if (error) {
+    const warning = `Nie zapisano zdarzenia ${eventType} (faktura_events): ${error.message}`
+    console.error('[logFakturaEvent]', warning, { fakturaId, queueId, clientNip, actor })
+    return warning
+  }
+  return null
 }
 
 // Build a diff object comparing final values vs AI originals.
@@ -269,15 +278,16 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   })
 
   // ── Oś czasu: edited → approved ──
-  if (diff1) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 })
+  const eventWarnings: (string | null)[] = []
+  if (diff1) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
-    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+    eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null }))
   }
-  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: opisDoZapisu, kwoty_final: kwotyDoZapisu ?? null })
+  eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: opisDoZapisu, kwoty_final: kwotyDoZapisu ?? null }))
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: eventWarnings.filter(Boolean).join('; ') || undefined }
 }
 
 // ZATWIERDŹ Z EDYCJĄ (dla pending_review - gdy księgowa zmieni kwoty lub opis - WERSJA LEGACY)
@@ -369,15 +379,16 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   })
 
   // ── Oś czasu: edited → approved ──
-  if (diff2) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff2 })
+  const eventWarnings: (string | null)[] = []
+  if (diff2) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff2 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
-    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+    eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null }))
   }
-  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null })
+  eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null }))
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: eventWarnings.filter(Boolean).join('; ') || undefined }
 }
 
 // ZATWIERDŹ Z EDYCJĄ PEŁNĄ (KPiR + VAT) z modalu
@@ -481,15 +492,16 @@ export async function approveExceptionFull(
   })
 
   // ── Oś czasu: edited → approved ──
-  if (diff3) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 })
+  const eventWarnings: (string | null)[] = []
+  if (diff3) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
-    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+    eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null }))
   }
-  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: finalOpis, kwoty_final: roundedKwoty ?? null })
+  eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis: finalOpis, kwoty_final: roundedKwoty ?? null }))
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: eventWarnings.filter(Boolean).join('; ') || undefined }
 }
 
 // UPDATE ONLY VAT
@@ -625,15 +637,16 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   })
 
   // ── Oś czasu: edited → approved ──
-  if (diff4) await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 })
+  const eventWarnings: (string | null)[] = []
+  if (diff4) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
-    await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null })
+    eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'rezim_changed', userEmail, { z: aiRezim, na: scalonyPojazd?.strategia ?? null }))
   }
-  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null })
+  eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'approved', userEmail, { opis, kwoty_final: roundedKwoty ?? null }))
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: eventWarnings.filter(Boolean).join('; ') || undefined }
 }
 
 // POMIŃ
@@ -686,10 +699,10 @@ export async function ignoreFaktura(exceptionId: number) {
   })
 
   // ── Oś czasu: skipped ──
-  await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'skipped', userEmail, { reason: 'panel', by: userEmail })
+  const skipWarning = await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'skipped', userEmail, { reason: 'panel', by: userEmail })
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: skipWarning ?? undefined }
 }
 
 // DODAJ PROPOZYCJĘ DO LISTY KLIENTA (reuse z sesji 5)
@@ -761,9 +774,9 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
 
   // ── Oś czasu: opis_added_to_list ──
   const { fakturaId: fId2, queueId: qId2 } = await resolveExceptionIds(supabase, exceptionId)
-  await logFakturaEvent(supabase, fId2, qId2, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
+  const opisWarning = await logFakturaEvent(supabase, fId2, qId2, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
 
-  return { success: true, message: 'Opis dodany poprawnie.' }
+  return { success: true, message: 'Opis dodany poprawnie.', warning: opisWarning ?? undefined }
 }
 
 

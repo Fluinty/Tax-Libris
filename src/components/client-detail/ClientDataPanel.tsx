@@ -29,7 +29,11 @@ export function ClientDataPanel({ client, isAdmin }: { client: any, isAdmin: boo
 
   const saveInfo = async () => {
     try {
-      await updateClientData(client.nip, { dodatkowe_info_ksiegowej: infoDraft })
+      const result = await updateClientData(client.nip, { dodatkowe_info_ksiegowej: infoDraft })
+      if (!result.success) {
+        toast.error('Błąd podczas zapisywania', { description: result.error })
+        return
+      }
       setIsEditingInfo(false)
       toast.success('Zapisano dodatkowe informacje')
       router.refresh()
@@ -40,7 +44,11 @@ export function ClientDataPanel({ client, isAdmin }: { client: any, isAdmin: boo
 
   const saveData = async () => {
     try {
-      await updateClientData(client.nip, dataDraft)
+      const result = await updateClientData(client.nip, dataDraft)
+      if (!result.success) {
+        toast.error('Błąd podczas zapisywania', { description: result.error })
+        return
+      }
       setIsEditingData(false)
       toast.success('Zapisano dane klienta')
       router.refresh()
