@@ -45,3 +45,6 @@ walkthrough.md
 
 # personal documents
 Umowa ramowa*.pdf
+
+# MCP — lokalna konfiguracja serwerów (token przez env var, plik nie do repo)
+.mcp.json
