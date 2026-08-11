@@ -68,3 +68,76 @@ NOTIFY pgrst, 'reload schema';
 --   SELECT * FROM fluinty.config WHERE key='auto_write_global';
 --     -> dokladnie jeden wiersz, value='off' (kill-switch rozbrojony)
 -- ============================================================================
+
+
+-- ============================================================================
+-- CZĘŚĆ 2: rozszerzenie CHECK constraint faktura_events — 11.08
+--
+-- BUG z testu T1: insert 'auto_write_toggled' pada na
+-- faktura_events_event_type_check (zamknieta lista event_type bez nowych typow
+-- bramki). Fail-safe panelu zadzialal poprawnie — brakuje tylko typow na liscie.
+--
+-- Dotychczasowa definicja (odczyt z produkcji 11.08.2026, pg_get_constraintdef):
+--   CHECK ((event_type = ANY (ARRAY['ksef_received', 'ai_classified',
+--     'validator_adjusted', 'anomaly_flagged', 'duplicate_flagged', 'queued',
+--     'edited', 'approved', 'skipped', 'rezim_changed', 'opis_added_to_list',
+--     'rule_created', 'booked', 'auto_booked', 'booking_failed',
+--     'external_booked', 'rollback', 'reprocessed', 'comment'])))
+--
+-- Nowa lista = wszystkie 19 dotychczasowych typow + 2 realnie brakujace:
+--   + 'auto_write_toggled'  (toggle bramki w panelu — zrodlo buga z T1)
+--   + 'auto_candidate'      (czesc workerowa bramki — dokladamy od razu)
+-- Uwaga: 'auto_booked' (trzeci planowany) juz JEST na liscie, a
+-- 'opis_added_to_list' (0 wierszy w danych) takze — po prostu nieuzyte.
+--
+-- Blok idempotentny: DROP IF EXISTS + ADD z pelna jawna lista.
+-- ============================================================================
+
+BEGIN;
+
+ALTER TABLE fluinty.faktura_events
+  DROP CONSTRAINT IF EXISTS faktura_events_event_type_check;
+
+ALTER TABLE fluinty.faktura_events
+  ADD CONSTRAINT faktura_events_event_type_check CHECK (event_type = ANY (ARRAY[
+    'ksef_received'::text,
+    'ai_classified'::text,
+    'validator_adjusted'::text,
+    'anomaly_flagged'::text,
+    'duplicate_flagged'::text,
+    'queued'::text,
+    'edited'::text,
+    'approved'::text,
+    'skipped'::text,
+    'rezim_changed'::text,
+    'opis_added_to_list'::text,
+    'rule_created'::text,
+    'booked'::text,
+    'auto_booked'::text,
+    'booking_failed'::text,
+    'external_booked'::text,
+    'rollback'::text,
+    'reprocessed'::text,
+    'comment'::text,
+    -- bramka auto-write (11.08.2026):
+    'auto_write_toggled'::text,
+    'auto_candidate'::text
+  ]));
+
+COMMIT;
+
+-- ============================================================================
+-- WERYFIKACJA CZĘŚCI 2:
+--   SELECT pg_get_constraintdef(c.oid)
+--   FROM pg_constraint c
+--   JOIN pg_class t ON t.oid = c.conrelid
+--   JOIN pg_namespace n ON n.oid = t.relnamespace
+--   WHERE n.nspname='fluinty' AND t.relname='faktura_events'
+--     AND c.conname='faktura_events_event_type_check';
+--     -> lista = 19 dotychczasowych typow + auto_write_toggled + auto_candidate
+--        (auto_booked i opis_added_to_list byly juz na liscie wczesniej)
+--
+--   Po ponownym tescie T1 (toggle DEMO):
+--   SELECT event_type, actor, payload, created_at FROM fluinty.faktura_events
+--   WHERE event_type='auto_write_toggled' ORDER BY created_at DESC LIMIT 5;
+-- ============================================================================
