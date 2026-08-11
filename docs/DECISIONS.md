@@ -64,3 +64,26 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   NIP dla nie-admina | server actions to publiczne endpointy POST z dowolnymi id,
   a service_role omija RLS: pojedynczy 'autorytatywny' NIP + zaufanie OR-owi
   pozwalal sparowac wlasny fakturaId z cudzym queueId (IDOR miedzy klientami biura).
+- 2026-08-11 | Sekcja "Czego system nauczyl sie od ksiegowej" (/klienci/[nip],
+  fetchClientLearning): rama odwrocona — poprawki ksiegowej = inwestycja
+  ("N poprawek -> M zasad -> K faktur bez zmian"), NIE rejestr bledow AI; "regula"
+  to agregat dostawca (nip_dostawcy, fallback znormalizowana nazwa) x kategoria
+  (kwota_* -> KPiR, gtu/jpk -> VAT, rezim_changed -> rezim, opis -> styl opisu,
+  reszta -> inne) z trescia z NAJNOWSZEJ korekty; dowod skutecznosci = karty
+  dostawcy zakonczone PO ostatniej korekcie z edycja_ksiegowa=false (dla stylu
+  opisu: edycja_realna=false, bo edycja_ksiegowa z definicji pomija opis)
+  ORAZ bez wlasnego eventu korekty — rekonesans 11.08 wykazal 26 kart z eventami
+  edited (diff kwot) przy flagach false/false, wiec same flagi nie wystarcza
+  za dowod czystosci (rozbieznosc zgloszona osobno do zbadania);
+  empty-state liczony z FLAG KART, nie z eventow (edited istnieje dopiero od
+  05.08.2026 — klient edytowany wczesniej dostalby falszywe "zero zmian");
+  komunikaty mowia o "poprawkach ksiegowych", nie o "zmianach" (edycja_ksiegowa
+  z definicji pomija opis); "Kwoty ksiegowane do" tylko gdy diff z=0->na!=0,
+  sama korekta wysokosci = "Poprawiona kwota w" (inaczej zdanie klamie o tresci
+  korekty); naglowek "N poprawek" liczy kazdy event RAZ, takze przy diffie
+  wielokategorii; wylacznie fakty policzalne, zadnych obietnic mechanizmu;
+  dane LAZY, stala liczba zapytan (2-3, bez N+1), limity DESC (przy scieciu
+  zostaja najnowsze), gate read-only wg wzorca gateFakturaHistory
+  | dowod dla wlascicielki biura, ze poprawki sie amortyzuja (argument
+  sprzedazowy auto-write), a surowa lista "final != ai" u sceptyka dziala
+  odwrotnie.
