@@ -53,6 +53,7 @@ import { getLatestReview } from '@/lib/ai-review'
 import type { ExceptionWithClient, ClientPojazd, PozycjaXml, KlasyfikacjaAiPozycja, TypDokumentu, ZapisVATData, PozycjaVAT } from '@/types/database'
 import { FakturaPreview } from './sections/FakturaPreview'
 import { FakturaEventsDrawer } from './sections/FakturaEventsDrawer'
+import { FakturaHistoriaSection } from './sections/FakturaHistoriaSection'
 
 interface ClientOpis {
   id: number
@@ -1458,6 +1459,11 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           </div>
         </div>
       )}
+
+      {/* Historia faktury — jedna chronologiczna oś. Dane LAZY: strzelają
+          dopiero przy pierwszym rozwinięciu (fetchFakturaTimeline), NIE przy
+          renderze listy kart. */}
+      <FakturaHistoriaSection fakturaId={exception.id} queueId={exception.legacy_id} />
 
       </div>{/* end left column */}
 

@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
-import { assertCanWrite } from '@/lib/auth-helpers'
+import { assertCanWrite, getAllowedNips } from '@/lib/auth-helpers'
 
 // Helper to get authenticated user email
 async function getUserEmail(): Promise<string> {
@@ -927,6 +927,84 @@ export async function checkExceptionStatus(exceptionId: number): Promise<{ statu
   return { status: queueData?.status ?? null }
 }
 
+// ── Kontrola dostępu do historii faktury (współdzielona, read-only) ──────────
+// Server actions to publiczne endpointy POST z dowolnym fakturaId/queueId, a
+// createSupabaseAdmin() omija RLS — dostęp trzeba egzekwować jawnie. Model jak
+// w assertCanWrite (izolacja klientów biura): rola 'klient' = zero dostępu;
+// nie-admin tylko przypisane NIP-y, bez kart demo gdy ma dostęp all-but-demo.
+//
+// UWAGA na sparowane klucze: fakturaId i queueId są w pełni sterowane przez
+// wołającego. Gdyby rozwiązać jeden „autorytatywny" NIP i zaufać OR-owi, atakujący
+// mógłby sparować WŁASNY fakturaId z CUDZYM queueId i wyciągnąć dane ofiary. Dlatego
+// rozwiązujemy client_nip NIEZALEŻNIE dla każdego klucza i wymagamy zgodności.
+// Fail-closed: błąd odczytu lub nierozstrzygnięty NIP dla nie-admina = odmowa.
+async function resolveNipForKey(
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  col: 'faktura_id' | 'queue_id',
+  val: number,
+  cardTable: 'faktury' | 'exceptions_queue',
+): Promise<{ nip: string | null } | { error: string }> {
+  const ev = await supabase.from('faktura_events').select('client_nip').eq(col, val).limit(1).maybeSingle()
+  if (ev.error) {
+    console.error(`[gateFakturaHistory] odczyt NIP (faktura_events.${col}=${val}): ${ev.error.message}`)
+    return { error: `Błąd odczytu uprawnień (faktura_events): ${ev.error.message}` }
+  }
+  if (ev.data?.client_nip) return { nip: ev.data.client_nip }
+  // brak eventów — fallback do wiersza karty
+  const card = await supabase.from(cardTable).select('client_nip').eq('id', val).maybeSingle()
+  if (card.error) {
+    console.error(`[gateFakturaHistory] odczyt NIP (${cardTable}.id=${val}): ${card.error.message}`)
+    return { error: `Błąd odczytu uprawnień (${cardTable}): ${card.error.message}` }
+  }
+  return { nip: card.data?.client_nip ?? null }
+}
+
+async function gateFakturaHistory(
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  params: { fakturaId?: number; queueId?: number }
+): Promise<{ ok: true; clientNip: string | null } | { ok: false; error: string }> {
+  const { fakturaId, queueId } = params
+  if (!fakturaId && !queueId) return { ok: false, error: 'Brak ID faktury' }
+
+  const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
+  if (!panelUser || panelUser.rola === 'klient') {
+    return { ok: false, error: 'Brak uprawnień do podglądu historii' }
+  }
+
+  let nipF: string | null = null
+  let nipQ: string | null = null
+  if (fakturaId) {
+    const r = await resolveNipForKey(supabase, 'faktura_id', fakturaId, 'faktury')
+    if ('error' in r) return { ok: false, error: r.error }
+    nipF = r.nip
+  }
+  if (queueId) {
+    const r = await resolveNipForKey(supabase, 'queue_id', queueId, 'exceptions_queue')
+    if ('error' in r) return { ok: false, error: r.error }
+    nipQ = r.nip
+  }
+
+  // Sparowane klucze muszą wskazywać ten sam NIP — inaczej to niespójna para
+  // (atak przez enumerację albo nieaktualne id). Odmawiamy.
+  if (fakturaId && queueId && nipF && nipQ && nipF !== nipQ) {
+    return { ok: false, error: 'Niespójne identyfikatory faktury — odmowa dostępu' }
+  }
+  const clientNip = nipF ?? nipQ
+
+  if (!isAdmin) {
+    // Fail-closed: nie-admin bez rozstrzygniętego NIP = odmowa
+    if (!clientNip) return { ok: false, error: 'Brak dostępu do historii tej faktury' }
+    if (nips !== null && !nips.includes(clientNip)) {
+      return { ok: false, error: 'Brak dostępu do historii tej faktury' }
+    }
+    if (nips === null && demoNips.includes(clientNip)) {
+      return { ok: false, error: 'Brak dostępu do historii tej faktury' }
+    }
+  }
+
+  return { ok: true, clientNip }
+}
+
 /**
  * Pobierz zdarzenia osi czasu faktury.
  */
@@ -935,11 +1013,14 @@ export async function fetchFakturaEvents(params: { fakturaId?: number; queueId?:
   if (!fakturaId && !queueId) return { events: [], error: 'Brak ID faktury' };
 
   const supabase = createSupabaseAdmin()
-  
+
+  const gate = await gateFakturaHistory(supabase, params)
+  if (!gate.ok) return { events: [], error: gate.error }
+
   let query = supabase
     .from('faktura_events')
     .select('id, event_type, actor, payload, created_at')
-  
+
   if (fakturaId && queueId) {
     query = query.or(`faktura_id.eq.${fakturaId},queue_id.eq.${queueId}`)
   } else if (fakturaId) {
@@ -947,11 +1028,139 @@ export async function fetchFakturaEvents(params: { fakturaId?: number; queueId?:
   } else if (queueId) {
     query = query.eq('queue_id', queueId)
   }
+  // Defense-in-depth: OR mógłby dociągnąć wiersze innego klienta — twardo tniemy
+  // do NIP-a rozstrzygniętego przez gate
+  if (gate.clientNip) query = query.eq('client_nip', gate.clientNip)
 
   const { data, error } = await query
     .order('created_at', { ascending: true })
     .limit(200)
 
-  if (error) return { events: [], error: error.message }
+  if (error) return { events: [], error: `Błąd odczytu zdarzeń (faktura_events): ${error.message}` }
   return { events: data || [], error: null }
+}
+
+// ── Oś czasu faktury: jedna chronologiczna historia ─────────────────
+// WYŁĄCZNIE ODCZYT. Kręgosłup = fluinty.faktura_events; zdarzenia implicytne
+// (narodziny/decyzja/rollback/auto) dokładane z kolumn karty tylko gdy NIE ma
+// odpowiadającego eventu w oknie ±5 s (events wygrywa, bo bogatszy). Anomalie
+// pochodzą z kolumny jsonb exceptions_queue.anomalie_historii (osobnej tabeli
+// anomalii historycznych brak w tym środowisku — patrz meta.anomaliesSource).
+export interface TimelineEntry {
+  key: string
+  ts: string
+  event_type: string
+  actor: string | null
+  payload: any
+  source: 'event' | 'implicit' | 'anomaly'
+}
+
+export async function fetchFakturaTimeline(params: {
+  fakturaId?: number
+  queueId?: number
+}): Promise<{ entries: TimelineEntry[]; error: string | null; meta?: { anomaliesSource: string | null } }> {
+  const { fakturaId, queueId } = params
+  if (!fakturaId && !queueId) return { entries: [], error: 'Brak ID faktury' }
+
+  const supabase = createSupabaseAdmin()
+
+  // Kontrola dostępu (rola + scoping NIP) — współdzielona z fetchFakturaEvents
+  const gate = await gateFakturaHistory(supabase, params)
+  if (!gate.ok) return { entries: [], error: gate.error }
+
+  // 1) Zdarzenia z faktura_events (OR po obu kluczach, dedup po id, rosnąco)
+  let evQuery = supabase.from('faktura_events').select('id, event_type, actor, payload, created_at')
+  if (fakturaId && queueId) evQuery = evQuery.or(`faktura_id.eq.${fakturaId},queue_id.eq.${queueId}`)
+  else if (fakturaId) evQuery = evQuery.eq('faktura_id', fakturaId)
+  else evQuery = evQuery.eq('queue_id', queueId!)
+  // Defense-in-depth: tnij do NIP-a rozstrzygniętego przez gate (OR + sparowane klucze)
+  if (gate.clientNip) evQuery = evQuery.eq('client_nip', gate.clientNip)
+
+  const { data: rawEvents, error: evError } = await evQuery.order('created_at', { ascending: true }).limit(300)
+  if (evError) return { entries: [], error: `Błąd odczytu zdarzeń (faktura_events): ${evError.message}` }
+
+  const seen = new Set<number>()
+  const events: TimelineEntry[] = []
+  for (const e of rawEvents ?? []) {
+    if (seen.has(e.id)) continue
+    seen.add(e.id)
+    events.push({ key: `ev-${e.id}`, ts: e.created_at, event_type: e.event_type, actor: e.actor, payload: e.payload, source: 'event' })
+  }
+
+  // 2) Kolumny implicytne karty (starsze karty mogą nie mieć eventów).
+  //    Błędu odczytu NIE połykamy (CLAUDE.md); anomalie_historii jest kolumną
+  //    exceptions_queue — na tabeli faktury NIE istnieje, więc jej tam nie selektujemy.
+  let card: any = null
+  if (queueId) {
+    let cardQuery = supabase
+      .from('exceptions_queue')
+      .select('created_at, resolved_at, resolved_by, rollback_at, rollback_by, auto_created_at, auto_created_by, status, anomalie_historii')
+      .eq('id', queueId)
+    if (gate.clientNip) cardQuery = cardQuery.eq('client_nip', gate.clientNip)
+    const { data, error } = await cardQuery.maybeSingle()
+    if (error) console.error(`[fetchFakturaTimeline] odczyt karty (exceptions_queue id=${queueId}): ${error.message}`)
+    card = data
+  }
+  if (!card && fakturaId) {
+    let cardQuery = supabase
+      .from('faktury')
+      .select('created_at, resolved_at, resolved_by, auto_created_at, auto_created_by, status')
+      .eq('id', fakturaId)
+    if (gate.clientNip) cardQuery = cardQuery.eq('client_nip', gate.clientNip)
+    const { data, error } = await cardQuery.maybeSingle()
+    if (error) console.error(`[fetchFakturaTimeline] odczyt karty (faktury id=${fakturaId}): ${error.message}`)
+    card = data
+  }
+
+  const WINDOW_MS = 5000
+  const near = (types: string[], iso: string | null | undefined): boolean => {
+    if (!iso) return false
+    const t = new Date(iso).getTime()
+    return events.some((ev) => types.includes(ev.event_type) && Math.abs(new Date(ev.ts).getTime() - t) <= WINDOW_MS)
+  }
+  const ever = (types: string[]): boolean => events.some((ev) => types.includes(ev.event_type))
+
+  const implicit: TimelineEntry[] = []
+  if (card) {
+    if (card.created_at && !near(['ksef_received', 'ai_classified', 'queued'], card.created_at)) {
+      implicit.push({ key: 'imp-created', ts: card.created_at, event_type: 'card_created', actor: null, payload: null, source: 'implicit' })
+    }
+    if (card.resolved_at && !near(['approved', 'auto_booked', 'booked', 'skipped', 'external_booked'], card.resolved_at)) {
+      implicit.push({ key: 'imp-resolved', ts: card.resolved_at, event_type: 'card_resolved', actor: card.resolved_by ?? null, payload: null, source: 'implicit' })
+    }
+    if (card.auto_created_at && !near(['auto_booked', 'booked'], card.auto_created_at)) {
+      implicit.push({ key: 'imp-auto', ts: card.auto_created_at, event_type: 'auto_booked', actor: card.auto_created_by ?? null, payload: null, source: 'implicit' })
+    }
+    if (card.rollback_at && !ever(['rollback'])) {
+      implicit.push({ key: 'imp-rollback', ts: card.rollback_at, event_type: 'rollback', actor: card.rollback_by ?? null, payload: null, source: 'implicit' })
+    }
+  }
+
+  // 3) Anomalie historyczne — kolumna jsonb bez własnego timestampu; kotwiczymy
+  //    przy narodzinach karty (albo pierwszym evencie), żeby usiadły na początku osi
+  const anomalie = Array.isArray(card?.anomalie_historii) ? card.anomalie_historii : []
+  const anchorTs = card?.created_at ?? events[0]?.ts ?? null
+  const anomalieEntries: TimelineEntry[] = anchorTs
+    ? anomalie.map((a: any, i: number) => ({
+        key: `anom-${i}`,
+        ts: anchorTs,
+        event_type: 'anomaly_detected',
+        actor: null,
+        payload: a,
+        source: 'anomaly' as const,
+      }))
+    : []
+
+  // 4) Scal + sort rosnąco; przy równym ts: event, potem anomalia, potem implicit
+  const rank: Record<TimelineEntry['source'], number> = { event: 0, anomaly: 1, implicit: 2 }
+  const entries = [...events, ...implicit, ...anomalieEntries].sort((a, b) => {
+    const d = new Date(a.ts).getTime() - new Date(b.ts).getTime()
+    return d !== 0 ? d : rank[a.source] - rank[b.source]
+  })
+
+  return {
+    entries,
+    error: null,
+    meta: { anomaliesSource: anomalie.length ? 'exceptions_queue.anomalie_historii' : null },
+  }
 }

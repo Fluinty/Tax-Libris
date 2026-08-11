@@ -47,3 +47,20 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
 - 2026-08-11 | logFakturaEvent nie polyka bledow: console.error + pole `warning`
   w zwrotce akcji (toast.warning), operacja glowna przechodzi | approve nie moze
   padac przez os czasu, ale znikajace zdarzenia lamaly regule niepolykania bledow.
+- 2026-08-11 | Os czasu faktury (sekcja Historia): faktura_events jako kregoslup,
+  zdarzenia implicytne (created/resolved/rollback/auto_created) dokladane z kolumn
+  karty TYLKO gdy brak eventu o tej semantyce w oknie +-5 s (events wygrywa, bo
+  bogatszy); anomalie z kolumny jsonb exceptions_queue.anomalie_historii (osobnej
+  tabeli anomalii historycznych w tym srodowisku brak); dane LAZY przy pierwszym
+  rozwinieciu | rozproszony slad (events + kolumny kart + anomalie) laczymy w jedna
+  chronologie bez dublowania; lista kart bez dodatkowych zapytan (wymog wydajnosci).
+  UWAGA: kolumny klasyfikacja_korekty NIE MA — szczegol edycji zyje w
+  faktura_events.edited.payload.diff (pole: z -> na) i stamtad go renderujemy.
+- 2026-08-11 | Historia faktury (fetchFakturaEvents + fetchFakturaTimeline) za
+  wspolnym gateFakturaHistory: blokada roli 'klient' + scoping po NIP jak w
+  assertCanWrite. Przy parze fakturaId+queueId rozwiazujemy client_nip NIEZALEZNIE
+  dla kazdego klucza i wymagamy zgodnosci (mismatch => odmowa), plus .eq(client_nip)
+  na zapytaniach danych; fail-closed przy bledzie odczytu lub nierozstrzygnietym
+  NIP dla nie-admina | server actions to publiczne endpointy POST z dowolnymi id,
+  a service_role omija RLS: pojedynczy 'autorytatywny' NIP + zaufanie OR-owi
+  pozwalal sparowac wlasny fakturaId z cudzym queueId (IDOR miedzy klientami biura).
