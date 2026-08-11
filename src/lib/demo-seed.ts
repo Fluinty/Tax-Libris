@@ -88,7 +88,8 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
     nazwa_bazy_rachmistrz: 'DEMO_FIRMA',
     aktywny: true,
     pilot: false,
-    auto_write_enabled: true,
+    // bramka: DEMO rozbrojone domyślnie — uzbrojenie tylko świadomie togglem (event audytowy)
+    auto_write_enabled: false,
     is_demo: demoData.demo_client.is_demo,
   }, { onConflict: 'nip' })
   if (clientErr) {

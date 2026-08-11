@@ -47,8 +47,12 @@ export function AutoWriteSection({ client, isAdmin, candidateStats }: AutoWriteS
     if (!isAdmin) return
     setIsSaving(true)
     try {
-      await updateAutoWriteSettings(client.nip, enabled, maxKwota)
-      toast.success('Zapisano ustawienia Auto-write')
+      const result = await updateAutoWriteSettings(client.nip, enabled, maxKwota)
+      if (result.success) {
+        toast.success('Zapisano ustawienia Auto-write')
+      } else {
+        toast.error(`Błąd zapisu: ${result.error || 'Nieznany błąd'}`)
+      }
     } catch (err: any) {
       toast.error(`Błąd zapisu: ${err.message || 'Nieznany błąd'}`)
     } finally {

@@ -57,4 +57,7 @@ zadnego cichego polykania `error` z Supabase.
 * Sekrety wylacznie w env (SUPABASE\_SERVICE\_ROLE\_KEY itd.) — nigdy w kodzie/commitach.
 * Commity male i tematyczne; przed zmiana w istniejacym flow przeczytac caly plik,
 nie tylko fragment (lekcja: resetDemo x4).
+* Na starcie KAŻDEGO zadania: git fetch + pull (rebase przy lokalnych zmianach).
+W repo pracuje też drugi agent (Antigravity) — przed pushem sprawdź, czy origin
+nie uciekł. Konflikt = zatrzymaj się i zgłoś, nie rozwiązuj po cichu.
 

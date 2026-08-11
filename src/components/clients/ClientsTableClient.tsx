@@ -19,6 +19,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Label } from '@/components/ui/label'
 import { addClient, resetDemoClient } from '@/app/(auth)/klienci/actions'
 
@@ -26,6 +37,7 @@ interface Props {
   clients: ClientWithCounts[]
   isAdmin: boolean
   okres: string
+  autoWriteGlobal: 'on' | 'off'
 }
 
 const OKRES_OPTIONS = [
@@ -71,13 +83,15 @@ function AutoBadge({ verdict }: { verdict: string | null }) {
   return null
 }
 
-export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
+export function ClientsTableClient({ clients, isAdmin, okres, autoWriteGlobal }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [loadingNips, setLoadingNips] = useState<Set<string>>(new Set())
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const [resettingDemo, setResettingDemo] = useState(false)
+  // Klient czekający na potwierdzenie WŁĄCZENIA auto-zapisu (wyłączanie bez dialogu)
+  const [confirmClient, setConfirmClient] = useState<ClientWithCounts | null>(null)
 
   const [formData, setFormData] = useState({
     nip: '',
@@ -97,8 +111,12 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
   const handleToggleAuto = async (nip: string, enabled: boolean) => {
     setLoadingNips((prev) => new Set(prev).add(nip))
     try {
-      await toggleAutoWrite(nip, enabled)
-      toast.success(enabled ? 'Auto-zapis włączony' : 'Auto-zapis wyłączony')
+      const result = await toggleAutoWrite(nip, enabled)
+      if (result.success) {
+        toast.success(enabled ? 'Auto-zapis włączony' : 'Auto-zapis wyłączony')
+      } else {
+        toast.error('Błąd', { description: result.error ?? 'Nieznany błąd' })
+      }
     } catch (err) {
       toast.error('Błąd', {
         description: err instanceof Error ? err.message : 'Nieznany błąd',
@@ -270,6 +288,32 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
         </DialogContent>
       </Dialog>
 
+      {/* Potwierdzenie WŁĄCZENIA auto-zapisu (bramka produkcyjnego księgowania) */}
+      <AlertDialog open={confirmClient !== null} onOpenChange={(open) => { if (!open) setConfirmClient(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Włączyć auto-księgowanie?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Faktury klienta {confirmClient?.nazwa} spełniające progi bezpieczeństwa będą
+              księgowane bez ręcznej akceptacji. Automat aktywuje się dopiero po włączeniu
+              głównego przełącznika systemu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmClient(null)}>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#1F3A5F] hover:bg-[#152A45] text-white"
+              onClick={() => {
+                if (confirmClient) handleToggleAuto(confirmClient.nip, true)
+                setConfirmClient(null)
+              }}
+            >
+              Włącz
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
         <div className="overflow-x-auto">
@@ -297,8 +341,19 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
                 <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="Pominięte faktury w wybranym okresie">
                   Pominięte
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider" title="≥50 faktur AI i >50% czystości księgowej w wybranym okresie">
-                  Auto
+                <th className="text-center px-4 py-3 font-semibold text-[#64748B] text-xs uppercase tracking-wider">
+                  <div className="flex items-center justify-center gap-2">
+                    <span title="≥50 faktur AI i >50% czystości księgowej w wybranym okresie">Auto</span>
+                    {autoWriteGlobal === 'on' ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px] normal-case tracking-normal" title="Główny przełącznik systemu (fluinty.config: auto_write_global) — zmiana wyłącznie ręcznym SQL-em właściciela">
+                        Automat: aktywny
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-500 border-0 text-[10px] normal-case tracking-normal" title="Główny przełącznik systemu (fluinty.config: auto_write_global) — zmiana wyłącznie ręcznym SQL-em właściciela">
+                        Automat: rozbrojony
+                      </Badge>
+                    )}
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -355,21 +410,38 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
                     {client.skipped_count > 0 ? client.skipped_count : <span className="text-slate-400">0</span>}
                   </td>
                   <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                    {isAdmin ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <AutoBadge verdict={client.auto_verdict} />
+                    <div className="flex items-center justify-center gap-2">
+                      <AutoBadge verdict={client.auto_verdict} />
+                      {isAdmin ? (
                         <Switch
                           checked={client.auto_write_enabled}
-                          onCheckedChange={(checked) =>
-                            handleToggleAuto(client.nip, checked)
-                          }
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              // Włączenie wymaga potwierdzenia — dialog
+                              setConfirmClient(client)
+                            } else {
+                              // Wyłączenie działa od razu, bez dialogu
+                              handleToggleAuto(client.nip, false)
+                            }
+                          }}
                           disabled={loadingNips.has(client.nip)}
                           className="cursor-pointer"
                         />
-                      </div>
-                    ) : (
-                      <AutoBadge verdict={client.auto_verdict} />
-                    )}
+                      ) : (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <span tabIndex={0} className="inline-flex cursor-not-allowed">
+                                <Switch checked={client.auto_write_enabled} disabled />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs">
+                              zmiana tylko dla administratora
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

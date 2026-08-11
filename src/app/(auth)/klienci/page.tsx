@@ -43,6 +43,20 @@ export default async function KlienciPage({ searchParams }: { searchParams: Prom
     console.error('[KlienciPage] RPC client_metrics error:', metricsError)
   }
 
+  // Kill-switch globalny automatu — TYLKO odczyt; zmiana wyłącznie ręcznym SQL-em
+  // właściciela (fluinty.config, key='auto_write_global'). Brak wiersza/tabeli
+  // lub błąd = traktujemy jak 'off' (fail-safe: automat rozbrojony).
+  const { data: configRow, error: configError } = await supabase
+    .from('config')
+    .select('value')
+    .eq('key', 'auto_write_global')
+    .maybeSingle()
+
+  if (configError) {
+    console.error('[KlienciPage] odczyt fluinty.config auto_write_global error:', configError)
+  }
+  const autoWriteGlobal: 'on' | 'off' = configRow?.value === 'on' ? 'on' : 'off'
+
   // NIP-filtrowanie metryk po stronie JS (jak dotąd dla views)
   const allowedNipSet = nips ? new Set(nips) : null
   const metricsMap = new Map<string, ClientMetricsRow>()
@@ -83,6 +97,7 @@ export default async function KlienciPage({ searchParams }: { searchParams: Prom
         clients={clientsWithCounts}
         isAdmin={isAdmin}
         okres={okresKey}
+        autoWriteGlobal={autoWriteGlobal}
       />
     </div>
   )

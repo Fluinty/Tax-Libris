@@ -122,32 +122,84 @@ export async function ignoreException(exceptionId: number) {
   return { success: true }
 }
 
-export async function toggleAutoWrite(clientNip: string, enabled: boolean) {
+// Błędy zwracamy jako wartość (nie throw) — Next.js maskuje w produkcji treść
+// błędów rzuconych z Server Actions, a komunikaty bramki muszą dotrzeć do admina.
+export async function toggleAutoWrite(
+  clientNip: string,
+  enabled: boolean
+): Promise<{ success: boolean; error?: string }> {
   const supabaseAuth = await createSupabaseServerClient()
   const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) throw new Error('Nie jesteś zalogowany')
+  if (!user) return { success: false, error: 'Nie jesteś zalogowany' }
 
   const supabase = createSupabaseAdmin()
 
   // Check if admin
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('panel_users')
     .select('rola')
     .eq('email', user.email ?? '')
     .eq('aktywny', true)
-    .single()
+    .maybeSingle()
 
+  if (profileError) {
+    return { success: false, error: `Błąd odczytu uprawnień (panel_users): ${profileError.message}` }
+  }
   if (profile?.rola !== 'admin') {
-    throw new Error('Brak uprawnień — tylko admin może zmienić to ustawienie')
+    return { success: false, error: 'Brak uprawnień — tylko admin może zmienić to ustawienie' }
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('clients')
     .update({ auto_write_enabled: enabled })
     .eq('nip', clientNip)
+    .select('nip')
 
   if (error) {
-    throw new Error(`Błąd aktualizacji klienta: ${error.message}`)
+    return { success: false, error: `Błąd aktualizacji klienta (clients): ${error.message}` }
+  }
+  if (!updated || updated.length === 0) {
+    return { success: false, error: `Nie znaleziono klienta o NIP ${clientNip} (clients)` }
+  }
+
+  // Ślad audytowy bramki auto-write — obowiązkowy przy każdej zmianie z panelu
+  const { error: eventError } = await supabase.from('faktura_events').insert({
+    client_nip: clientNip,
+    event_type: 'auto_write_toggled',
+    actor: user.email ?? 'unknown',
+    payload: { client_nip: clientNip, enabled },
+  })
+
+  if (eventError) {
+    if (enabled) {
+      // Fail-safe: WŁĄCZENIE bez śladu audytowego wycofujemy — klient wraca do
+      // stanu rozbrojonego. Guard .eq na starą wartość, żeby nie nadpisać
+      // równoległej zmiany innego admina.
+      const { error: revertError } = await supabase
+        .from('clients')
+        .update({ auto_write_enabled: false })
+        .eq('nip', clientNip)
+        .eq('auto_write_enabled', true)
+      if (revertError) {
+        revalidatePath('/klienci')
+        return {
+          success: false,
+          error: `Nie zapisano zdarzenia auto_write_toggled (faktura_events: ${eventError.message}) i nie udało się wycofać włączenia (clients: ${revertError.message}) — stan klienta NIP ${clientNip} jest NIEOKREŚLONY, zweryfikuj ręcznie`,
+        }
+      }
+      revalidatePath('/klienci')
+      return {
+        success: false,
+        error: `Nie zapisano zdarzenia auto_write_toggled (faktura_events): ${eventError.message} — włączenie wycofane, klient pozostaje rozbrojony`,
+      }
+    }
+    // Fail-safe w drugą stronę: awaria zapisu zdarzenia przy WYŁĄCZANIU nie może
+    // z powrotem uzbroić klienta — rozbrojenie zostaje, zgłaszamy brak śladu.
+    revalidatePath('/klienci')
+    return {
+      success: false,
+      error: `Klient został wyłączony, ale nie zapisano zdarzenia auto_write_toggled (faktura_events): ${eventError.message} — uzupełnij ślad audytowy ręcznie`,
+    }
   }
 
   revalidatePath('/klienci')

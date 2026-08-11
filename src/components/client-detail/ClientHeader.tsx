@@ -20,8 +20,14 @@ export function ClientHeader({ client, isAdmin }: { client: any, isAdmin: boolea
 
     setLoading(true)
     try {
-      await toggleAutoWrite(client.nip, checked)
-      toast.success(checked ? 'Auto-zapis włączony' : 'Auto-zapis wyłączony')
+      const result = await toggleAutoWrite(client.nip, checked)
+      if (result.success) {
+        toast.success(checked ? 'Auto-zapis włączony' : 'Auto-zapis wyłączony')
+      } else {
+        toast.error('Błąd', { description: result.error ?? 'Nieznany błąd' })
+      }
+      // Refresh także przy błędzie — niektóre gałęzie awarii celowo utrwalają
+      // zmianę (np. wyłączenie bez śladu audytowego) i UI musi pokazać stan z DB
       router.refresh()
     } catch (e) {
       toast.error('Wystąpił błąd')
