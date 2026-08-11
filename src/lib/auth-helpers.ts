@@ -40,11 +40,16 @@ export async function getAllowedNips(): Promise<{
     redirect('/login')
   }
 
-  // Pobierz NIP-y klientów na ryczałcie (do wykluczenia) oraz dema
-  const { data: excludedClients } = await admin
+  // Pobierz NIP-y klientów na ryczałcie (do wykluczenia) oraz dema.
+  // Fail-closed: błąd odczytu NIE może po cichu wyzerować list wykluczeń
+  // (ryczalt/demo) — konsumenci (bramki dostępu) traktowaliby je jako puste.
+  const { data: excludedClients, error: exclError } = await admin
     .from('clients')
     .select('nip, forma_opodatkowania, is_demo')
     .or('forma_opodatkowania.eq.ryczalt,is_demo.eq.true')
+  if (exclError) {
+    throw new Error(`Błąd odczytu klientów (clients): ${exclError.message}`)
+  }
 
   const ryczaltNips = (excludedClients ?? []).filter(c => c.forma_opodatkowania === 'ryczalt').map(c => c.nip)
   const demoNips = (excludedClients ?? []).filter(c => c.is_demo).map(c => c.nip)
