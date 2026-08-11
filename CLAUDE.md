@@ -60,4 +60,7 @@ nie tylko fragment (lekcja: resetDemo x4).
 * Na starcie KAŻDEGO zadania: git fetch + pull (rebase przy lokalnych zmianach).
 W repo pracuje też drugi agent (Antigravity) — przed pushem sprawdź, czy origin
 nie uciekł. Konflikt = zatrzymaj się i zgłoś, nie rozwiązuj po cichu.
+* Przed zadaniem wykraczającym poza czysty frontend przeczytaj docs/ARCHITECTURE.md;
+nie zmieniaj zachowań opisanych w docs/DECISIONS.md bez wyraźnej zgody; przy każdej
+istotnej decyzji architektonicznej DOPISZ wpis do DECISIONS.md w commicie ze zmianą.
 
