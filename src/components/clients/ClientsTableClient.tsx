@@ -172,13 +172,14 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
 
   const hasDemoClient = clients.some(c => (c as any).is_demo)
 
-  // Summary row calculations
-  const sumAi = filtered.reduce((s, c) => s + c.ai_count, 0)
-  const sumExt = filtered.reduce((s, c) => s + c.external_count, 0)
-  const sumKorekty = filtered.reduce((s, c) => s + c.decyzje_ksiegowe, 0)
-  const sumPending = filtered.reduce((s, c) => s + c.pending_count, 0)
-  const sumSkipped = filtered.reduce((s, c) => s + c.skipped_count, 0)
-  const sumCzyste = filtered.reduce((s, c) => s + c.czyste_ksiegowo, 0)
+  // Summary row calculations — klient DEMO poza sumami stopki
+  const sumowani = filtered.filter((c) => !c.is_demo)
+  const sumAi = sumowani.reduce((s, c) => s + c.ai_count, 0)
+  const sumExt = sumowani.reduce((s, c) => s + c.external_count, 0)
+  const sumKorekty = sumowani.reduce((s, c) => s + c.decyzje_ksiegowe, 0)
+  const sumPending = sumowani.reduce((s, c) => s + c.pending_count, 0)
+  const sumSkipped = sumowani.reduce((s, c) => s + c.skipped_count, 0)
+  const sumCzyste = sumowani.reduce((s, c) => s + c.czyste_ksiegowo, 0)
   const avgPct = sumAi > 0 ? (sumCzyste / sumAi) * 100 : null
 
   return (
@@ -387,8 +388,8 @@ export function ClientsTableClient({ clients, isAdmin, okres }: Props) {
             {filtered.length > 0 && (
               <tfoot>
                 <tr className="bg-[#F8FAFC] border-t-2 border-[#E2E8F0] font-semibold text-[#1E293B]">
-                  <td className="px-4 py-3 text-xs uppercase text-[#64748B]">
-                    Suma ({filtered.length} klientów)
+                  <td className="px-4 py-3 text-xs uppercase text-[#64748B]" title={sumowani.length !== filtered.length ? 'Klient DEMO nie jest wliczany do sum' : undefined}>
+                    Suma ({sumowani.length} klientów{sumowani.length !== filtered.length ? ', bez DEMO' : ''})
                   </td>
                   <td className="px-4 py-3 text-center">{sumAi}</td>
                   <td className="px-4 py-3 text-center">{sumExt}</td>
