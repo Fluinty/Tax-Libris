@@ -87,3 +87,14 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | dowod dla wlascicielki biura, ze poprawki sie amortyzuja (argument
   sprzedazowy auto-write), a surowa lista "final != ai" u sceptyka dziala
   odwrotnie.
+- 2026-08-12 | AUDYT rozbieznosci flag vs eventow (docs/AUDIT-flagi-vs-eventy.md):
+  metryka czystosci NIE jest zawyzona — 30/30 "rozbieznych" kart ma final_kwoty
+  rowne ai_kwoty (flagi mowia prawde); to eventy 'edited' nadraportowuja, bo
+  baseline diffu (ai_kwoty z widoku exceptions_queue_v2) pochodzi z faktury,
+  gdzie jest NULL (kazdy diff to z:0). Uzasadnienie defense-in-depth z wpisu
+  2026-08-11 ("flagi niewiarygodne") bylo odwrotne do stanu faktycznego —
+  sekcja nauki do korekty: poprawka = event z REALNA zmiana wartosci vs AI.
+  Definicji metryki NIE zmieniac na flaga+eventy (skrzywdziloby klientow
+  potwierdzajacych kwoty zgodne z AI, np. Medical Group 100->30 p.p.)
+  | pct_ksiegowa to fundament decyzji auto-write; fix nalezy sie zrodlu
+  sygnalu (baseline diffu / logowanie edited), nie definicji metryki.
