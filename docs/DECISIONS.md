@@ -118,24 +118,34 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   gateFakturaHistory: blokada roli 'klient', scoping po przypisanych NIP-ach,
   fail-closed przy nierozstrzygnietym NIP; identyfikatory z wejscia
   (fakturaId/queueId/zapisId/pozycjaId/exceptionId) walidowane
-  Number.isSafeInteger przed uzyciem w filtrach; checkWhitelist (login)
-  zwraca jedna generyczna odpowiedz | server actions to publiczne endpointy
-  POST, a service_role omija RLS — kazdy odczyt bez jawnej bramki to
-  cross-tenant IDOR (audyt 2026-08 par.1); rozrozniane odpowiedzi logowania
-  = enumeracja e-maili panel_users.
-- 2026-08-12 | Wszystkie zapisy panelu do kart aktywnych (updateJpkSection,
-  resetJpkSection, updateFinalZapisVAT, ignoreFaktura + istniejacy wzorzec
-  approve*/resolveException na exceptions_queue) maja guard statusu
-  .in('status',['pending','pending_review']).select('id') — pusty wynik =
-  blad "Faktura zmienila status"; blad KTOREGOKOLWIEK z dwoch zapisow
-  (faktury + exceptions_queue) idzie do UI z nazwa tabeli, nigdy nie jest
-  polykany; resolveExceptionIds sprawdza error obu odczytow faktury, a
-  fallback "czysty queue-id" bierze WYLACZNIE przy data===null &&
-  error===null | bez guardu podwojny Enter/stala lista nadpisywaly karte juz
-  zaksiegowana (worker ksieguje z tych pol); `if (error && !queueId)`
-  raportowal nieudany zapis jako sukces; przejsciowy blad odczytu faktury
-  zamienial faktury.id w queue.id i UPDATE mogl trafic w CUDZA karte
-  (v2.id === faktury.id !== queue.id).
+  Number.isSafeInteger przed uzyciem w filtrach; getZapisHistory dodatkowo
+  tnie WSZYSTKIE odczyty .eq(client_nip) do rozstrzygnietego wlasciciela,
+  bo zapis_id z Rachmistrza numeruje sie per ksiega klienta i koliduje
+  miedzy klientami (wiersze bez client_nip pomijane — fail-closed);
+  checkWhitelist (login/actions.ts) USUNIETY jako martwy endpoint — proba
+  "generycznej odpowiedzi" nie zamykala enumeracji (boolean allowed dalej
+  rozroznial konta), a logowanie idzie bezposrednio przez Supabase auth
+  | server actions to publiczne endpointy POST, a service_role omija RLS —
+  kazdy odczyt bez jawnej bramki to cross-tenant IDOR (audyt 2026-08 par.1).
+- 2026-08-12 | Wszystkie zapisy panelu do kart aktywnych (approveFaktura,
+  approveExceptionFull, resolveException, ignoreFaktura, updateJpkSection,
+  resetJpkSection, updateFinalZapisVAT) maja guard statusu
+  .in('status',['pending','pending_review']).select('id') na OBU tabelach
+  (exceptions_queue + faktury) — pusty wynik = blad "Faktura zmienila
+  status"; zaden blad zapisu nie jest polykany. Semantyka drugiego zapisu
+  (tabele nie sa transakcyjne): w approve*/resolve sync do faktury po
+  udanym zapisie queue nie cofa decyzji, ale wraca jako WARNING (toast,
+  updateFakturaOnFinish), a dla karty faktury-native (queueId=null) to
+  jedyny zapis = pelny blad; w updateJpk*/updateFinalZapisVAT/ignoreFaktura
+  porazka drugiej tabeli zwraca jawny komunikat "Zapis czesciowy: ..."
+  (nie udaje, ze nic sie nie stalo). resolveExceptionIds sprawdza error obu
+  odczytow faktury, a fallback "czysty queue-id" bierze WYLACZNIE przy
+  data===null && error===null | bez guardu podwojny Enter/stala lista
+  nadpisywaly karte juz zaksiegowana (worker ksieguje z tych pol);
+  `if (error && !queueId)` raportowal nieudany zapis jako sukces;
+  przejsciowy blad odczytu faktury zamienial faktury.id w queue.id i UPDATE
+  mogl trafic w CUDZA karte (v2.id === faktury.id !== queue.id); pelna
+  atomowosc wymaga RPC/plpgsql — kandydat na fale 2-3.
 - 2026-08-12 | Status 'rolled_back' (36 kart w prod, 22 bez resolved_at) to
   status HISTORYCZNY — relikt recznych rollbackow wykonywanych przez
   wlasciciela na K1 sprzed asynchronicznej sciezki workera

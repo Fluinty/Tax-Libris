@@ -243,7 +243,16 @@ export async function updateAutoWriteSettings(
   if (!/^\d{10}$/.test(nip ?? '')) {
     return { success: false, error: `Nieprawidłowy NIP „${nip}" — oczekiwane dokładnie 10 cyfr` }
   }
-  if (typeof autoMaxKwota !== 'number' || !Number.isFinite(autoMaxKwota) || autoMaxKwota <= 0 || autoMaxKwota > AUTO_MAX_KWOTA_LIMIT) {
+  // Walidacja progu blokuje wyłącznie UZBRAJANIE. Rozbrajanie (enabled=false)
+  // to operacja bezpieczna i bywa pilna — nieprawidłowa/wyczyszczona kwota w
+  // formularzu nie może zostawić klienta uzbrojonego; wtedy próg w bazie
+  // zostaje nietknięty (zapisujemy starą wartość).
+  const kwotaValid =
+    typeof autoMaxKwota === 'number' &&
+    Number.isFinite(autoMaxKwota) &&
+    autoMaxKwota > 0 &&
+    autoMaxKwota <= AUTO_MAX_KWOTA_LIMIT
+  if (autoWriteEnabled && !kwotaValid) {
     return {
       success: false,
       error: `Nieprawidłowy próg auto_max_kwota — oczekiwana kwota od 0 (wyłącznie) do ${AUTO_MAX_KWOTA_LIMIT} zł`,
@@ -269,11 +278,13 @@ export async function updateAutoWriteSettings(
     return { success: false, error: `Nie znaleziono klienta o NIP ${nip} (clients)` }
   }
 
+  const kwotaDoZapisu = kwotaValid ? autoMaxKwota : oldClient.auto_max_kwota
+
   const { error } = await supabaseAdmin
     .from('clients')
     .update({
       auto_write_enabled: autoWriteEnabled,
-      auto_max_kwota: autoMaxKwota
+      auto_max_kwota: kwotaDoZapisu
     })
     .eq('nip', nip)
 
@@ -288,7 +299,7 @@ export async function updateAutoWriteSettings(
     client_nip: nip,
     event_type: 'auto_write_toggled',
     actor: userEmail,
-    payload: { client_nip: nip, enabled: autoWriteEnabled, auto_max_kwota: autoMaxKwota },
+    payload: { client_nip: nip, enabled: autoWriteEnabled, auto_max_kwota: kwotaDoZapisu },
   })
 
   if (eventError) {
@@ -317,7 +328,7 @@ export async function updateAutoWriteSettings(
     // nie przywraca uzbrojenia — zmiana zostaje (z wpisem w client_changes_log),
     // zgłaszamy brak śladu w faktura_events.
     await logChange(supabaseAdmin, nip, 'auto_write_enabled', oldClient.auto_write_enabled, autoWriteEnabled, userEmail)
-    await logChange(supabaseAdmin, nip, 'auto_max_kwota', oldClient.auto_max_kwota ?? 5000, autoMaxKwota, userEmail)
+    await logChange(supabaseAdmin, nip, 'auto_max_kwota', oldClient.auto_max_kwota ?? 5000, kwotaDoZapisu, userEmail)
     revalidatePath(`/klienci/${nip}`)
     revalidatePath('/klienci')
     return {

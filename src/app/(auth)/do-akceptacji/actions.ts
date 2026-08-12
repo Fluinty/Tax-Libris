@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
 import { assertCanWrite, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
 import { KOLUMNY_PER_TYP } from '@/lib/kpir'
+import { parsePolishNumber } from '@/lib/parse-number'
 
 // ── Walidacja wejść formularza (kwoty KPiR + opis) ────────────────────────
 // Server actions to publiczne endpointy POST — `kwoty` idą wprost do
@@ -16,19 +17,58 @@ const KPIR_KWOTY_KEYS = new Set(
 )
 const OPIS_MAX_LENGTH = 500
 
-function validateKwotyInput(kwoty: Record<string, number> | null | undefined): string | null {
-  if (kwoty == null) return null
+// Waliduje i NORMALIZUJE kwoty: klucze twardo z whitelisty (mass assignment),
+// ale wartości koercowane przez parsePolishNumber — jsonb ai_/final_kwoty pisze
+// pipeline poza repo i wartość-string ("1234.56") na istniejącej karcie nie może
+// zablokować zatwierdzenia; nie-finite/nieparsowalne = odmowa.
+function validateKwotyInput(
+  kwoty: Record<string, unknown> | null | undefined
+): { error: string; kwoty: null } | { error: null; kwoty: Record<string, number> | null } {
+  if (kwoty == null) return { error: null, kwoty: null }
+  const out: Record<string, number> = {}
   for (const [k, v] of Object.entries(kwoty)) {
-    if (!KPIR_KWOTY_KEYS.has(k)) return `Niedozwolony klucz kolumny KPiR: ${k}`
-    if (typeof v !== 'number' || !Number.isFinite(v)) return `Nieprawidłowa kwota w kolumnie KPiR ${k}`
+    if (!KPIR_KWOTY_KEYS.has(k)) return { error: `Niedozwolony klucz kolumny KPiR: ${k}`, kwoty: null }
+    const num = parsePolishNumber(v as string | number | null | undefined)
+    if (num === null) return { error: `Nieprawidłowa kwota w kolumnie KPiR ${k}`, kwoty: null }
+    out[k] = num
   }
-  return null
+  return { error: null, kwoty: out }
 }
 
 function validateOpisInput(opis: string | null | undefined): string | null {
   if (opis == null) return null
   if (typeof opis !== 'string') return 'Nieprawidłowy opis księgowy'
   if (opis.length > OPIS_MAX_LENGTH) return `Opis księgowy za długi (max ${OPIS_MAX_LENGTH} znaków)`
+  return null
+}
+
+// Lekka walidacja strukturalna zapisu VAT z wejścia wołającego — payload idzie
+// 1:1 do final_zapis_vat_data, z którego worker księguje; łapiemy klasę
+// "nie-liczba/nie-finite w polu kwotowym", pełna walidacja domenowa jest po
+// stronie workera.
+function validateZapisVatInput(z: unknown): string | null {
+  if (z == null) return null
+  if (typeof z !== 'object' || Array.isArray(z)) return 'Nieprawidłowy zapis VAT (oczekiwany obiekt)'
+  const obj = z as Record<string, unknown>
+  const pozycje = obj.pozycje_vat
+  if (pozycje != null) {
+    if (!Array.isArray(pozycje)) return 'Nieprawidłowe pozycje VAT (oczekiwana lista)'
+    for (const p of pozycje) {
+      if (p == null || typeof p !== 'object') return 'Nieprawidłowa pozycja VAT'
+      for (const k of ['netto', 'vat', 'brutto'] as const) {
+        const v = (p as Record<string, unknown>)[k]
+        if (v != null && (typeof v !== 'number' || !Number.isFinite(v))) {
+          return `Nieprawidłowa kwota „${k}" w pozycji VAT`
+        }
+      }
+    }
+  }
+  for (const k of ['suma_netto', 'suma_vat', 'suma_brutto'] as const) {
+    const v = obj[k]
+    if (v != null && (typeof v !== 'number' || !Number.isFinite(v))) {
+      return `Nieprawidłowa kwota „${k}" w zapisie VAT`
+    }
+  }
   return null
 }
 
@@ -281,6 +321,42 @@ async function resolveExceptionIds(
   return { fakturaId, queueId, exception, faktura, isDemo, error: null }
 }
 
+// ── Zapis do fluinty.faktury przy kończeniu karty (approve*/resolve) ────────
+// Guard statusu + zero połykania błędów, z semantyką zależną od roli zapisu:
+// - karta pary (hasQueue): exceptions_queue jest już zapisane z guardem, a to
+//   z niej worker księguje karty legacy — błąd/rozjazd syncu do faktury nie
+//   cofa decyzji księgowej, ale NIE znika po cichu: wraca jako warning
+//   (toast, wzorzec logFakturaEvent) + console.error;
+// - karta faktury-native (queueId===null): to JEDYNY zapis akcji (worker
+//   księguje z faktury) — błąd lub inny status = błąd całej akcji.
+async function updateFakturaOnFinish(
+  supabase: any,
+  fakturaId: number,
+  hasQueue: boolean,
+  patch: Record<string, unknown>,
+): Promise<{ error: string | null; warning: string | null }> {
+  const { data: updated, error } = await supabase
+    .from('faktury')
+    .update(patch)
+    .eq('id', fakturaId)
+    .in('status', ['pending', 'pending_review'])
+    .select('id')
+
+  if (error) {
+    if (!hasQueue) return { error: `Błąd zapisu (faktury): ${error.message}`, warning: null }
+    const warning = `Nie zsynchronizowano tabeli faktury: ${error.message} — decyzja zapisana w exceptions_queue, zweryfikuj kartę po odświeżeniu`
+    console.error('[updateFakturaOnFinish]', warning, { fakturaId })
+    return { error: null, warning }
+  }
+  if (!updated || updated.length === 0) {
+    if (!hasQueue) return { error: 'Faktura zmieniła status — odśwież listę', warning: null }
+    const warning = 'Nie zsynchronizowano tabeli faktury (status inny niż pending) — rozjazd tabel, zweryfikuj kartę po odświeżeniu'
+    console.error('[updateFakturaOnFinish]', warning, { fakturaId })
+    return { error: null, warning }
+  }
+  return { error: null, warning: null }
+}
+
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
   const opisError = validateOpisInput(overrideOpis)
@@ -355,7 +431,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
       .select('id')
 
     if (error) {
-      return { success: false, error: error.message }
+      return { success: false, error: `Błąd zapisu (exceptions_queue): ${error.message}` }
     }
     if (!updatedQueue || updatedQueue.length === 0) {
       return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
@@ -363,21 +439,21 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   }
 
   // Sync też do fluinty.faktury (audit + future migration off exceptions_queue)
+  let fakturaSyncWarning: string | null = null
   if (fakturaId) {
-    await supabase
-      .from('faktury')
-      .update({
-        status: targetStatus,
-        final_opis: opisDoZapisu,
-        final_kwoty_per_kolumna: kwotyDoZapisu,
-        final_zapis_vat_data: scalonyVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
-        resolved_by: userEmail,
-        resolved_at: new Date().toISOString(),
-        edycja_realna: editFlags.edycja_realna,
-        edycja_ksiegowa: editFlags.edycja_ksiegowa,
-      })
-      .eq('id', fakturaId)
+    const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
+      status: targetStatus,
+      final_opis: opisDoZapisu,
+      final_kwoty_per_kolumna: kwotyDoZapisu,
+      final_zapis_vat_data: scalonyVat,
+      final_kpir_pojazdowe_data: scalonyPojazd,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString(),
+      edycja_realna: editFlags.edycja_realna,
+      edycja_ksiegowa: editFlags.edycja_ksiegowa,
+    })
+    if (sync.error) return { success: false, error: sync.error }
+    fakturaSyncWarning = sync.warning
   }
 
   await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id ?? null, {
@@ -393,7 +469,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline1.warning]
+  const eventWarnings: (string | null)[] = [baseline1.warning, fakturaSyncWarning]
   if (diff1) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -412,7 +488,9 @@ export async function approveExceptionFull(
   finalZapisVatData: any,
   finalOpis: string
 ) {
-  const inputError = validateKwotyInput(finalKwotyPerKolumna) ?? validateOpisInput(finalOpis)
+  const kwotyCheck = validateKwotyInput(finalKwotyPerKolumna)
+  if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
+  const inputError = validateOpisInput(finalOpis) ?? validateZapisVatInput(finalZapisVatData)
   if (inputError) return { success: false, error: inputError }
 
   try {
@@ -441,7 +519,10 @@ export async function approveExceptionFull(
         .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
-  const roundedKwoty = finalKwotyPerKolumna ? roundKwoty(finalKwotyPerKolumna) : finalKwotyPerKolumna
+  // kwotyCheck.kwoty = wejście po whiteliście i koercji wartości (nigdy surowy
+  // argument); null nie występuje przy wywołaniach z UI (typy parametrów), ale
+  // domykamy go do pustego obiektu jak default resolveException.
+  const roundedKwoty = roundKwoty(kwotyCheck.kwoty ?? {})
 
   // Scalenie inline edits z modal edits
   // Modal daje finalKwotyPerKolumna + finalZapisVatData + finalOpis
@@ -477,7 +558,7 @@ export async function approveExceptionFull(
       .select('id')
 
     if (error) {
-      return { success: false, error: error.message }
+      return { success: false, error: `Błąd zapisu (exceptions_queue): ${error.message}` }
     }
     if (!updatedQueue || updatedQueue.length === 0) {
       return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
@@ -485,20 +566,20 @@ export async function approveExceptionFull(
   }
 
   // Sync też do fluinty.faktury
+  let fakturaSyncWarning: string | null = null
   if (fakturaId) {
-    await supabase
-      .from('faktury')
-      .update({
-        status: targetStatus,
-        final_opis: finalOpis,
-        final_zapis_vat_data: baseVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
-        resolved_by: userEmail,
-        resolved_at: new Date().toISOString(),
-        edycja_realna: editFlags.edycja_realna,
-        edycja_ksiegowa: editFlags.edycja_ksiegowa,
-      })
-      .eq('id', fakturaId)
+    const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
+      status: targetStatus,
+      final_opis: finalOpis,
+      final_zapis_vat_data: baseVat,
+      final_kpir_pojazdowe_data: scalonyPojazd,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString(),
+      edycja_realna: editFlags.edycja_realna,
+      edycja_ksiegowa: editFlags.edycja_ksiegowa,
+    })
+    if (sync.error) return { success: false, error: sync.error }
+    fakturaSyncWarning = sync.warning
   }
 
   await logAudit(supabase, 'approved_with_full_edit', exception.client_nip, exception.zapis_id ?? null, {
@@ -513,7 +594,7 @@ export async function approveExceptionFull(
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline3.warning]
+  const eventWarnings: (string | null)[] = [baseline3.warning, fakturaSyncWarning]
   if (diff3) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -530,6 +611,9 @@ export async function updateFinalZapisVAT(
   exceptionId: number,
   zapisVatData: any
 ) {
+  const vatError = validateZapisVatInput(zapisVatData)
+  if (vatError) return { success: false, error: vatError }
+
   try {
     await assertCanWrite(exceptionId)
   } catch (e: unknown) {
@@ -571,9 +655,23 @@ export async function updateFinalZapisVAT(
       .eq('id', fakturaId)
       .in('status', ['pending', 'pending_review'])
       .select('id')
-    if (error) return { success: false, error: `Błąd zapisu VAT (faktury): ${error.message}` }
+    // Zapisy nie są transakcyjne — po udanym zapisie do exceptions_queue
+    // komunikat musi mówić o zapisie częściowym.
+    if (error) {
+      return {
+        success: false,
+        error: queueId
+          ? `Zapis częściowy: VAT zapisany w exceptions_queue, ale tabela faktury zgłosiła błąd: ${error.message} — odśwież listę i zweryfikuj kartę`
+          : `Błąd zapisu VAT (faktury): ${error.message}`,
+      }
+    }
     if (!updatedFaktura || updatedFaktura.length === 0) {
-      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      return {
+        success: false,
+        error: queueId
+          ? 'Zapis częściowy: VAT zapisany w exceptions_queue, ale tabela faktury ma inny status (rozjazd tabel) — odśwież listę i zweryfikuj kartę'
+          : 'Faktura zmieniła status — odśwież listę',
+      }
     }
   }
 
@@ -590,7 +688,9 @@ export async function updateFinalZapisVAT(
 
 // ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
 export async function resolveException(exceptionId: number, opis: string, kwoty: Record<string, number> = {}, zapisVatData: any = null) {
-  const inputError = validateKwotyInput(kwoty) ?? validateOpisInput(opis)
+  const kwotyCheck = validateKwotyInput(kwoty)
+  if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
+  const inputError = validateOpisInput(opis) ?? validateZapisVatInput(zapisVatData)
   if (inputError) return { success: false, error: inputError }
 
   try {
@@ -618,7 +718,10 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
         .eq('faktura_id', fakturaId)
     : { data: [] as any[] }
 
-  const roundedKwoty = kwoty ? roundKwoty(kwoty) : kwoty
+  // kwotyCheck.kwoty = wejście po whiteliście i koercji wartości (nigdy surowy
+  // argument); null nie występuje przy wywołaniach z UI (typy parametrów), ale
+  // domykamy go do pustego obiektu jak default resolveException.
+  const roundedKwoty = roundKwoty(kwotyCheck.kwoty ?? {})
   const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], roundedKwoty)
   const baseVat = zapisVatData
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: zapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
@@ -652,28 +755,28 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
       .select('id')
 
     if (error) {
-      return { success: false, error: error.message }
+      return { success: false, error: `Błąd zapisu (exceptions_queue): ${error.message}` }
     }
     if (!updatedQueue || updatedQueue.length === 0) {
       return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
     }
   }
 
+  let fakturaSyncWarning: string | null = null
   if (fakturaId) {
-    await supabase
-      .from('faktury')
-      .update({
-        status: targetStatus,
-        final_opis: opis,
-        final_kwoty_per_kolumna: roundedKwoty,
-        final_zapis_vat_data: baseVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
-        resolved_by: userEmail,
-        resolved_at: new Date().toISOString(),
-        edycja_realna: editFlags.edycja_realna,
-        edycja_ksiegowa: editFlags.edycja_ksiegowa,
-      })
-      .eq('id', fakturaId)
+    const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
+      status: targetStatus,
+      final_opis: opis,
+      final_kwoty_per_kolumna: roundedKwoty,
+      final_zapis_vat_data: baseVat,
+      final_kpir_pojazdowe_data: scalonyPojazd,
+      resolved_by: userEmail,
+      resolved_at: new Date().toISOString(),
+      edycja_realna: editFlags.edycja_realna,
+      edycja_ksiegowa: editFlags.edycja_ksiegowa,
+    })
+    if (sync.error) return { success: false, error: sync.error }
+    fakturaSyncWarning = sync.warning
   }
 
   await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id ?? null, {
@@ -686,7 +789,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline4.warning]
+  const eventWarnings: (string | null)[] = [baseline4.warning, fakturaSyncWarning]
   if (diff4) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -753,11 +856,23 @@ export async function ignoreFaktura(exceptionId: number) {
       .in('status', ['pending', 'pending_review'])
       .select('id')
 
+    // Po udanym 'ignored' w exceptions_queue komunikat nie może udawać, że
+    // nic się nie stało — karta znika z kolejki mimo błędu drugiej tabeli.
     if (error) {
-      return { success: false, error: `Błąd pomijania (faktury): ${error.message}` }
+      return {
+        success: false,
+        error: queueId
+          ? `Zapis częściowy: karta pominięta w exceptions_queue, ale tabela faktury zgłosiła błąd: ${error.message} — odśwież listę i zweryfikuj kartę`
+          : `Błąd pomijania (faktury): ${error.message}`,
+      }
     }
     if (!updatedFaktura || updatedFaktura.length === 0) {
-      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      return {
+        success: false,
+        error: queueId
+          ? 'Zapis częściowy: karta pominięta w exceptions_queue, ale tabela faktury ma inny status (rozjazd tabel) — odśwież listę i zweryfikuj kartę'
+          : 'Faktura zmieniła status — odśwież listę',
+      }
     }
   }
 
@@ -887,8 +1002,13 @@ export async function updateJpkSection(
       }
     }
     if ('final_kwoty_per_kolumna' in data) {
-      const kwotyError = validateKwotyInput(data.final_kwoty_per_kolumna as Record<string, number> | null)
-      if (kwotyError) return { success: false, error: kwotyError }
+      const kwotyCheck = validateKwotyInput(data.final_kwoty_per_kolumna as Record<string, unknown> | null)
+      if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
+      data = { ...data, final_kwoty_per_kolumna: kwotyCheck.kwoty }
+    }
+    if ('pozycje_vat_final' in data && data.pozycje_vat_final != null) {
+      const vatError = validateZapisVatInput({ pozycje_vat: data.pozycje_vat_final })
+      if (vatError) return { success: false, error: vatError }
     }
 
     const userEmail = await getUserEmail()
@@ -930,9 +1050,23 @@ export async function updateJpkSection(
         .in('status', ['pending', 'pending_review'])
         .select('id')
 
-      if (error) return { success: false, error: `Błąd zapisu sekcji (exceptions_queue): ${error.message}` }
+      // Zapisy do dwóch tabel nie są transakcyjne — jeśli faktury już zapisano,
+      // komunikat NIE może udawać, że nic się nie stało (rozjazd tabel).
+      if (error) {
+        return {
+          success: false,
+          error: fakturaId
+            ? `Zapis częściowy: sekcja zapisana w tabeli faktury, ale exceptions_queue zgłosił błąd: ${error.message} — odśwież listę i zweryfikuj kartę`
+            : `Błąd zapisu sekcji (exceptions_queue): ${error.message}`,
+        }
+      }
       if (!updatedQueue || updatedQueue.length === 0) {
-        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+        return {
+          success: false,
+          error: fakturaId
+            ? 'Zapis częściowy: sekcja zapisana w tabeli faktury, ale karta w exceptions_queue ma inny status (rozjazd tabel) — odśwież listę i zweryfikuj kartę'
+            : 'Faktura zmieniła status — odśwież listę',
+        }
       }
     }
 
@@ -996,9 +1130,23 @@ export async function resetJpkSection(
         .in('status', ['pending', 'pending_review'])
         .select('id')
 
-      if (error) return { success: false, error: `Błąd resetu sekcji (exceptions_queue): ${error.message}` }
+      // Jak w updateJpkSection: po udanym zapisie do faktury komunikat musi
+      // mówić o zapisie częściowym, nie udawać braku zmian.
+      if (error) {
+        return {
+          success: false,
+          error: fakturaId
+            ? `Zapis częściowy: sekcja zresetowana w tabeli faktury, ale exceptions_queue zgłosił błąd: ${error.message} — odśwież listę i zweryfikuj kartę`
+            : `Błąd resetu sekcji (exceptions_queue): ${error.message}`,
+        }
+      }
       if (!updatedQueue || updatedQueue.length === 0) {
-        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+        return {
+          success: false,
+          error: fakturaId
+            ? 'Zapis częściowy: sekcja zresetowana w tabeli faktury, ale karta w exceptions_queue ma inny status (rozjazd tabel) — odśwież listę i zweryfikuj kartę'
+            : 'Faktura zmieniła status — odśwież listę',
+        }
       }
     }
 
@@ -1091,11 +1239,14 @@ async function gateFakturaHistory(
   if (!fakturaId && !queueId) return { ok: false, error: 'Brak ID faktury' }
   // fakturaId/queueId sterowane przez wołającego i trafiają do interpolowanego
   // .or() — wymuszamy bezpieczny int, żeby string z przecinkiem nie wstrzyknął
-  // dodatkowych filtrów PostgREST.
-  if (fakturaId !== undefined && (!Number.isSafeInteger(fakturaId) || fakturaId <= 0)) {
+  // dodatkowych filtrów PostgREST. `!= null` (nie `!== undefined`): karta bez
+  // legacy_queue_id przekazuje queueId=null (FakturaCard podaje exception.legacy_id
+  // wprost) — null znaczy „brak klucza", nie atak; odrzucenie łamałoby historię
+  // każdej karty nowego formatu.
+  if (fakturaId != null && (!Number.isSafeInteger(fakturaId) || fakturaId <= 0)) {
     return { ok: false, error: 'Nieprawidłowy identyfikator faktury' }
   }
-  if (queueId !== undefined && (!Number.isSafeInteger(queueId) || queueId <= 0)) {
+  if (queueId != null && (!Number.isSafeInteger(queueId) || queueId <= 0)) {
     return { ok: false, error: 'Nieprawidłowy identyfikator faktury' }
   }
 

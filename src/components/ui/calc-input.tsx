@@ -21,9 +21,17 @@ export function CalcInput({ value, onChange, ...props }: CalcInputProps) {
   const [error, setError] = useState<string | null>(null)
   const errorTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPropValue = useRef(String(value ?? ''))
+  const isFocused = useRef(false)
 
-  // Sync from props when they change externally (not from our own edits)
-  if (String(value ?? '') !== lastPropValue.current) {
+  // Sync from props when they change externally (not from our own edits).
+  // NIGDY podczas pisania: rodzice trzymają kwotę jako LICZBĘ i przy stanie
+  // przejściowym ("123,", "-") wstrzymują update stanu — echo w propsie
+  // ("123") różni się wtedy od surowego localValue ("123,") i sync kasowałby
+  // właśnie wpisany przecinek/kropkę/minus (dalsze klawisze doklejałyby się
+  // do "123" → 12345 zamiast 123,45 w księgowaniu). Zewnętrzne zmiany
+  // (recalc, reset do AI) i tak wymagają kliknięcia poza input, więc
+  // synchronizacja po blur wystarcza.
+  if (!isFocused.current && String(value ?? '') !== lastPropValue.current) {
     lastPropValue.current = String(value ?? '')
     setLocalValue(String(value ?? ''))
     setError(null)
@@ -92,7 +100,12 @@ export function CalcInput({ value, onChange, ...props }: CalcInputProps) {
     }
   }
 
+  const handleFocus = () => {
+    isFocused.current = true
+  }
+
   const handleBlur = () => {
+    isFocused.current = false
     evaluate()
   }
 
@@ -111,6 +124,7 @@ export function CalcInput({ value, onChange, ...props }: CalcInputProps) {
         inputMode="decimal"
         value={localValue}
         onChange={handleChange}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
       />

@@ -39,6 +39,10 @@ import type { AuditEntry, ZapisInfo, ActionColor } from '@/lib/audit-formatter'
 
 interface Props {
   zapisId: number
+  /** NIP klienta, w którego kontekście otwarto historię — zapis_id z Rachmistrza
+   *  numeruje się PER KSIĘGA i koliduje między klientami; serwer potwierdza
+   *  parę (zapisId, nip) w danych i tnie odpowiedź do tego klienta. */
+  clientNip?: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -65,7 +69,7 @@ const colorMap: Record<ActionColor, { text: string; bg: string; dot: string }> =
   purple: { text: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/10', dot: 'bg-[#8B5CF6]' },
 }
 
-export function ZapisHistorySheet({ zapisId, open, onOpenChange }: Props) {
+export function ZapisHistorySheet({ zapisId, clientNip, open, onOpenChange }: Props) {
   const [audits, setAudits] = useState<AuditEntry[]>([])
   const [zapisInfo, setZapisInfo] = useState<ZapisInfo | null>(null)
   const [loading, setLoading] = useState(false)
@@ -75,7 +79,11 @@ export function ZapisHistorySheet({ zapisId, open, onOpenChange }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const result = await getZapisHistory(zapisId)
+      const result = await getZapisHistory(zapisId, clientNip ?? null)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
       setAudits(result.audits)
       setZapisInfo(result.zapisInfo)
     } catch (err) {
@@ -83,7 +91,7 @@ export function ZapisHistorySheet({ zapisId, open, onOpenChange }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [zapisId])
+  }, [zapisId, clientNip])
 
   useEffect(() => {
     if (open && zapisId) {

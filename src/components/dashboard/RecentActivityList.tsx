@@ -20,7 +20,7 @@ interface Props {
 }
 
 export function RecentActivityList({ activities }: Props) {
-  const [historyZapisId, setHistoryZapisId] = useState<number | null>(null)
+  const [historyZapis, setHistoryZapis] = useState<{ zapisId: number; clientNip: string | null } | null>(null)
 
   return (
     <>
@@ -69,7 +69,7 @@ export function RecentActivityList({ activities }: Props) {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    onClick={() => setHistoryZapisId(activity.zapis_id)}
+                    onClick={() => activity.zapis_id && setHistoryZapis({ zapisId: activity.zapis_id, clientNip: activity.client_nip ?? null })}
                     className="text-[#94A3B8] hover:text-[#4A90E2] cursor-pointer"
                     title="Historia zapisu"
                   >
@@ -93,12 +93,13 @@ export function RecentActivityList({ activities }: Props) {
       </div>
 
       {/* Shared history sheet */}
-      {historyZapisId && (
+      {historyZapis && (
         <ZapisHistorySheet
-          zapisId={historyZapisId}
-          open={!!historyZapisId}
+          zapisId={historyZapis.zapisId}
+          clientNip={historyZapis.clientNip}
+          open={!!historyZapis}
           onOpenChange={(open) => {
-            if (!open) setHistoryZapisId(null)
+            if (!open) setHistoryZapis(null)
           }}
         />
       )}
