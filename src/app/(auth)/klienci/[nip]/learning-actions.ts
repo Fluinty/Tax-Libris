@@ -110,6 +110,10 @@ function cmpIso(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+// Tolerancja porównań kwot — jak KWOTA_EPS w akcjach do-akceptacji: różnice
+// poniżej pół grosza to szum zaokrągleń, korekta o 1 grosz przechodzi.
+const KWOTA_EPS = 0.005
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DiffEntry = { z: any; na: any }
 
@@ -119,12 +123,42 @@ function asNumber(v: any): number {
   return Number.isFinite(n) ? n : 0
 }
 
-// Zdanie reguły z NAJNOWSZEJ korekty w grupie — same policzalne fakty.
-// Dla KPiR rozróżniamy: kwota poprawiona w tej samej kolumnie (z≠0 i na≠0)
-// vs kwota skierowana do kolumny, w której AI miało 0 (z=0/null, na≠0) —
-// „Kwoty księgowane do" przy samej korekcie wysokości byłoby nieprawdą.
+// ── Realność korekty (AUDIT-flagi-vs-eventy.md) ────────────────────────────
+// Historyczne eventy 'edited' bywają fantomowe: diff liczony z baseline'em
+// z widoku v2 (ai_kwoty z faktury = NULL) ma zawsze z:0 i loguje „poprawkę"
+// nawet przy wartościach równych propozycji AI. Prawdę o kwotach niesie
+// ai_kwoty_per_kolumna KARTY (exceptions_queue) — klucz kwota_* jest realny
+// tylko gdy na różni się od wartości AI o więcej niż epsilon. Klucz opis jest
+// realny gdy z≠na (baseline opisu w v2 był poprawny); pozostałe klucze
+// (gtu/procedura_jpk/pozycje_vat) pochodzą z jawnych flag edycji — realne.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildSentence(category: LearningCategory, latestPayload: any): string {
+function realDiffKeys(payload: any, card: CardRow): string[] {
+  const diff: Record<string, DiffEntry> =
+    payload && typeof payload === 'object' && payload.diff && typeof payload.diff === 'object' ? payload.diff : {}
+  const aiKwoty = (card.ai_kwoty_per_kolumna ?? {}) as Record<string, unknown>
+  return Object.keys(diff).filter((k) => {
+    if (k.startsWith('kwota_')) {
+      const col = k.replace(/^kwota_/, '')
+      const ai = asNumber(aiKwoty[col] ?? 0)
+      const na = asNumber(diff[k]?.na)
+      return Math.abs(na - ai) > KWOTA_EPS
+    }
+    if (k === 'opis') {
+      const z = typeof diff[k]?.z === 'string' ? (diff[k].z as string).trim() : ''
+      const na = typeof diff[k]?.na === 'string' ? (diff[k].na as string).trim() : ''
+      return z !== na
+    }
+    return true
+  })
+}
+
+// Zdanie reguły z NAJNOWSZEJ korekty w grupie — same policzalne fakty.
+// Dla KPiR baseline'em jest ai_kwoty_per_kolumna KARTY (payload.z historycznie
+// bywa fantomowym 0): kwota poprawiona w tej samej kolumnie (AI≠0 i na≠0)
+// vs kwota skierowana do kolumny, w której AI miało 0 — „Kwoty księgowane do"
+// przy samej korekcie wysokości byłoby nieprawdą.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildSentence(category: LearningCategory, latestPayload: any, latestCard: CardRow | undefined): string {
   if (category === 'rezim') {
     const na = latestPayload?.na
     const label = typeof na === 'string' ? (REZIM_LABELS[na] ?? na) : String(na ?? '—')
@@ -134,18 +168,20 @@ function buildSentence(category: LearningCategory, latestPayload: any): string {
     latestPayload && typeof latestPayload === 'object' && latestPayload.diff && typeof latestPayload.diff === 'object'
       ? latestPayload.diff
       : {}
-  const keys = Object.keys(diff).filter((k) => categorize(k) === category)
+  const realKeys = latestCard ? realDiffKeys(latestPayload, latestCard) : Object.keys(diff)
+  const keys = realKeys.filter((k) => categorize(k) === category)
 
   if (category === 'kpir') {
+    const aiKwoty = (latestCard?.ai_kwoty_per_kolumna ?? {}) as Record<string, unknown>
     const targets: string[] = []
     const amountFixes: string[] = []
     const withdrawn: string[] = []
     for (const k of keys) {
-      const z = asNumber(diff[k]?.z)
+      const ai = asNumber(aiKwoty[k.replace(/^kwota_/, '')] ?? 0)
       const na = asNumber(diff[k]?.na)
-      if (z !== 0 && na !== 0) amountFixes.push(kpirLabel(k))
+      if (ai !== 0 && na !== 0) amountFixes.push(kpirLabel(k))
       else if (na !== 0) targets.push(kpirLabel(k))
-      else if (z !== 0) withdrawn.push(kpirLabel(k))
+      else if (ai !== 0) withdrawn.push(kpirLabel(k))
     }
     const parts: string[] = []
     if (targets.length > 0) parts.push(`Kwoty księgowane do: ${targets.join(' + ')}`)
@@ -179,10 +215,11 @@ interface CardRow {
   created_at: string
   ksiegowe_numer: string | null
   data_wystawienia: string | null
+  ai_kwoty_per_kolumna: Record<string, unknown> | null
 }
 
 const CARD_COLUMNS =
-  'id, nip_dostawcy, nazwa_dostawcy, status, edycja_ksiegowa, edycja_realna, resolved_at, created_at, ksiegowe_numer, data_wystawienia'
+  'id, nip_dostawcy, nazwa_dostawcy, status, edycja_ksiegowa, edycja_realna, resolved_at, created_at, ksiegowe_numer, data_wystawienia, ai_kwoty_per_kolumna'
 
 function supplierKeyOf(card: CardRow): string | null {
   if (card.nip_dostawcy && card.nip_dostawcy.trim()) return card.nip_dostawcy.trim()
@@ -319,12 +356,14 @@ export async function fetchClientLearning(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const diff = (ev.payload as any)?.diff
       if (diff && typeof diff === 'object') {
-        for (const key of Object.keys(diff)) cats.add(categorize(key))
+        // Tylko klucze z REALNĄ zmianą vs AI — fantomowe eventy (baseline z:0,
+        // wartości równe propozycji AI) nie są poprawkami księgowej
+        for (const key of realDiffKeys(ev.payload, card)) cats.add(categorize(key))
       } else {
         cats.add('inne')
       }
     }
-    if (cats.size === 0) continue
+    if (cats.size === 0) continue // event w całości fantomowy — pomijamy
     totalCorrections++
 
     for (const category of cats) {
@@ -354,26 +393,6 @@ export async function fetchClientLearning(
     else completedBySupplier.set(key, [c])
   }
 
-  // Defense-in-depth dla „czystych przelotów": w danych produkcyjnych (11.08.2026)
-  // 26 kart ma eventy edited z korektami kwot przy edycja_ksiegowa=false —
-  // flagi bywają niewiarygodne. Karta z JAKIMKOLWIEK zdarzeniem korekty
-  // (w zakresie kategorii) nie może uchodzić za czystą, niezależnie od flag.
-  const corrCardsKsiegowe = new Set<number>() // edited z diffem nie-opisowym lub rezim_changed
-  const corrCardsAny = new Set<number>() // dowolna korekta, w tym sam opis
-  for (const ev of events) {
-    const queueId = ev.queue_id as number | null
-    if (queueId == null) continue
-    corrCardsAny.add(queueId)
-    if (ev.event_type === 'rezim_changed') {
-      corrCardsKsiegowe.add(queueId)
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const diff = (ev.payload as any)?.diff
-      const keys = diff && typeof diff === 'object' ? Object.keys(diff) : []
-      if (keys.length === 0 || keys.some((k) => k !== 'opis')) corrCardsKsiegowe.add(queueId)
-    }
-  }
-
   const rules: LearningRule[] = []
   const cleanCardIds = new Set<number>()
 
@@ -390,12 +409,10 @@ export async function fetchClientLearning(
     // „Czysty przelot po nauce": zakończona PO ostatniej korekcie, bez poprawek.
     // Dla kategorii 'opis' miarą jest edycja_realna (edycja_ksiegowa z definicji
     // pomija opis); dla pozostałych — edycja_ksiegowa. Null ≠ false (uczciwie).
-    // Dodatkowo: flaga musi być zgodna z eventami (karta ze zdarzeniem korekty
-    // nie jest czysta, choćby flaga twierdziła inaczej).
+    // Flagi są wiarygodne (audyt 12.08: 30/30 zgodności z porównaniem
+    // wartościowym) — bez dodatkowych warunków po eventach.
     const cleanFlag = (c: CardRow) =>
-      g.category === 'opis'
-        ? c.edycja_realna === false && !corrCardsAny.has(c.id)
-        : c.edycja_ksiegowa === false && !corrCardsKsiegowe.has(c.id)
+      g.category === 'opis' ? c.edycja_realna === false : c.edycja_ksiegowa === false
     const cleanAfter = (completedBySupplier.get(g.supplierKey) ?? [])
       .filter((c) => cleanFlag(c) && completedAt(c) > lastCorrectionAt)
       .sort((a, b) => cmpIso(completedAt(a), completedAt(b)))
@@ -418,7 +435,7 @@ export async function fetchClientLearning(
       supplierName,
       supplierNip,
       category: g.category,
-      sentence: buildSentence(g.category, latest.payload),
+      sentence: buildSentence(g.category, latest.payload, latestCard),
       correctionsCount: g.events.length,
       correctionCardsCount: correctionCards.length,
       lastCorrectionAt,

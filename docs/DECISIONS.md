@@ -98,3 +98,18 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   potwierdzajacych kwoty zgodne z AI, np. Medical Group 100->30 p.p.)
   | pct_ksiegowa to fundament decyzji auto-write; fix nalezy sie zrodlu
   sygnalu (baseline diffu / logowanie edited), nie definicji metryki.
+- 2026-08-12 | Fix fantomowych eventow WDROZONY droga panelowa (widok v2
+  nietkniety): resolveAiBaseline dociaga ai_kwoty/ai_opis z exceptions_queue
+  gdy v2 daje NULL; buildEditDiff porownuje wartosciowo z KWOTA_EPS=0.005
+  (pol grosza — szum zaokraglen odpada, korekta o grosz przechodzi), "z" w
+  diffie to odtad REALNA wartosc AI (a przy bledzie odczytu baseline'u z=null,
+  nigdy fabrykowane 0); pusty obiekt {} i pusty string traktowane jak brak
+  baseline'u (normalizacja po obu zrodlach); event edited tylko przy niepustym
+  realnym diffie; blad odczytu baseline'u -> warning w zwrotce (toast) z
+  informacja o mozliwej niedokladnosci flag, nie blokada approve. Historycznych eventow NIE kasujemy — konsumenci filtruja:
+  sekcja nauki liczy poprawke tylko z kluczy z realna zmiana vs
+  ai_kwoty_per_kolumna KARTY (realDiffKeys), fantomy w calosci pomijane;
+  wycofany warunek defense-in-depth z 11.08 (flagi wiarygodle — audyt 30/30);
+  zdanie reguly KPiR partycjonowane po ai wartosci karty, nie po payload.z
+  | payload.z historycznych eventow to fantomowe 0, jedyna prawda o kwotach
+  AI jest na karcie; po fixie nowe eventy sa juz samonosne.

@@ -59,10 +59,70 @@ async function logFakturaEvent(
   return null
 }
 
-// Build a diff object comparing final values vs AI originals.
+// ── Baseline AI do diffu eventów i flag ──────────────────────
+// exceptions_queue_v2 serwuje ai_kwoty_per_kolumna/ai_proponowany_opis wprost
+// z tabeli faktury, gdzie bywają NULL — diff liczony z takim baseline'em miał
+// `?? 0` po stronie "z" i logował event 'edited' przy każdym zatwierdzeniu
+// z wysłanymi kwotami, także równymi propozycji AI (fantomy — patrz
+// docs/AUDIT-flagi-vs-eventy.md). Gdy v2 daje NULL, dociągamy ai_* z
+// exceptions_queue (tam worker je zapisuje).
+// „Brak" baseline'u normalizujemy po obu źródłach: pusty obiekt {} i pusty
+// string to też brak (v2 mogłoby je serwować zamiast NULL — kolumny w faktury
+// pisze pipeline poza panelem, nie kontrolujemy inwariantu NULL-vs-{}).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function kwotyOrNull(o: any): Record<string, number> | null {
+  return o != null && typeof o === 'object' && Object.keys(o).length > 0 ? o : null
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function opisOrNull(s: any): string | null {
+  return typeof s === 'string' && s.trim() !== '' ? s : null
+}
+
+async function resolveAiBaseline(
+  supabase: any,
+  exception: any,
+  queueId: number | null
+): Promise<{
+  aiKwoty: Record<string, number> | null
+  aiOpis: string | null
+  /** true = baseline kwot NIEROZSTRZYGNIĘTY przez błąd odczytu (nie mylić
+   *  z legalnym „AI nie miało kwot") — diff nie może wtedy fabrykować z:0 */
+  unresolved: boolean
+  warning: string | null
+}> {
+  let aiKwoty = kwotyOrNull(exception.ai_kwoty_per_kolumna)
+  let aiOpis = opisOrNull(exception.ai_proponowany_opis)
+  let unresolved = false
+  let warning: string | null = null
+  if ((aiKwoty == null || aiOpis == null) && queueId) {
+    const { data, error } = await supabase
+      .from('exceptions_queue')
+      .select('ai_kwoty_per_kolumna, ai_proponowany_opis')
+      .eq('id', queueId)
+      .maybeSingle()
+    if (error) {
+      unresolved = aiKwoty == null
+      warning = `Nie odczytano baseline AI (exceptions_queue): ${error.message} — historia zmian i flagi edycji mogą być niedokładne`
+      console.error('[resolveAiBaseline]', warning, { queueId })
+    } else if (data) {
+      aiKwoty = aiKwoty ?? kwotyOrNull(data.ai_kwoty_per_kolumna)
+      aiOpis = aiOpis ?? opisOrNull(data.ai_proponowany_opis)
+    }
+  }
+  return { aiKwoty, aiOpis, unresolved, warning }
+}
+
+// Tolerancja porównań kwot: wartości formularza przechodzą przez roundKwoty
+// (2 miejsca), a baseline ai_* bywa surowy — różnice poniżej pół grosza to
+// szum zaokrągleń, nie korekta księgowej. Realna korekta o 1 grosz (0.01)
+// przechodzi.
+const KWOTA_EPS = 0.005
+
+// Build a diff object comparing final values vs AI originals (value-level).
 // Returns null if nothing changed.
 function buildEditDiff(
   exception: any,
+  baseline: { aiKwoty: Record<string, number> | null; aiOpis: string | null; unresolved: boolean },
   finalOpis: string | null,
   finalKwoty: Record<string, number> | null,
   finalVat: any | null,
@@ -71,19 +131,22 @@ function buildEditDiff(
   const diff: Record<string, { z: unknown; na: unknown }> = {}
 
   // Opis
-  const aiOpis = exception.ai_proponowany_opis
-  if (finalOpis && aiOpis && finalOpis !== aiOpis) {
-    diff['opis'] = { z: aiOpis, na: finalOpis }
+  const aiOpis = (baseline.aiOpis ?? '').trim()
+  const finOpis = (finalOpis ?? '').trim()
+  if (finOpis && aiOpis && finOpis !== aiOpis) {
+    diff['opis'] = { z: aiOpis, na: finOpis }
   }
 
-  // Kwoty KPiR
-  const aiKwoty = exception.ai_kwoty_per_kolumna || {}
+  // Kwoty KPiR — porównanie wartościowe z epsilon; "z" to REALNA wartość AI.
+  // Przy nierozstrzygniętym baselinie (błąd odczytu) z = null — event nie może
+  // twierdzić, że AI proponowało 0, skoro tego nie wiemy.
+  const aiKwoty = baseline.aiKwoty || {}
   if (finalKwoty) {
     const allKeys = new Set([...Object.keys(aiKwoty), ...Object.keys(finalKwoty)])
     for (const k of allKeys) {
-      const z = aiKwoty[k] ?? 0
-      const na = finalKwoty[k] ?? 0
-      if (z !== na) diff[`kwota_${k}`] = { z, na }
+      const z = Number(aiKwoty[k] ?? 0)
+      const na = Number(finalKwoty[k] ?? 0)
+      if (Math.abs(z - na) > KWOTA_EPS) diff[`kwota_${k}`] = { z: baseline.unresolved ? null : z, na }
     }
   }
 
@@ -217,7 +280,8 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
-  const diff1 = buildEditDiff(exception, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
+  const baseline1 = await resolveAiBaseline(supabase, exception, queueId)
+  const diff1 = buildEditDiff(exception, baseline1, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff1, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
 
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
@@ -278,7 +342,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = []
+  const eventWarnings: (string | null)[] = [baseline1.warning]
   if (diff1) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -322,7 +386,8 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
-  const diff2 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  const baseline2 = await resolveAiBaseline(supabase, exception, queueId)
+  const diff2 = buildEditDiff(exception, baseline2, opis, roundedKwoty, baseVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff2, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
 
   if (queueId) {
@@ -379,7 +444,7 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = []
+  const eventWarnings: (string | null)[] = [baseline2.warning]
   if (diff2) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff2 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -434,7 +499,8 @@ export async function approveExceptionFull(
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
-  const diff3 = buildEditDiff(exception, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
+  const baseline3 = await resolveAiBaseline(supabase, exception, queueId)
+  const diff3 = buildEditDiff(exception, baseline3, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff3, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
 
   if (queueId) {
@@ -492,7 +558,7 @@ export async function approveExceptionFull(
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = []
+  const eventWarnings: (string | null)[] = [baseline3.warning]
   if (diff3) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -582,7 +648,8 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
-  const diff4 = buildEditDiff(exception, opis, roundedKwoty, baseVat, scalonyPojazd)
+  const baseline4 = await resolveAiBaseline(supabase, exception, queueId)
+  const diff4 = buildEditDiff(exception, baseline4, opis, roundedKwoty, baseVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff4, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
 
   if (queueId) {
@@ -637,7 +704,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = []
+  const eventWarnings: (string | null)[] = [baseline4.warning]
   if (diff4) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
