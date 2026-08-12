@@ -5,6 +5,32 @@ import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
 import { assertCanWrite, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
+import { KOLUMNY_PER_TYP } from '@/lib/kpir'
+
+// ── Walidacja wejść formularza (kwoty KPiR + opis) ────────────────────────
+// Server actions to publiczne endpointy POST — `kwoty` idą wprost do
+// final_kwoty_per_kolumna, którą worker księguje. Bez whitelisty dowolny klucz
+// kolumny i NaN/Infinity trafiały do bazy.
+const KPIR_KWOTY_KEYS = new Set(
+  Object.values(KOLUMNY_PER_TYP).flatMap(cols => cols.map(c => c.klucz))
+)
+const OPIS_MAX_LENGTH = 500
+
+function validateKwotyInput(kwoty: Record<string, number> | null | undefined): string | null {
+  if (kwoty == null) return null
+  for (const [k, v] of Object.entries(kwoty)) {
+    if (!KPIR_KWOTY_KEYS.has(k)) return `Niedozwolony klucz kolumny KPiR: ${k}`
+    if (typeof v !== 'number' || !Number.isFinite(v)) return `Nieprawidłowa kwota w kolumnie KPiR ${k}`
+  }
+  return null
+}
+
+function validateOpisInput(opis: string | null | undefined): string | null {
+  if (opis == null) return null
+  if (typeof opis !== 'string') return 'Nieprawidłowy opis księgowy'
+  if (opis.length > OPIS_MAX_LENGTH) return `Opis księgowy za długi (max ${OPIS_MAX_LENGTH} znaków)`
+  return null
+}
 
 // Helper to get authenticated user email
 async function getUserEmail(): Promise<string> {
@@ -257,6 +283,9 @@ async function resolveExceptionIds(
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
+  const opisError = validateOpisInput(overrideOpis)
+  if (opisError) return { success: false, error: opisError }
+
   try {
     await assertCanWrite(exceptionId)
   } catch (e: unknown) {
@@ -488,6 +517,9 @@ export async function approveExceptionFull(
   finalZapisVatData: any,
   finalOpis: string
 ) {
+  const inputError = validateKwotyInput(finalKwotyPerKolumna) ?? validateOpisInput(finalOpis)
+  if (inputError) return { success: false, error: inputError }
+
   try {
     await assertCanWrite(exceptionId)
   } catch (e: unknown) {
@@ -663,6 +695,9 @@ export async function updateFinalZapisVAT(
 
 // ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
 export async function resolveException(exceptionId: number, opis: string, kwoty: Record<string, number> = {}, zapisVatData: any = null) {
+  const inputError = validateKwotyInput(kwoty) ?? validateOpisInput(opis)
+  if (inputError) return { success: false, error: inputError }
+
   try {
     await assertCanWrite(exceptionId)
   } catch (e: unknown) {
@@ -955,6 +990,10 @@ export async function updateJpkSection(
       if (!ALLOWED_JPK_KEYS.includes(key)) {
         return { success: false, error: `Niedozwolony klucz: ${key}` }
       }
+    }
+    if ('final_kwoty_per_kolumna' in data) {
+      const kwotyError = validateKwotyInput(data.final_kwoty_per_kolumna as Record<string, number> | null)
+      if (kwotyError) return { success: false, error: kwotyError }
     }
 
     const userEmail = await getUserEmail()

@@ -5,6 +5,8 @@
  * NO eval(), NO new Function().
  */
 
+import { parsePolishNumber } from '@/lib/parse-number'
+
 export interface CalcResult {
   value: number | null
   error: string | null
@@ -25,10 +27,12 @@ export function parseCalcExpression(input: string): CalcResult {
   // Normalize: replace comma with dot
   const normalized = trimmed.replace(/,/g, '.')
 
-  // If it's just a plain number, return it
+  // If it's just a plain number, return it.
+  // parsePolishNumber waliduje CAŁY string (parseFloat brał tylko prefiks:
+  // "1 234,56" -> 1, "12.34.56" -> 12.34 — cicho złe kwoty).
   if (!hasOperator(normalized)) {
-    const num = parseFloat(normalized)
-    if (isNaN(num)) return { value: null, error: 'Nieprawidłowe wyrażenie' }
+    const num = parsePolishNumber(normalized)
+    if (num === null) return { value: null, error: 'Nieprawidłowe wyrażenie' }
     return { value: Math.round(num * 100) / 100, error: null }
   }
 

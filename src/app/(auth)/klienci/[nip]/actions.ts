@@ -230,11 +230,26 @@ export async function updateOpis(
 // Błędy zwracamy jako wartość (nie throw) — Next.js maskuje w produkcji treść
 // błędów rzuconych z Server Actions. Semantyka zdarzenia audytowego i fail-safe
 // identyczna jak w toggleAutoWrite (wyjatki/actions.ts).
+// Górny limit progu auto-write. Worker porównuje clients.auto_max_kwota w
+// auto_write_gate — NaN/Infinity/ujemna wartość rozbroiłaby lub rozdęła bramkę
+// produkcyjnego księgowania po cichu.
+const AUTO_MAX_KWOTA_LIMIT = 100000
+
 export async function updateAutoWriteSettings(
   nip: string,
   autoWriteEnabled: boolean,
   autoMaxKwota: number
 ): Promise<{ success: boolean; error?: string }> {
+  if (!/^\d{10}$/.test(nip ?? '')) {
+    return { success: false, error: `Nieprawidłowy NIP „${nip}" — oczekiwane dokładnie 10 cyfr` }
+  }
+  if (typeof autoMaxKwota !== 'number' || !Number.isFinite(autoMaxKwota) || autoMaxKwota <= 0 || autoMaxKwota > AUTO_MAX_KWOTA_LIMIT) {
+    return {
+      success: false,
+      error: `Nieprawidłowy próg auto_max_kwota — oczekiwana kwota od 0 (wyłącznie) do ${AUTO_MAX_KWOTA_LIMIT} zł`,
+    }
+  }
+
   const { isAdmin, panelUser } = await getAllowedNips()
   if (!panelUser || !isAdmin) {
     return { success: false, error: 'Brak uprawnień do edycji ustawień Auto-write (tylko admin)' }

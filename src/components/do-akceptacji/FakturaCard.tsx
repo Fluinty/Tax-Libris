@@ -33,6 +33,7 @@ import {
   REZIM_KPIR_LABELS
 } from '@/lib/vat'
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
+import { parsePolishNumber } from '@/lib/parse-number'
 import { kpirDisplayNum } from '@/lib/kpir-labels'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, normalizujRezim } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
@@ -198,7 +199,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   }
 
   const handleKpirKwotaChange = (klucz: string, value: string) => {
-    const numVal = parseFloat(value) || 0
+    // CalcInput podaje SUROWY string. parseFloat ucinał polski przecinek
+    // ("123,45" -> 123) i grosze znikały z księgowania. Puste pole = 0;
+    // stan przejściowy podczas pisania ("123,", "-") NIE nadpisuje kwoty —
+    // czekamy na pełną liczbę.
+    const numVal = value.trim() === '' ? 0 : parsePolishNumber(value)
+    if (numVal === null) return
     setCurrentKpirKwoty(prev => ({ ...prev, [klucz]: numVal }))
     setKpirEditedManually(true)
   }

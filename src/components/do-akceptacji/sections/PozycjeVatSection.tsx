@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { Trash2, Plus, RotateCcw, RefreshCw } from 'lucide-react'
 import type { FakturaPozycja } from '@/types/database'
 import { normalizeStawka } from '@/lib/vat'
+import { parsePolishNumber } from '@/lib/parse-number'
 
 interface PozycjaVatRow {
   stawka: string
@@ -168,6 +169,15 @@ export function PozycjeVatSection({
   const hasPoleDeklaracji = rows.some(r => r.pole_deklaracji)
 
   const updateRow = useCallback((index: number, field: 'stawka' | 'netto' | 'pole_deklaracji', value: string) => {
+    // CalcInput podaje SUROWY string. parseFloat ucinał polski przecinek
+    // ("123,45" -> 123). Puste pole = 0; stan przejściowy podczas pisania
+    // ("123,", "-") NIE nadpisuje kwoty — czekamy na pełną liczbę.
+    let netto: number | null = null
+    if (field === 'netto') {
+      netto = value.trim() === '' ? 0 : parsePolishNumber(value)
+      if (netto === null) return
+    }
+
     setRows(prev => {
       const next = [...prev]
       const row = { ...next[index] }
@@ -179,10 +189,9 @@ export function PozycjeVatSection({
       } else if (field === 'pole_deklaracji') {
         row.pole_deklaracji = value || null
       } else {
-        const netto = parseFloat(value) || 0
-        row.netto = netto
-        row.vat = calcVat(netto, row.stawka)
-        row.brutto = calcBrutto(netto, row.vat)
+        row.netto = netto!
+        row.vat = calcVat(netto!, row.stawka)
+        row.brutto = calcBrutto(netto!, row.vat)
       }
 
       next[index] = row

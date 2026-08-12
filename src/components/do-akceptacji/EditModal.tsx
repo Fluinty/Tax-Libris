@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu, FakturaPozycja } from '@/types/database'
 import { kwotaReferencyjnaPozycje } from '@/lib/kpir-calc'
+import { parsePolishNumber } from '@/lib/parse-number'
 import { 
   REJESTRY_VAT, TRANSAKCJE_VAT_KRAJOWE, 
   RODZAJ_ZAKUPU_LABELS, RODZAJ_ODLICZENIA_LABELS, CEL_ZAKUPU_LABELS,
@@ -96,16 +97,16 @@ export function EditModal({
   }, [open, initialOpis, initialKwoty, initialZapisVatData, typDokumentu])
 
   const handleKwotaChange = (colId: string, value: string) => {
-    // Only allow numbers, dot, comma
-    if (/^[\d.,]*$/.test(value)) {
+    // Cyfry, kropka, przecinek, spacje (separator tysięcy z CalcInput po blur)
+    // oraz wiodący minus — faktury korygujące mają ujemne kwoty.
+    if (/^-?[\d.,\s]*$/.test(value)) {
       setKwoty(prev => ({ ...prev, [colId]: value }))
     }
   }
 
   // Obliczenia sumy
   const totalSum = Object.values(kwoty).reduce((acc, val) => {
-    const num = parseFloat(val.replace(',', '.'))
-    return acc + (isNaN(num) ? 0 : num)
+    return acc + (parsePolishNumber(val) ?? 0)
   }, 0)
 
   // Bug #3 fix: per-pozycja calculation when v8 data available
@@ -126,8 +127,10 @@ export function EditModal({
   const handleSave = () => {
     const parsedKwoty: Record<string, number> = {}
     Object.entries(kwoty).forEach(([k, v]) => {
-      const num = parseFloat(v.replace(',', '.'))
-      if (!isNaN(num) && num > 0) {
+      // num !== 0 (nie num > 0): faktura korygująca ma ujemne kwoty —
+      // warunek > 0 zapisywał {} i kwota znikała z księgowania.
+      const num = parsePolishNumber(v)
+      if (num !== null && num !== 0) {
         parsedKwoty[k] = num
       }
     })

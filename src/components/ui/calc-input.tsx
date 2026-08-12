@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { parseCalcExpression, hasOperator } from '@/lib/calc-expression'
+import { parsePolishNumber } from '@/lib/parse-number'
 
 interface CalcInputProps extends Omit<React.ComponentProps<typeof Input>, 'onChange' | 'value' | 'type'> {
   value: string | number
@@ -36,9 +37,31 @@ export function CalcInput({ value, onChange, ...props }: CalcInputProps) {
   const evaluate = useCallback(() => {
     const input = localValue.trim()
 
-    // Empty or plain number — pass through as-is
-    if (!input || !hasOperator(input)) {
+    if (!input) {
       clearError()
+      return
+    }
+
+    // Czysta liczba: na blur/Enter kanonizujemy zapis (polski przecinek,
+    // spacje tysięcy) do "1234.56" i dopiero taki string propagujemy —
+    // rodzic nie zobaczy "1 234,56", którego parseFloat ucinał do 1.
+    // Nieparsowalna wartość (np. "12.34.56") dostaje widoczny błąd zamiast
+    // cichego przejścia dalej.
+    if (!hasOperator(input)) {
+      const num = parsePolishNumber(input)
+      if (num === null) {
+        setError('Nieprawidłowa liczba')
+        if (errorTimeout.current) clearTimeout(errorTimeout.current)
+        errorTimeout.current = setTimeout(() => setError(null), 3000)
+        return
+      }
+      clearError()
+      const str = String(num)
+      if (str !== localValue) {
+        setLocalValue(str)
+        lastPropValue.current = str
+        onChange(str)
+      }
       return
     }
 
