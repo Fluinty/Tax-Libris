@@ -165,7 +165,7 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       vendor_vat_checked_at: f.vendor_vat_checked_at,
       rachunek_match_status: f.rachunek_match_status,
       rachunek_match_reason: f.rachunek_match_reason,
-    }).select().single()
+    }).select('id').single()
 
     if (qErr || !queueData) {
       result.errors.push(`Faktura #${fIndex + 1} (queue): ${qErr?.message} ${qErr?.details || ''}`)
@@ -198,11 +198,16 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       vendor_invoice_count: f.vendor_invoice_count,
       is_potential_duplicate: f.is_potential_duplicate,
       rachunek_match_status: f.rachunek_match_status,
-      final_zapis_vat_data: f.zapis_vat,
-      final_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
+      // final_* WYŁĄCZNIE dla kart już zakończonych (seed odtwarza wtedy stan
+      // po realnej decyzji). Karta pending/pending_review dostaje same ai_* —
+      // kopiowanie ai→final łamało kontrakt „final tylko z realnej edycji"
+      // (docs/DECISIONS.md) i zatruwało metrykę edycji w demo.
+      ...(f.status === 'booked'
+        ? { final_zapis_vat_data: f.zapis_vat, final_kwoty_per_kolumna: f.ai_kwoty_per_kolumna }
+        : { final_zapis_vat_data: null, final_kwoty_per_kolumna: null }),
       ai_zapis_vat_data: f.zapis_vat, // TUTAJ ZOSTAJE ai_zapis_vat_data
       ai_kwoty_per_kolumna: f.ai_kwoty_per_kolumna,
-    }).select().single()
+    }).select('id').single()
 
     if (fErr || !fakturaData) {
       result.errors.push(`Faktura #${fIndex + 1} (faktury): ${fErr?.message} ${fErr?.details || ''}`)

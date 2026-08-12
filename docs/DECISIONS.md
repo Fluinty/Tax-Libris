@@ -157,6 +157,42 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   sa dzis niewidzialne w panelu (kolejka bierze pending/pending_review) —
   zanim dostana UI, musi byc jasne, ze to nie jest zywa czesc kontraktu
   panel-worker.
+- 2026-08-12 | KONTRAKT final_* PRZYWROCONY: zatwierdzenie BEZ realnej edycji
+  zapisuje final_kwoty_per_kolumna = final_zapis_vat_data =
+  final_kpir_pojazdowe_data = NULL w OBU tabelach (dotad szly tam kopie ai_*,
+  wprost wbrew wpisowi z 2026-08-05). KRYTERIUM JEST PER POLE: zapisujemy
+  final_X wtedy i tylko wtedy, gdy rozni sie od tego, co worker i tak wyliczy
+  z ai_* (kwoty z tolerancja KWOTA_EPS, zapis VAT i dane pojazdowe porownaniem
+  strukturalnym niezaleznym od kolejnosci kluczy). NIE wystarczy globalna flaga
+  edycja_realna — final_zapis_vat_data i final_kpir_pojazdowe_data to wartosci
+  WYPROWADZONE (ai + edycje inline + wykluczenia art.88/NKUP + auto-korekta
+  rodzaj_odliczenia), a nie kopie AI; zerowanie ich przy czystym kliku
+  kasowaloby wykluczenia, ktore karta wlasnie pokazala ksiegowej, i worker
+  odliczylby VAT np. od noclegu (recenzja wielo-agentowa zlapala to jako
+  KRYTYCZNE przed pushem). Porownanie z baseline'em widzi tez zmiany
+  przychodzace kanalami BEZ wlasnej flagi edycji: EditModal (rejestr,
+  transakcja, rodzaj odliczenia, wiersze VAT) i updateFinalZapisVAT
+  (transakcja zagraniczna) — buildEditDiff ich nie widzi, bo ignoruje wlasne
+  argumenty finalVat/finalPojazd (audyt par.4, „znane"). Przy nierozstrzygnietym
+  baseline (blad odczytu) zapisujemy wartosc — lepiej nadmiarowy final niz
+  utracona korekta.
+  resolved_opis i final_opis NIE naleza do tej trojki i sa ustawiane ZAWSZE —
+  worker pomija karte bez opisu przy ksiegowaniu. Przy okazji domkniete
+  „znane" z audytu par.4: approveExceptionFull nie zapisywal
+  final_kwoty_per_kolumna do tabeli faktury, wiec zostawala tam stara kopia.
+  demo-seed przestaje wypelniac final_* na kartach pending (tylko karty
+  zakonczone dostaja final_*).
+  Potwierdzenie na workerze (K1, przed wdrozeniem): kwoty czytane jako
+  `final or ai` (l. 6692-6693), kwoty_source = „AI (zatwierdzone bez zmian)",
+  S40b to `if not final_kwoty`, S40 REBUILD odbudowuje zapis VAT przy
+  null+null, guardy rezimowe wymagaja truthy final (przy null = no-op).
+  UWAGA na przyszlosc: kryterium jest binarne — edycja SAMEGO OPISU tez
+  ustawia edycja_realna=true, wiec wtedy final_* zapisza sie jak dotad
+  (kopie AI). Metryki to nie rusza, bo pct_ksiegowa liczy sie z
+  edycja_ksiegowa, ktora opis z definicji pomija
+  | „final = kopia ai" lamalo kontrakt, zatruwalo badge „kandydat auto"
+  i bylo mina dla kazdego konsumenta ufajacego docs; worker jest zbudowany
+  pod final=null i przy nim ksieguje z ai_*.
 - 2026-08-12 | Rejestr VAT liczy JEDNA funkcja dla podgladu i dla zapisu:
   applyPozycjeVatFinal + computeEffectivePozycjeVat (merge-helpers), wolane
   i przez FakturaCard.renderZapisVat, i przez mergeInlineEditsVat. Przy

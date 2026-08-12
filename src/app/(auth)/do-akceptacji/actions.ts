@@ -234,6 +234,81 @@ function buildEditDiff(
   return Object.keys(diff).length > 0 ? diff : null
 }
 
+// ── Kontrakt final_* (docs/DECISIONS.md 2026-08-05, przywrócony 2026-08-12) ──
+// Zatwierdzenie BEZ realnej edycji nie kopiuje ai_* do final_*: pole idzie jako
+// NULL do OBU tabel, a worker księguje z ai_* (kwoty czyta jako `final or ai`,
+// przy null loguje „AI (zatwierdzone bez zmian)", guardy reżimowe przy null to
+// no-op). resolved_opis / final_opis NIE należą do tej trójki i są ustawiane
+// ZAWSZE — bez opisu worker pomija kartę przy księgowaniu.
+//
+// KRYTERIUM JEST PER POLE i brzmi: „czy to, co zapisalibyśmy, jest tym samym,
+// co worker i tak wyliczy z ai_*?". NIE wystarczy globalna flaga edycja_realna:
+// final_zapis_vat_data i final_kpir_pojazdowe_data to wartości WYPROWADZONE
+// (ai + edycje inline + wykluczenia art. 88/NKUP + auto-korekta
+// rodzaj_odliczenia), a nie kopie AI. Wyzerowanie ich przy czystym kliku
+// kasowałoby wykluczenia, które karta właśnie pokazała księgowej, i worker
+// odliczyłby VAT np. od noclegu — dokładnie odwrotnie do celu tej fali.
+// Z tego samego powodu pole zapisujemy też wtedy, gdy zmiana przyszła kanałem
+// bez własnej flagi edycji (EditModal, updateFinalZapisVAT dla transakcji
+// zagranicznej) — porównanie z baseline'em AI je widzi, flagi nie widziały.
+// Przy NIEROZSTRZYGNIĘTYM baseline (błąd odczytu) zapisujemy wartość:
+// lepiej nadmiarowy final niż utrata korekty.
+function finalDoZapisu<T extends Record<string, unknown>>(params: {
+  kwoty: T | null | undefined
+  vat: unknown
+  pojazd: unknown
+  aiKwoty: Record<string, number> | null
+  aiVat: unknown
+  aiPojazd: unknown
+  baselineUnresolved: boolean
+}): { kwoty: T | null; vat: unknown; pojazd: unknown } {
+  const { kwoty, vat, pojazd, aiKwoty, aiVat, aiPojazd, baselineUnresolved } = params
+  if (baselineUnresolved) {
+    return { kwoty: (kwoty ?? null) as T | null, vat: vat ?? null, pojazd: pojazd ?? null }
+  }
+  return {
+    kwoty: kwoty && !sameKwoty(kwoty as Record<string, unknown>, aiKwoty) ? (kwoty as T) : null,
+    vat: vat != null && !sameJson(vat, aiVat) ? vat : null,
+    pojazd: pojazd != null && !sameJson(pojazd, aiPojazd) ? pojazd : null,
+  }
+}
+
+/** Porównanie kwot per kolumna z tolerancją KWOTA_EPS (jak buildEditDiff). */
+function sameKwoty(a: Record<string, unknown>, b: Record<string, number> | null): boolean {
+  const bb = b ?? {}
+  const klucze = new Set([...Object.keys(a), ...Object.keys(bb)])
+  for (const k of klucze) {
+    const x = Number((a as Record<string, unknown>)[k] ?? 0)
+    const y = Number(bb[k] ?? 0)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false
+    if (Math.abs(x - y) > KWOTA_EPS) return false
+  }
+  return true
+}
+
+/** Porównanie strukturalne niezależne od kolejności kluczy. */
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return a == null && b == null
+  return stabilnyJson(a) === stabilnyJson(b)
+}
+
+function stabilnyJson(v: unknown): string {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
+  if (Array.isArray(v)) return `[${v.map(stabilnyJson).join(',')}]`
+  const obj = v as Record<string, unknown>
+  const klucze = Object.keys(obj).filter(k => obj[k] !== undefined).sort()
+  return `{${klucze.map(k => `${JSON.stringify(k)}:${stabilnyJson(obj[k])}`).join(',')}}`
+}
+
+/** Baseline AI dla zapisu VAT i danych pojazdowych — bez członu final_*,
+ *  bo to właśnie z nim porównujemy (tam może siedzieć wcześniejsza korekta). */
+function aiBaselineVat(exception: any): unknown {
+  return exception?.ai_zapis_vat_data ?? exception?.zapis_vat_data ?? null
+}
+function aiBaselinePojazd(exception: any): unknown {
+  return exception?.ai_kpir_pojazdowe_data ?? exception?.kpir_pojazdowe_data ?? null
+}
+
 // Whitelist kluczy z buildEditDiff, które dotyczą TYLKO opisu (nie są korektą księgową).
 // Weryfikacja: buildEditDiff produkuje klucze: 'opis', 'kwota_${k}', 'pozycje_vat', 'gtu', 'procedura_jpk'.
 const OPIS_ONLY_KEYS = new Set(['opis'])
@@ -410,6 +485,11 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const baseline1 = await resolveAiBaseline(supabase, exception, queueId)
   const diff1 = buildEditDiff(exception, baseline1, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff1, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+  const finalne = finalDoZapisu({
+    kwoty: kwotyDoZapisu, vat: scalonyVat, pojazd: scalonyPojazd,
+    aiKwoty: baseline1.aiKwoty, aiVat: aiBaselineVat(exception), aiPojazd: aiBaselinePojazd(exception),
+    baselineUnresolved: baseline1.unresolved,
+  })
 
   // Update OBYDWU tabel - exceptions_queue (legacy worker) i faktury (nowa)
   if (queueId) {
@@ -418,9 +498,9 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
       .update({
         status: targetStatus,
         resolved_opis: opisDoZapisu,
-        final_kwoty_per_kolumna: kwotyDoZapisu,
-        final_zapis_vat_data: scalonyVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
+        final_kwoty_per_kolumna: finalne.kwoty,
+        final_zapis_vat_data: finalne.vat,
+        final_kpir_pojazdowe_data: finalne.pojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString(),
         edycja_realna: editFlags.edycja_realna,
@@ -444,9 +524,9 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
       status: targetStatus,
       final_opis: opisDoZapisu,
-      final_kwoty_per_kolumna: kwotyDoZapisu,
-      final_zapis_vat_data: scalonyVat,
-      final_kpir_pojazdowe_data: scalonyPojazd,
+      final_kwoty_per_kolumna: finalne.kwoty,
+      final_zapis_vat_data: finalne.vat,
+      final_kpir_pojazdowe_data: finalne.pojazd,
       resolved_by: userEmail,
       resolved_at: new Date().toISOString(),
       edycja_realna: editFlags.edycja_realna,
@@ -538,6 +618,11 @@ export async function approveExceptionFull(
   const baseline3 = await resolveAiBaseline(supabase, exception, queueId)
   const diff3 = buildEditDiff(exception, baseline3, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff3, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+  const finalne = finalDoZapisu({
+    kwoty: roundedKwoty, vat: baseVat, pojazd: scalonyPojazd,
+    aiKwoty: baseline3.aiKwoty, aiVat: aiBaselineVat(exception), aiPojazd: aiBaselinePojazd(exception),
+    baselineUnresolved: baseline3.unresolved,
+  })
 
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
@@ -545,9 +630,9 @@ export async function approveExceptionFull(
       .update({
         status: targetStatus,
         resolved_opis: finalOpis,
-        final_kwoty_per_kolumna: roundedKwoty,
-        final_zapis_vat_data: baseVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
+        final_kwoty_per_kolumna: finalne.kwoty,
+        final_zapis_vat_data: finalne.vat,
+        final_kpir_pojazdowe_data: finalne.pojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString(),
         edycja_realna: editFlags.edycja_realna,
@@ -571,8 +656,12 @@ export async function approveExceptionFull(
     const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
       status: targetStatus,
       final_opis: finalOpis,
-      final_zapis_vat_data: baseVat,
-      final_kpir_pojazdowe_data: scalonyPojazd,
+      // final_kwoty_per_kolumna BYŁO TU POMINIĘTE (audyt §4, „znane"): tabela
+      // faktury zostawała ze starą kopią kwot. Przy kontrakcie final=null to
+      // szczególnie mylące — obie tabele muszą mówić to samo.
+      final_kwoty_per_kolumna: finalne.kwoty,
+      final_zapis_vat_data: finalne.vat,
+      final_kpir_pojazdowe_data: finalne.pojazd,
       resolved_by: userEmail,
       resolved_at: new Date().toISOString(),
       edycja_realna: editFlags.edycja_realna,
@@ -735,6 +824,11 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   const baseline4 = await resolveAiBaseline(supabase, exception, queueId)
   const diff4 = buildEditDiff(exception, baseline4, opis, roundedKwoty, baseVat, scalonyPojazd)
   const editFlags = computeEditFlags(diff4, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
+  const finalne = finalDoZapisu({
+    kwoty: roundedKwoty, vat: baseVat, pojazd: scalonyPojazd,
+    aiKwoty: baseline4.aiKwoty, aiVat: aiBaselineVat(exception), aiPojazd: aiBaselinePojazd(exception),
+    baselineUnresolved: baseline4.unresolved,
+  })
 
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
@@ -742,9 +836,9 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
       .update({
         status: targetStatus,
         resolved_opis: opis,
-        final_kwoty_per_kolumna: roundedKwoty,
-        final_zapis_vat_data: baseVat,
-        final_kpir_pojazdowe_data: scalonyPojazd,
+        final_kwoty_per_kolumna: finalne.kwoty,
+        final_zapis_vat_data: finalne.vat,
+        final_kpir_pojazdowe_data: finalne.pojazd,
         resolved_by: userEmail,
         resolved_at: new Date().toISOString(),
         edycja_realna: editFlags.edycja_realna,
@@ -767,9 +861,9 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     const sync = await updateFakturaOnFinish(supabase, fakturaId, queueId != null, {
       status: targetStatus,
       final_opis: opis,
-      final_kwoty_per_kolumna: roundedKwoty,
-      final_zapis_vat_data: baseVat,
-      final_kpir_pojazdowe_data: scalonyPojazd,
+      final_kwoty_per_kolumna: finalne.kwoty,
+      final_zapis_vat_data: finalne.vat,
+      final_kpir_pojazdowe_data: finalne.pojazd,
       resolved_by: userEmail,
       resolved_at: new Date().toISOString(),
       edycja_realna: editFlags.edycja_realna,
