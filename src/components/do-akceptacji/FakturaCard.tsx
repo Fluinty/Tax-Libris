@@ -102,6 +102,18 @@ function getKolumnaLabel(typ: TypDokumentu | null, numer: number): string {
   return kol ? `Kolumna ${kol.displayNumer} (${kol.labelKrotki})` : `Kolumna ${kpirDisplayNum(numer)}`
 }
 
+/** Nakładki renderowane w portalu (Base UI). Escape wewnątrz nich ma je
+ *  zamykać, a nie oznaczać faktury jako pominiętej. */
+const OVERLAY_SELECTOR = [
+  '[data-slot="dialog-content"]',
+  '[data-slot="alert-dialog-content"]',
+  '[data-slot="sheet-content"]',
+  '[data-slot="popover-content"]',
+  '[data-slot="select-content"]',
+  '[data-slot="dropdown-menu-content"]',
+  '[data-slot="tooltip-content"]',
+].join(',')
+
 /**
  * Etykieta stawki niezależna od formatu zapisu: worker podaje „Stawka23",
  * scalona tabela ręczna „23", a stawki bezprocentowe to „zw"/„np"/„oo".
@@ -223,7 +235,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
   const router = useRouter()
 
-  const handleClassificationChange = useCallback((pozycje: import('@/types/database').FakturaPozycja[]) => {
+  const handleClassificationChange = useCallback((pozycje: import('@/types/database').FakturaPozycjaKarta[]) => {
     setCurrentPozycje(pozycje)
     setClassificationVersion(v => v + 1)
   }, [])
@@ -272,13 +284,29 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     ignore: () => void
   }>({ approve: () => {}, resolve: () => {}, ignore: () => {} })
 
+  // Flagi nakładek w ref — listener nie musi się przez nie przemontowywać
+  // (spójnie z keyActionsRef powyżej).
+  const overlayStateRef = useRef(false)
+  overlayStateRef.current = showEditModal || showPreviewModal || showEventsDrawer || openCombobox
+
   useEffect(() => {
     if (!isActive) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || showEditModal) {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+
+      // 1) Pola edycyjne — doszły SELECT (trzy natywne <select> w sekcjach:
+      //    PozycjeVatSection, ProceduryJpkSection, TransakcjaZagranicznaSection)
+      //    i contentEditable. Escape na sfokusowanym selekcie pomijał fakturę.
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
         return
       }
+      // 2) Fokus wewnątrz nakładki — nakładki renderują się w portalu, więc
+      //    cardRef.contains() ich nie obejmuje; identyfikujemy po data-slot.
+      if (target?.closest?.(OVERLAY_SELECTOR)) return
+      // 3) Stany nakładek karty (tania ścieżka, czytelna intencja).
+      if (overlayStateRef.current) return
 
       if (e.key === 'Enter') {
         e.preventDefault()
@@ -288,6 +316,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
         e.preventDefault()
         if (stan === 'pending_review') setShowEditModal(true)
       } else if (e.key === 'Escape') {
+        // Escape NIGDY nie pomija faktury, gdy w DOM jest otwarta jakakolwiek
+        // nakładka — także cudza (SimilarPozycjeModal, Selecty w sekcjach) albo
+        // taka, która jest w trakcie animacji zamykania. Dziś ochronę daje
+        // wyłącznie stopPropagation w Base UI; to jest warstwa własna panelu,
+        // niezależna od wersji biblioteki. Zapytanie do DOM tylko w tej gałęzi.
+        if (document.querySelector(OVERLAY_SELECTOR)) return
         e.preventDefault()
         if (stan === 'pending_review' || stan === 'pending') keyActionsRef.current.ignore()
       }
@@ -295,7 +329,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isActive, stan, showEditModal])
+  }, [isActive, stan])
 
   const handleApprove = async () => {
     if (isSubmitting) return

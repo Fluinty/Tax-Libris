@@ -38,10 +38,10 @@ export function getEtykietaSekcjiKwot(typ: string | null): string {
     : 'Rozdzielenie kwot na kolumny KPiR (rozchody)';
 }
 
-import type { FakturaPozycja } from '@/types/database'
+import type { FakturaPozycjaKarta } from '@/types/database'
 
 export function computeKpirFromPozycje(
-  pozycje: FakturaPozycja[],
+  pozycje: FakturaPozycjaKarta[],
   typDokumentu: string | null,
   aiKwoty: Record<string, number>,
   isVatPayerKarta: boolean | null,

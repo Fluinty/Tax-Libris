@@ -20,7 +20,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { FileText, Pencil, ChevronsUpDown, Search, AlertTriangle, Scale, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
-import type { FakturaPozycja, TypDokumentu } from '@/types/database'
+import type { FakturaPozycjaKarta, TypDokumentu } from '@/types/database'
 import { getKolumnyForTyp } from '@/lib/kpir'
 import { formatGtuBadgeList } from '@/lib/jpk-helpers'
 import { updatePozycjaWymiar } from '@/app/(auth)/do-akceptacji/pozycje-actions'
@@ -50,17 +50,17 @@ function getVatStyle(status: string | null) {
 // ── Component ──
 
 interface Props {
-  pozycje: FakturaPozycja[]
+  pozycje: FakturaPozycjaKarta[]
   typDokumentu: TypDokumentu | string | null
   readOnly?: boolean
-  onClassificationChange?: (pozycje: FakturaPozycja[]) => void
+  onClassificationChange?: (pozycje: FakturaPozycjaKarta[]) => void
 }
 
 export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false, onClassificationChange }: Props) {
   const [isPending, startTransition] = useTransition()
   const [similarModalPozycjaId, setSimilarModalPozycjaId] = useState<number | null>(null)
   // Local pozycje state to track classification changes before server round-trip
-  const [localPozycje, setLocalPozycje] = useState<FakturaPozycja[]>(pozycje)
+  const [localPozycje, setLocalPozycje] = useState<FakturaPozycjaKarta[]>(pozycje)
   const localPozycjeRef = useRef(pozycje)
   // Sync from server props when they change (new data from router.refresh)
   if (pozycje !== localPozycjeRef.current) {
@@ -93,7 +93,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
             if (wymiar === 'kup_status') {
               return { ...p, effective_kup_status: value as 'kup' | 'nkup', final_kup_status: value as 'kup' | 'nkup' }
             }
-            return { ...p, effective_vat_odliczalny: value as FakturaPozycja['effective_vat_odliczalny'], final_vat_odliczalny: value as FakturaPozycja['final_vat_odliczalny'] }
+            return { ...p, effective_vat_odliczalny: value as FakturaPozycjaKarta['effective_vat_odliczalny'], final_vat_odliczalny: value as FakturaPozycjaKarta['final_vat_odliczalny'] }
           })
           setLocalPozycje(updatedPozycje)
           onClassificationChange?.(updatedPozycje)
@@ -105,7 +105,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
     })
   }
 
-  const PozycjaRow = ({ poz }: { poz: FakturaPozycja }) => {
+  const PozycjaRow = ({ poz }: { poz: FakturaPozycjaKarta }) => {
     const effectiveKol = poz.effective_kolumna_kpir
     const kolDef = kolumny.find(k => k.numer === effectiveKol)
     const isInvalid = effectiveKol != null && !kolumny.some(k => k.numer === effectiveKol)

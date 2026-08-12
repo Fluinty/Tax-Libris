@@ -125,6 +125,44 @@ export interface FakturaPozycja {
   effective_gtu_bits?: number | null;
 }
 
+/**
+ * Podzbiór pozycji faktury, który kolejka /do-akceptacji wysyła do przeglądarki.
+ *
+ * Strona celowo NIE robi już `select('*')` na faktury_pozycje: tabela zawiera
+ * `nazwa_embedding` (vector 1536, ~6 kB/wiersz), który leciał w payloadzie RSC
+ * przy każdym wejściu i przy auto-refreshu co 30 s, mimo że w panelu nie ma ani
+ * jednego czytelnika (jedyny użytkownik wektora to RPC match_pozycje, które
+ * dociąga go osobno po stronie serwera).
+ *
+ * Ten typ musi odpowiadać liście kolumn w `POZYCJE_KARTY_COLUMNS`
+ * (src/app/(auth)/do-akceptacji/page.tsx) — inaczej TypeScript obiecywałby pola,
+ * których w runtime nie ma.
+ */
+export type FakturaPozycjaKarta = Pick<
+  FakturaPozycja,
+  | 'id'
+  | 'faktura_id'
+  | 'lp'
+  | 'nazwa'
+  | 'ilosc'
+  | 'jednostka'
+  | 'stawka_vat'
+  | 'wartosc_netto'
+  | 'wartosc_brutto'
+  | 'ai_kolumna_kpir'
+  | 'final_kolumna_kpir'
+  | 'effective_kolumna_kpir'
+  | 'ai_podstawa_prawna'
+  | 'final_podstawa_prawna'
+  | 'edytowane_przez_monike'
+  | 'walidator_zmiana'
+  | 'final_kup_status'
+  | 'effective_kup_status'
+  | 'final_vat_odliczalny'
+  | 'effective_vat_odliczalny'
+  | 'effective_gtu_bits'
+>;
+
 // Walidator usluga obca warning entry
 export interface WalidatorWarning {
   lp: string;
@@ -350,7 +388,7 @@ export interface ExceptionWithClient extends ExceptionItem {
   // Schema v8 additions
   walidator_usluga_warningi?: WalidatorWarning[] | null;
   walidator_kup_vat_warningi?: WalidatorKupVatWarning[] | null;
-  pozycje_editable?: FakturaPozycja[];
+  pozycje_editable?: FakturaPozycjaKarta[];
   is_demo?: boolean;
 }
 

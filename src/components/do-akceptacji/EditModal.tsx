@@ -12,7 +12,7 @@ import { Check, ChevronsUpDown, AlertCircle, Trash2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu, FakturaPozycja } from '@/types/database'
+import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu, FakturaPozycjaKarta } from '@/types/database'
 import { kwotaReferencyjnaPozycje } from '@/lib/kpir-calc'
 import { parsePolishNumber } from '@/lib/parse-number'
 import {
@@ -39,7 +39,7 @@ interface EditModalProps {
   kwotaBrutto: number | null
   kwotaNetto: number | null
   isVatPayer: boolean
-  pozycjeEditable?: FakturaPozycja[]
+  pozycjeEditable?: FakturaPozycjaKarta[]
   typDokumentu: string | null
   clientOpisy: ClientOpis[]
   onSave: (opis: string, kwoty: Record<string, number>, zapisVat: ZapisVATData | null) => void

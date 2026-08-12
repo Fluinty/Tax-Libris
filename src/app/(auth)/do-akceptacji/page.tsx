@@ -12,6 +12,26 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 
+/**
+ * Kolumny faktury_pozycje wysyłane do karty — JAWNA lista zamiast `select('*')`.
+ * Tabela ma kolumnę `nazwa_embedding` (vector 1536, ~6 kB/wiersz), której panel
+ * nigdzie nie czyta, a która leciała do przeglądarki przy każdym wejściu na
+ * kolejkę i przy auto-refreshu co 30 s. Lista musi odpowiadać typowi
+ * `FakturaPozycjaKarta` (src/types/database.ts).
+ * UWAGA: kolumny effective_* są GENERATED — wolno je SELECTOWAĆ (tak samo robi
+ * ścieżka approve), ale nigdy nie wpisywać w UPDATE.
+ */
+const POZYCJE_KARTY_COLUMNS = [
+  'id', 'faktura_id', 'lp', 'nazwa', 'ilosc', 'jednostka',
+  'stawka_vat', 'wartosc_netto', 'wartosc_brutto',
+  'ai_kolumna_kpir', 'final_kolumna_kpir', 'effective_kolumna_kpir',
+  'ai_podstawa_prawna', 'final_podstawa_prawna',
+  'edytowane_przez_monike', 'walidator_zmiana',
+  'final_kup_status', 'effective_kup_status',
+  'final_vat_odliczalny', 'effective_vat_odliczalny',
+  'effective_gtu_bits',
+].join(', ')
+
 interface PageProps {
   searchParams: Promise<{ client?: string; sort?: string; typ?: string }>
 }
@@ -97,7 +117,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
           .in('queue_id', exceptionIds),
         supabase
           .from('faktury_pozycje')
-          .select('*')
+          .select(POZYCJE_KARTY_COLUMNS)
           .in('faktura_id', exceptionIds)
           .order('lp', { ascending: true })
       ])

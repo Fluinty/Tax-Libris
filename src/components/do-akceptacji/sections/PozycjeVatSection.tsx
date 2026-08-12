@@ -10,7 +10,7 @@ import { STAWKI_VAT, getStawkaLabel, type StawkaVat } from '@/lib/jpk-helpers'
 import { updateJpkSection, resetJpkSection } from '@/app/(auth)/do-akceptacji/actions'
 import { toast } from 'sonner'
 import { Trash2, Plus, RotateCcw, RefreshCw } from 'lucide-react'
-import type { FakturaPozycja } from '@/types/database'
+import type { FakturaPozycjaKarta } from '@/types/database'
 import { normalizeStawka } from '@/lib/vat'
 import { parsePolishNumber } from '@/lib/parse-number'
 
@@ -32,7 +32,7 @@ interface PozycjeVatSectionProps {
   isEdited: boolean
   readOnly?: boolean
   /** Current pozycje faktury with 3-dimensional classification (for auto-recalc) */
-  pozycjeFaktury?: FakturaPozycja[]
+  pozycjeFaktury?: FakturaPozycjaKarta[]
   /** Counter incremented on every classification change (triggers recalc) */
   classificationVersion?: number
   /** Official VAT table from XML (used to align rounding exactly) */
@@ -50,7 +50,7 @@ function calcBrutto(netto: number, vat: number): number {
 }
 
 /** Compute VAT rows from pozycje faktury based on classification */
-function computeVatFromPozycje(pozycje: FakturaPozycja[], officialVatTable?: PozycjaVatRow[]): PozycjaVatRow[] {
+function computeVatFromPozycje(pozycje: FakturaPozycjaKarta[], officialVatTable?: PozycjaVatRow[]): PozycjaVatRow[] {
   // Filter: only positions where vat_odliczalny != 'brak'
   const included = pozycje.filter(p => p.effective_vat_odliczalny !== 'brak')
   if (included.length === 0) return [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }]

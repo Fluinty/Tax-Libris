@@ -1,7 +1,7 @@
 // Pure helper: per-pozycja kwota referencyjna calculation (sesja 33)
 // Accounts for KUP/NKUP status and VAT odliczalny per line item.
 
-import type { FakturaPozycja } from '@/types/database'
+import type { FakturaPozycjaKarta } from '@/types/database'
 
 /**
  * Calculate the reference amount for KPiR column validation.
@@ -16,7 +16,7 @@ import type { FakturaPozycja } from '@/types/database'
  * - VAT odliczalny = 'pelny' AND client is VAT payer → use netto
  */
 export function kwotaReferencyjnaPozycje(
-  pozycje: FakturaPozycja[],
+  pozycje: FakturaPozycjaKarta[],
   isVatPayer: boolean
 ): number {
   let suma = 0
