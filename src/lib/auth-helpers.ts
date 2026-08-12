@@ -151,6 +151,33 @@ export async function assertCanWrite(exceptionId: number) {
 }
 
 /**
+ * Read-only scoping gate: czy zalogowany użytkownik może CZYTAĆ dane klienta
+ * o podanym NIP. Wspólny wzorzec dla read-only endpointów (getZapisHistory,
+ * getSimilarPozycje, checkExceptionStatus) — server actions to publiczne POST-y,
+ * a service_role omija RLS, więc kontrola musi być jawna i fail-closed.
+ * Model jak w gateFakturaHistory/assertCanWrite: rola 'klient' = zero dostępu;
+ * nie-admin tylko przypisane NIP-y (bez kart demo gdy ma dostęp all-but-demo);
+ * nierozstrzygnięty NIP dla nie-admina = odmowa.
+ */
+export async function assertNipReadAccess(
+  clientNip: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
+  if (!panelUser || panelUser.rola === 'klient') {
+    return { ok: false, error: 'Brak uprawnień do tych danych' }
+  }
+  if (isAdmin) return { ok: true }
+  if (!clientNip) return { ok: false, error: 'Brak dostępu do tych danych' }
+  if (nips !== null && !nips.includes(clientNip)) {
+    return { ok: false, error: 'Brak dostępu do tych danych' }
+  }
+  if (nips === null && demoNips.includes(clientNip)) {
+    return { ok: false, error: 'Brak dostępu do tych danych' }
+  }
+  return { ok: true }
+}
+
+/**
  * Verify that the currently authenticated user has write permission for the given pozycjaId.
  */
 export async function assertCanWritePozycja(pozycjaId: number) {

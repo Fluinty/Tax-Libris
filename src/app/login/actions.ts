@@ -9,29 +9,27 @@ import { createSupabaseAdmin } from '@/lib/supabase/admin'
 export async function checkWhitelist(
   email: string
 ): Promise<{ allowed: boolean; error?: string }> {
+  // Endpoint nieuwierzytelniony — nie może być wyrocznią istnienia/statusu konta.
+  // Jedna generyczna odpowiedź niezależnie od tego, czy e-mail istnieje w
+  // panel_users i czy jest aktywny (rozróżnienie dopiero po zalogowaniu).
+  const generic = {
+    allowed: false,
+    error: 'Jeśli ten adres ma dostęp do panelu, wyślemy link logowania na skrzynkę.',
+  }
+
   if (!email || !email.includes('@')) {
-    return { allowed: false, error: 'Podaj prawidłowy adres email.' }
+    return generic
   }
 
   const supabase = createSupabaseAdmin()
-  const { data: user, error } = await supabase
+  const { data: user } = await supabase
     .from('panel_users')
-    .select('email, aktywny')
+    .select('aktywny')
     .eq('email', email.trim().toLowerCase())
-    .single()
+    .maybeSingle()
 
-  if (error || !user) {
-    return {
-      allowed: false,
-      error: 'Ten adres email nie ma dostępu do panelu.',
-    }
-  }
-
-  if (!user.aktywny) {
-    return {
-      allowed: false,
-      error: 'Twoje konto zostało dezaktywowane. Skontaktuj się z administratorem.',
-    }
+  if (!user || !user.aktywny) {
+    return generic
   }
 
   return { allowed: true }

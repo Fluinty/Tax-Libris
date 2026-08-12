@@ -3,7 +3,7 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { assertCanWritePozycja } from '@/lib/auth-helpers'
+import { assertCanWritePozycja, assertNipReadAccess } from '@/lib/auth-helpers'
 
 async function getUserEmail(): Promise<string> {
   const supabase = await createSupabaseServerClient()
@@ -97,6 +97,9 @@ export async function updatePozycjaKpir(
  * Fetch similar historical positions via RPC match_pozycje (pgvector).
  */
 export async function getSimilarPozycje(pozycjaId: number, matchCount = 10) {
+  // Publiczny endpoint POST — pozycjaId sterowany przez wołającego.
+  if (!Number.isSafeInteger(pozycjaId) || pozycjaId <= 0) return []
+
   const supabase = createSupabaseAdmin()
 
   const { data: poz, error: fetchErr } = await supabase
@@ -108,6 +111,11 @@ export async function getSimilarPozycje(pozycjaId: number, matchCount = 10) {
   if (fetchErr || !poz?.nazwa_embedding) {
     return []
   }
+
+  // Bramka read-only: bez niej dowolny zalogowany (w tym rola 'klient') po
+  // cudzym pozycjaId dostawał historyczne pozycje innego klienta (IDOR).
+  const gate = await assertNipReadAccess(poz.client_nip)
+  if (!gate.ok) return []
 
   const { data: similar, error: rpcErr } = await supabase.rpc('match_pozycje', {
     query_embedding: poz.nazwa_embedding,

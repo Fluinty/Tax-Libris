@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
-import { assertCanWrite, getAllowedNips } from '@/lib/auth-helpers'
+import { assertCanWrite, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
 
 // Helper to get authenticated user email
 async function getUserEmail(): Promise<string> {
@@ -975,23 +975,34 @@ export async function resetJpkSection(
  * PRZED zatwierdzeniem — wykrywa sytuację gdy ktoś zdążył zaksięgować/zatwierdzić.
  */
 export async function checkExceptionStatus(exceptionId: number): Promise<{ status: string | null }> {
+  // Publiczny endpoint POST — bez bramki dowolny zalogowany (w tym rola 'klient')
+  // enumerował statusy kart wszystkich klientów biura po id.
+  if (!Number.isSafeInteger(exceptionId) || exceptionId <= 0) return { status: null }
+
   const supabase = createSupabaseAdmin()
   // Deterministycznie: najpierw v2 po id (= faktury.id, tak przekazuje karta),
   // potem stare queue po id (wywolania legacy). Bez .or() - patrz resolveExceptionIds.
   const { data } = await supabase
     .from('exceptions_queue_v2')
-    .select('status')
+    .select('status, client_nip')
     .eq('id', exceptionId)
     .maybeSingle()
-  if (data) return { status: data.status ?? null }
+  if (data) {
+    const gate = await assertNipReadAccess(data.client_nip ?? null)
+    if (!gate.ok) return { status: null }
+    return { status: data.status ?? null }
+  }
 
   const { data: queueData } = await supabase
     .from('exceptions_queue')
-    .select('status')
+    .select('status, client_nip')
     .eq('id', exceptionId)
     .maybeSingle()
 
-  return { status: queueData?.status ?? null }
+  if (!queueData) return { status: null }
+  const gate = await assertNipReadAccess(queueData.client_nip ?? null)
+  if (!gate.ok) return { status: null }
+  return { status: queueData.status ?? null }
 }
 
 // ── Kontrola dostępu do historii faktury (współdzielona, read-only) ──────────
@@ -1032,6 +1043,15 @@ async function gateFakturaHistory(
 ): Promise<{ ok: true; clientNip: string | null } | { ok: false; error: string }> {
   const { fakturaId, queueId } = params
   if (!fakturaId && !queueId) return { ok: false, error: 'Brak ID faktury' }
+  // fakturaId/queueId sterowane przez wołającego i trafiają do interpolowanego
+  // .or() — wymuszamy bezpieczny int, żeby string z przecinkiem nie wstrzyknął
+  // dodatkowych filtrów PostgREST.
+  if (fakturaId !== undefined && (!Number.isSafeInteger(fakturaId) || fakturaId <= 0)) {
+    return { ok: false, error: 'Nieprawidłowy identyfikator faktury' }
+  }
+  if (queueId !== undefined && (!Number.isSafeInteger(queueId) || queueId <= 0)) {
+    return { ok: false, error: 'Nieprawidłowy identyfikator faktury' }
+  }
 
   const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
   if (!panelUser || panelUser.rola === 'klient') {
