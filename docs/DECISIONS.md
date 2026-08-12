@@ -157,6 +157,45 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   sa dzis niewidzialne w panelu (kolejka bierze pending/pending_review) —
   zanim dostana UI, musi byc jasne, ze to nie jest zywa czesc kontraktu
   panel-worker.
+- 2026-08-12 | Rejestr VAT liczy JEDNA funkcja dla podgladu i dla zapisu:
+  applyPozycjeVatFinal + computeEffectivePozycjeVat (merge-helpers), wolane
+  i przez FakturaCard.renderZapisVat, i przez mergeInlineEditsVat. Przy
+  scalaniu dwoch kopii rozstrzygniete swiadomie: (a) wykluczenia art.88/NKUP
+  TYLKO dla zakupu (NULL=zakup) — art. 88 dotyczy VAT naliczonego, a w prod
+  sa 4 karty sprzedazy z pozycja nkup/brak (3 otwarte), ktorym approve
+  wycinal VAT nalezny z rejestru, choc podglad pokazywal pelny; (b) reczna
+  tabela VAT ksiegowej NIE jest przeliczana z pozycji (keepManualRows) —
+  dotad blok wykluczen nadpisywal ja bezwarunkowo i korekta znikala;
+  (c) stawka odliczalna nieobecna w zapisie AI jest DOKLADANA do rejestru
+  ze stawka_id=null (worker dopasowuje przy ksiegowaniu) zamiast wypadac
+  bez sladu; (d) pusta baza pozycji = brak przeliczenia (nie syntetyzujemy
+  rejestru z pozycji — bez stawka_id byłby nie do zaksiegowania);
+  (e) podglad pokazuje teraz rowniez pozycje_vat_final, wiec „Zapis VAT" na
+  karcie to dokladnie to, co pojdzie do bazy. Zaokraglen w sciezce VAT
+  swiadomie NIE dokladamy (dzis ich nie ma; to zmiana payloadu do workera)
+  | dwie kopie tej samej logiki rozjechaly sie w piaciu wymiarach naraz,
+  a kazdy rozjazd to inna kwota w rejestrze VAT niz ta, ktora zaakceptowala
+  ksiegowa.
+- 2026-08-12 | normalizujRezim bierze procent WYLACZNIE sprzed znaku '%',
+  przy kilku roznych procentach zwraca null, obsluguje polski przecinek
+  | regex bez kotwicy lapal pierwsza liczbe zdania, wiec „leasing limit
+  150 tys proporcja 75%" dawalo rezim 100% zamiast 75% (koszt zawyzony
+  o 1/3); „55,56%" (realna wartosc rezim_proc w prod) bylo dotad null.
+  Lepszy brak rezimu niz zly rezim.
+- 2026-08-12 | Escape na karcie NIGDY nie pomija faktury, gdy w DOM jest
+  otwarta jakakolwiek nakladka (dialog/sheet/popover/select/tooltip,
+  takze cudza i ta w trakcie animacji zamykania) ani gdy fokus jest na
+  INPUT/TEXTAREA/SELECT/contentEditable | dotad ochrone dawal wylacznie
+  stopPropagation w Base UI, a guard karty sprawdzal tylko INPUT/TEXTAREA
+  i showEditModal: Escape na sfokusowanym natywnym selekcie ustawial
+  'ignored' bez potwierdzenia i bez drogi powrotu (100 kart w tym stanie).
+- 2026-08-12 | Kolejka /do-akceptacji pobiera faktury_pozycje JAWNA lista
+  kolumn (POZYCJE_KARTY_COLUMNS) + typ FakturaPozycjaKarta | select('*')
+  ciagnal nazwa_embedding (vector 1536): pomiar na realnej kolejce
+  (343 karty / 955 pozycji) 18,76 MB -> 0,50 MB, czyli -97,3%, przy kazdym
+  wejsciu i auto-refreshu co 30 s. Zawezenie selectu MUSI isc w parze
+  z zawezeniem typu, inaczej TypeScript obiecuje pola, ktorych w runtime
+  nie ma. Widok exceptions_queue_v2 sprawdzony — nie zawiera embeddingu.
 - 2026-08-12 | Martwe server actions USUNIETE zamiast naprawiane:
   resolveException/ignoreException/addProponowanyToClientOpisy
   (wyjatki/actions.ts — caly plik; toggleAutoWrite przeniesiony do
