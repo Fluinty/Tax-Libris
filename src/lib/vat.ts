@@ -1,3 +1,4 @@
+import { roundKwota } from './parse-number'
 import type { ZapisVATData, TypDokumentu } from '@/types/database';
 
 export function getEtykietaSekcjiVAT(typ: TypDokumentu | null, hasVAT: boolean): string {
@@ -90,7 +91,7 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
     
     if (!bruttoVal && nettoVal) {
       const stawkaNum = parseFloat(stawka)
-      bruttoVal = !isNaN(stawkaNum) ? Math.round(nettoVal * (1 + stawkaNum / 100) * 100) / 100 : nettoVal
+      bruttoVal = !isNaN(stawkaNum) ? (roundKwota(nettoVal * (1 + stawkaNum / 100)) ?? nettoVal) : nettoVal
     }
     
     groups[stawka].netto += nettoVal
@@ -101,9 +102,9 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
     stawka,
     stawka_symbol: stawka,
     stawka_id: '',
-    netto: Math.round(netto * 100) / 100,
-    vat: Math.round((brutto - netto) * 100) / 100,
-    brutto: Math.round(brutto * 100) / 100,
+    netto: roundKwota(netto) ?? 0,
+    vat: roundKwota(brutto - netto) ?? 0,
+    brutto: roundKwota(brutto) ?? 0,
   }))
 }
 

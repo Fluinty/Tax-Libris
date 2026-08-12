@@ -35,7 +35,7 @@ import {
 import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
 import { parsePolishNumber } from '@/lib/parse-number'
 import { kpirDisplayNum } from '@/lib/kpir-labels'
-import { mergeInlineEditsVat, mergeInlineEditsPojazd, normalizujRezim } from '@/lib/merge-helpers'
+import { mergeInlineEditsVat, mergeInlineEditsPojazd, normalizujRezim, applyPozycjeVatFinal, computeEffectivePozycjeVat } from '@/lib/merge-helpers'
 import { ConfidenceWeakPointsSection } from './sections/ConfidenceWeakPointsSection'
 import { AnomalieHistoriiSection } from './sections/AnomalieHistoriiSection'
 import { PozycjeVatSection } from './sections/PozycjeVatSection'
@@ -100,6 +100,18 @@ function getKolumnaLabel(typ: TypDokumentu | null, numer: number): string {
   const kolumny = getKolumnyForTyp(typ)
   const kol = kolumny.find(k => k.numer === numer)
   return kol ? `Kolumna ${kol.displayNumer} (${kol.labelKrotki})` : `Kolumna ${kpirDisplayNum(numer)}`
+}
+
+/**
+ * Etykieta stawki niezależna od formatu zapisu: worker podaje „Stawka23",
+ * scalona tabela ręczna „23", a stawki bezprocentowe to „zw"/„np"/„oo".
+ * Wcześniejszy render (`startsWith('Stawka')`) gubił „%" dla formatu
+ * znormalizowanego, więc po scaleniu obu ścieżek dawałby „23" zamiast „23%".
+ */
+function formatStawka(raw: string | null | undefined): string {
+  const s = normalizeStawka(raw)
+  if (s === '') return '—'
+  return Number.isFinite(Number(s)) ? `${s}%` : s
 }
 
 export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPojazdy = [], onResolved }: FakturaCardProps) {
@@ -648,10 +660,6 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     }
 
     const title = getEtykietaSekcjiVAT(exception.typ_dokumentu, true);
-    
-    // Walidacje
-    const diff = Math.abs((zapisVat.suma_brutto || 0) - (exception.kwota_brutto || 0));
-    const isSumInvalid = diff > 0.5;
 
     // AI proposed bad transaction per typ
     const isZakup = exception.typ_dokumentu === 'zakup';
@@ -666,57 +674,36 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     // Niespojnosc: pozycje maja czesciowe, ale naglowek mowi "Calkowite" (1)
     const isOdliczenieNiespojna = hasCzescioweVat && Number(zapisVat.rodzaj_odliczenia) === 1
 
-    // Przelicz effective pozycje_vat na podstawie flag KUP/VAT per pozycja
-    // brak odliczenia (art.88) lub NKUP -> wyklucz z rejestru VAT
-    // czesciowe_50/25 -> pelna kwota (rozdzielenie robi system ksiegowy)
-    let effectivePozycjeVat = zapisVat.pozycje_vat ?? []
-    let excludedStawki: string[] = []
-    let effectiveSumaNetto = Number(zapisVat.suma_netto ?? 0)
-    let effectiveSumaVat = Number(zapisVat.suma_vat ?? 0)
-    let effectiveSumaBrutto = Number(zapisVat.suma_brutto ?? 0)
-    const hasExclusions = isZakup && pozycjeEditable.length > 0 && pozycjeEditable.some(
-      p => p.effective_vat_odliczalny === 'brak' || p.effective_kup_status === 'nkup'
-    )
+    // Rejestr VAT liczony DOKŁADNIE tą samą ścieżką, którą zapisuje approve
+    // (applyPozycjeVatFinal → computeEffectivePozycjeVat w merge-helpers).
+    // Wcześniej ta sekcja miała własną kopię logiki wykluczeń i w ogóle nie
+    // widziała ręcznej tabeli VAT — księgowa widziała wiersze AI, a do bazy
+    // szły jej własne (audyt 2026-08 §3).
+    const reczneVat = applyPozycjeVatFinal(zapisVat.pozycje_vat, exception.pozycje_vat_final)
+    const eff = computeEffectivePozycjeVat({
+      pozycjeVat: reczneVat ? reczneVat.pozycje : zapisVat.pozycje_vat,
+      sumy: reczneVat ? reczneVat.sumy : {
+        netto: Number(zapisVat.suma_netto ?? 0),
+        vat: Number(zapisVat.suma_vat ?? 0),
+        brutto: Number(zapisVat.suma_brutto ?? 0),
+      },
+      pozycjeEditable,
+      applyExclusions: exception.typ_dokumentu !== 'sprzedaz',
+      keepManualRows: reczneVat !== null,
+    })
+    const effectivePozycjeVat = eff.pozycjeVat
+    const excludedStawki = eff.excludedStawki
+    const addedStawki = eff.addedStawki
+    const effectiveSumaNetto = eff.sumaNetto
+    const effectiveSumaVat = eff.sumaVat
+    const effectiveSumaBrutto = eff.sumaBrutto
+    const hasExclusions = eff.hasExclusions
 
-    if (hasExclusions) {
-      // Filtruj pozycje odliczalne
-      const deductible = pozycjeEditable.filter(p =>
-        p.effective_vat_odliczalny !== 'brak' && p.effective_kup_status !== 'nkup'
-      )
-
-      // Grupuj po stawce VAT
-      const groups = new Map<string, { netto: number; vat: number; brutto: number }>()
-      for (const p of deductible) {
-        const rawStawka = p.stawka_vat || '0'
-        const stawka = normalizeStawka(rawStawka)
-        const existing = groups.get(stawka) || { netto: 0, vat: 0, brutto: 0 }
-        const netto = Number(p.wartosc_netto || 0)
-        const brutto = Number(p.wartosc_brutto || 0)
-        existing.netto += netto
-        existing.vat += (brutto - netto)
-        existing.brutto += brutto
-        groups.set(stawka, existing)
-      }
-
-      // Zachowaj oryginalne stawka_id i pole_deklaracji z workerowego zapisVat
-      const origPozycje = zapisVat.pozycje_vat ?? []
-      effectivePozycjeVat = []
-      excludedStawki = []
-
-      for (const orig of origPozycje) {
-        const stawkaNum = normalizeStawka(orig.stawka_symbol)
-        const group = groups.get(stawkaNum)
-        if (group && (group.netto !== 0 || group.brutto !== 0)) {
-          effectivePozycjeVat.push({ ...orig, netto: group.netto, vat: group.vat, brutto: group.brutto })
-        } else {
-          excludedStawki.push(stawkaNum)
-        }
-      }
-
-      effectiveSumaNetto = effectivePozycjeVat.reduce((s, p) => s + Number(p.netto), 0)
-      effectiveSumaVat = effectivePozycjeVat.reduce((s, p) => s + Number(p.vat), 0)
-      effectiveSumaBrutto = effectivePozycjeVat.reduce((s, p) => s + Number(p.brutto), 0)
-    }
+    // Walidacja sumy liczona z tego, co REALNIE pójdzie do rejestru
+    // (wcześniej zawsze z surowego zapisu workera — po ręcznej edycji tabeli
+    // VAT alert porównywał nieaktualne liczby).
+    const diff = Math.abs(effectiveSumaBrutto - (exception.kwota_brutto || 0));
+    const isSumInvalid = diff > 0.5;
 
     return (
       <div className="mt-4 mb-2 bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
@@ -803,9 +790,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               {effectivePozycjeVat.map((poz: PozycjaVAT, i: number) => (
                 <div key={i} className="font-mono text-xs flex items-center gap-1 mb-1">
                   <span className="inline-block w-16 font-medium">
-                    {poz.stawka_symbol.startsWith('Stawka') 
-                      ? `${poz.stawka_symbol.replace('Stawka', '')}%`
-                      : poz.stawka_symbol}
+                    {formatStawka(poz.stawka_symbol)}
                   </span>
                   <span className="text-slate-600">netto</span> {Number(poz.netto).toFixed(2)} zł
                   {' '}+{' '}
@@ -827,7 +812,18 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-md text-xs flex items-start gap-2">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
               <span>
-                Stawka {excludedStawki.map(s => ['zw','np','oo'].includes(s.toLowerCase()) ? s : `${s}%`).join(', ')} wyłączona z rejestru VAT (pozycja nieodliczalna — NKUP/art.88). VAT trafia w koszty KPiR.
+                Stawka {excludedStawki.map(s => formatStawka(s)).join(', ')} wyłączona z rejestru VAT (pozycja nieodliczalna — NKUP/art.88). VAT trafia w koszty KPiR.
+              </span>
+            </div>
+          )}
+
+          {/* Stawka obecna w pozycjach, ale nieobecna w zapisie workera — dotąd
+              wypadała z rejestru bez śladu razem ze swoją kwotą */}
+          {addedStawki.length > 0 && (
+            <div className="mt-2 bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-md text-xs flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-600" />
+              <span>
+                Stawka {addedStawki.map(s => formatStawka(s)).join(', ')} dołożona do rejestru z pozycji faktury (brak jej w zapisie AI) — worker dopasuje ją do rejestru przy księgowaniu.
               </span>
             </div>
           )}

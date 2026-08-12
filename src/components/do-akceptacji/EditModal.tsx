@@ -15,12 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { ZapisVATData, PozycjaVAT, RejestrVAT, RodzajZakupu, RodzajOdliczenia, CelZakupu, ProceduraJPK, GrupaAsortymentu, FakturaPozycja } from '@/types/database'
 import { kwotaReferencyjnaPozycje } from '@/lib/kpir-calc'
 import { parsePolishNumber } from '@/lib/parse-number'
-import { 
-  REJESTRY_VAT, TRANSAKCJE_VAT_KRAJOWE, 
+import {
+  REJESTRY_VAT, TRANSAKCJE_VAT_KRAJOWE,
   RODZAJ_ZAKUPU_LABELS, RODZAJ_ODLICZENIA_LABELS, CEL_ZAKUPU_LABELS,
-  PROCEDURY_JPK, GRUPY_ASORTYMENTU,
+  PROCEDURY_JPK,
   getRodzajZakupuLabel, getRodzajOdliczeniaLabel, getCelZakupuLabel
 } from '@/lib/vat'
+import { GTU_LIST, gtuNumsToBitmask, bitmaskToGtuNums } from '@/lib/jpk-helpers'
 
 interface ClientOpis {
   id: number
@@ -47,6 +48,30 @@ interface EditModalProps {
 import { getKolumnyForTyp } from '@/lib/kpir'
 
 // KPIR_COLUMNS removed in favor of getKolumnyForTyp
+
+const gtuKod = (num: number) => `GTU_${String(num).padStart(2, '0')}`
+
+/** Numery GTU z wartości pola: bitmaska (aktualny format) albo legacy string 'GTU_01'. */
+function gtuNums(value: GrupaAsortymentu | undefined): number[] {
+  if (value === null || value === undefined || value === '') return []
+  if (typeof value === 'number') return bitmaskToGtuNums(value)
+  const m = String(value).match(/(\d+)/)
+  return m ? [Number(m[1])] : []
+}
+
+/** Wartość dla <Select>: pojedynczy numer albo 'none' (także gdy GTU jest wiele). */
+function gtuSelectValue(value: GrupaAsortymentu | undefined): string {
+  const nums = gtuNums(value)
+  return nums.length === 1 ? String(nums[0]) : 'none'
+}
+
+/** Etykieta triggera — przy wielu GTU pokazujemy wszystkie, żeby modal nie
+ *  udawał „braku" tam, gdzie inline GtuSection ustawiła kilka bitów. */
+function gtuSelectLabel(value: GrupaAsortymentu | undefined): string {
+  const nums = gtuNums(value)
+  if (nums.length === 0) return 'Brak'
+  return nums.map(gtuKod).join(', ')
+}
 
 export function EditModal({
   open,
@@ -432,10 +457,28 @@ export function EditModal({
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium text-slate-500">Grupa asort.</label>
-                        <Select value={String(zapisVat.grupa_asortymentu ?? '') || 'none'} onValueChange={(v) => setZapisVat({...zapisVat, grupa_asortymentu: v === 'none' ? null : v as GrupaAsortymentu})}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Brak" /></SelectTrigger>
+                        {/* GTU jako BITMASKA — tak zapisuje inline GtuSection i tego oczekuje
+                            worker. Wcześniej modal zapisywał tu string 'GTU_01', więc do
+                            final_zapis_vat_data trafiał raz string, raz liczba. */}
+                        <Select
+                          value={gtuSelectValue(zapisVat.grupa_asortymentu)}
+                          onValueChange={(v) => setZapisVat({
+                            ...zapisVat,
+                            grupa_asortymentu: v === 'none' ? null : gtuNumsToBitmask([Number(v)]),
+                          })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Brak">
+                              {gtuSelectLabel(zapisVat.grupa_asortymentu)}
+                            </SelectValue>
+                          </SelectTrigger>
                           <SelectContent sideOffset={4} className="min-w-[var(--anchor-width)] w-fit max-w-[400px]">
-                            {GRUPY_ASORTYMENTU.map(r => <SelectItem key={r.kod || 'none'} value={r.kod || 'none'}>{r.label}</SelectItem>)}
+                            <SelectItem value="none">— brak —</SelectItem>
+                            {GTU_LIST.map(g => (
+                              <SelectItem key={g.num} value={String(g.num)}>
+                                {gtuKod(g.num)} — {g.nameFull}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

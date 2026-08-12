@@ -39,6 +39,16 @@ export function kwotaReferencyjnaPozycje(
         // Nievatowiec: cały VAT jest kosztem → baza = brutto
         suma += 0.75 * brutto
       }
+    } else if (p.effective_vat_odliczalny === 'czesciowe_25') {
+      // Pojazd prywatny (20% kosztu) — ta sama luka co w computeKpirFromPozycje
+      // (kpir.ts): bez tej gałęzi kwota referencyjna liczyła się jak pełne
+      // odliczenie i rozjeżdżała się z kwotami KPiR pokazywanymi na karcie.
+      if (isVatPayer) {
+        const vat = brutto - netto
+        suma += 0.20 * (netto + vat * 0.5)
+      } else {
+        suma += 0.20 * brutto
+      }
     } else if (!isVatPayer || p.effective_vat_odliczalny === 'brak') {
       // Brak odliczenia VAT → cała kwota brutto idzie do kosztu
       suma += brutto

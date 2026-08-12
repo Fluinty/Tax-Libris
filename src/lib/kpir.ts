@@ -111,6 +111,10 @@ export function computeKpirFromPozycje(
         kwota = brutto
       } else if (odlicz === 'czesciowe_50') {
         kwota = 0.75 * brutto
+      } else if (odlicz === 'czesciowe_25') {
+        // Pojazd prywatny (odpowiednik reżimu '20'): bez tej gałęzi pozycja
+        // wpadała do `else` i była liczona jak pełne odliczenie.
+        kwota = 0.20 * brutto
       } else {
         kwota = brutto
       }
@@ -127,6 +131,10 @@ export function computeKpirFromPozycje(
         kwota = brutto
       } else if (odlicz === 'czesciowe_50') {
         kwota = 0.75 * (netto + vat * 0.5)
+      } else if (odlicz === 'czesciowe_25') {
+        // Jak wyżej — wymiar 'czesciowe_25' istnieje w typie i w merge-helpers
+        // (rodzaj_odliczenia=2), a tutaj był pominięty: kwota szła jako netto.
+        kwota = 0.20 * (netto + vat * 0.5)
       } else {
         kwota = netto // fallback
       }

@@ -5,7 +5,7 @@
  * NO eval(), NO new Function().
  */
 
-import { parsePolishNumber } from '@/lib/parse-number'
+import { parsePolishNumber, roundKwota } from '@/lib/parse-number'
 
 export interface CalcResult {
   value: number | null
@@ -33,7 +33,7 @@ export function parseCalcExpression(input: string): CalcResult {
   if (!hasOperator(normalized)) {
     const num = parsePolishNumber(normalized)
     if (num === null) return { value: null, error: 'Nieprawidłowe wyrażenie' }
-    return { value: Math.round(num * 100) / 100, error: null }
+    return { value: roundKwota(num), error: null }
   }
 
   // Tokenize
@@ -46,7 +46,9 @@ export function parseCalcExpression(input: string): CalcResult {
     if (result.pos !== tokens.length) {
       return { value: null, error: 'Nieprawidłowe wyrażenie' }
     }
-    return { value: Math.round(result.value * 100) / 100, error: null }
+    const rounded = roundKwota(result.value)
+    if (rounded === null) return { value: null, error: 'Nieprawidłowe wyrażenie' }
+    return { value: rounded, error: null }
   } catch {
     return { value: null, error: 'Nieprawidłowe wyrażenie' }
   }
