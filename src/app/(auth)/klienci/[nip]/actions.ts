@@ -229,7 +229,7 @@ export async function updateOpis(
 
 // Błędy zwracamy jako wartość (nie throw) — Next.js maskuje w produkcji treść
 // błędów rzuconych z Server Actions. Semantyka zdarzenia audytowego i fail-safe
-// identyczna jak w toggleAutoWrite (wyjatki/actions.ts).
+// identyczna jak w toggleAutoWrite (klienci/actions.ts).
 // Górny limit progu auto-write. Worker porównuje clients.auto_max_kwota w
 // auto_write_gate — NaN/Infinity/ujemna wartość rozbroiłaby lub rozdęła bramkę
 // produkcyjnego księgowania po cichu.

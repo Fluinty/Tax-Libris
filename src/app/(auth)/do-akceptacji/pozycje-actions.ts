@@ -77,23 +77,6 @@ export async function updatePozycjaWymiar(
 }
 
 /**
- * Backward-compatible wrapper for kolumna_kpir edits.
- */
-export async function updatePozycjaKpir(
-  pozycjaId: number,
-  newKolumna: number,
-  newKategoria?: string
-) {
-  const result = await updatePozycjaWymiar(pozycjaId, 'kolumna_kpir', newKolumna)
-  if (!result.success) return result
-
-  if (newKategoria !== undefined) {
-    return updatePozycjaWymiar(pozycjaId, 'kategoria', newKategoria)
-  }
-  return result
-}
-
-/**
  * Fetch similar historical positions via RPC match_pozycje (pgvector).
  */
 export async function getSimilarPozycje(pozycjaId: number, matchCount = 10) {

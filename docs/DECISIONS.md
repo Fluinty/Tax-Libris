@@ -136,3 +136,23 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   raportowal nieudany zapis jako sukces; przejsciowy blad odczytu faktury
   zamienial faktury.id w queue.id i UPDATE mogl trafic w CUDZA karte
   (v2.id === faktury.id !== queue.id).
+- 2026-08-12 | Status 'rolled_back' (36 kart w prod, 22 bez resolved_at) to
+  status HISTORYCZNY — relikt recznych rollbackow wykonywanych przez
+  wlasciciela na K1 sprzed asynchronicznej sciezki workera
+  (rollback_requested -> pending_review | rollback_failed z ARCHITECTURE).
+  Panel go nie ustawia i nie ustawial; nowych kart 'rolled_back' nie tworzyc.
+  Obsluga w UI (badge/filtr na /faktury, union typu ExceptionItem) i decyzja
+  "wskrzesic czy wygasic" — osobne zadanie (fale 2-3, wymaga uzgodnienia
+  slownika statusow z workerem na K1) | 22 cofniete i NIEzaksiegowane faktury
+  sa dzis niewidzialne w panelu (kolejka bierze pending/pending_review) —
+  zanim dostana UI, musi byc jasne, ze to nie jest zywa czesc kontraktu
+  panel-worker.
+- 2026-08-12 | Martwe server actions USUNIETE zamiast naprawiane:
+  resolveException/ignoreException/addProponowanyToClientOpisy
+  (wyjatki/actions.ts — caly plik; toggleAutoWrite przeniesiony do
+  klienci/actions.ts, gdzie zyja jego importery), approveWithEdit
+  (do-akceptacji), updatePozycjaKpir (pozycje-actions) | 'use server' czyni
+  kazdy eksport zywym endpointem POST; martwe akcje autoryzowaly inny obiekt
+  (faktury.id), niz zapisywaly (exceptions_queue.id) — nakladajace sie
+  sekwencje id = dostep do cudzej karty; kod bez importera nie przechodzi
+  przez review zmian i gnije w miejscu, gdzie sekwencja id sie naklada.

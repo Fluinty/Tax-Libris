@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { toggleAutoWrite } from '@/app/(auth)/wyjatki/actions'
+import { toggleAutoWrite } from '@/app/(auth)/klienci/actions'
 import type { ClientWithCounts } from '@/types/database'
 
 import { Plus } from 'lucide-react'
