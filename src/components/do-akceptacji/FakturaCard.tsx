@@ -241,6 +241,19 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     }
   }, [isActive])
 
+  // Handlery akcji w ref — efekt keydown woła zawsze AKTUALNE domknięcie.
+  // Wcześniej deps efektu ([isActive, stan, selectedOpis, showEditModal]) nie
+  // zawierały currentKpirKwoty/kpirEditedManually/editableOpis, więc Enter po
+  // inline-edycji kolumny KPiR lub opisu księgował wartości sprzed edycji
+  // (stale closure). Ref jest nadpisywany przy każdym renderze (niżej, po
+  // definicjach handlerów), więc skrót klawiszowy widzi ten sam stan co
+  // przycisk „Zatwierdź i księguj".
+  const keyActionsRef = useRef<{
+    approve: () => void
+    resolve: () => void
+    ignore: () => void
+  }>({ approve: () => {}, resolve: () => {}, ignore: () => {} })
+
   useEffect(() => {
     if (!isActive) return
 
@@ -251,20 +264,20 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (stan === 'pending_review') handleApprove()
-        if (stan === 'pending') handleResolve()
+        if (stan === 'pending_review') keyActionsRef.current.approve()
+        if (stan === 'pending') keyActionsRef.current.resolve()
       } else if (e.key === 'e' || e.key === 'E') {
         e.preventDefault()
         if (stan === 'pending_review') setShowEditModal(true)
       } else if (e.key === 'Escape') {
         e.preventDefault()
-        if (stan === 'pending_review' || stan === 'pending') handleIgnore()
+        if (stan === 'pending_review' || stan === 'pending') keyActionsRef.current.ignore()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isActive, stan, selectedOpis, showEditModal])
+  }, [isActive, stan, showEditModal])
 
   const handleApprove = async () => {
     if (isSubmitting) return
@@ -379,6 +392,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       setIsSubmitting(false)
     }
   }
+
+  // Świeże domknięcia dla skrótów klawiszowych (patrz komentarz przy keyActionsRef).
+  keyActionsRef.current = { approve: handleApprove, resolve: handleResolve, ignore: handleIgnore }
 
   const handleAddAiProposalToClient = async () => {
     if (isSubmitting) return

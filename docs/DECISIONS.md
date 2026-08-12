@@ -113,3 +113,26 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   zdanie reguly KPiR partycjonowane po ai wartosci karty, nie po payload.z
   | payload.z historycznych eventow to fantomowe 0, jedyna prawda o kwotach
   AI jest na karcie; po fixie nowe eventy sa juz samonosne.
+- 2026-08-12 | Read-only server actions z bramka assertNipReadAccess
+  (getZapisHistory, getSimilarPozycje, checkExceptionStatus) wg wzorca
+  gateFakturaHistory: blokada roli 'klient', scoping po przypisanych NIP-ach,
+  fail-closed przy nierozstrzygnietym NIP; identyfikatory z wejscia
+  (fakturaId/queueId/zapisId/pozycjaId/exceptionId) walidowane
+  Number.isSafeInteger przed uzyciem w filtrach; checkWhitelist (login)
+  zwraca jedna generyczna odpowiedz | server actions to publiczne endpointy
+  POST, a service_role omija RLS — kazdy odczyt bez jawnej bramki to
+  cross-tenant IDOR (audyt 2026-08 par.1); rozrozniane odpowiedzi logowania
+  = enumeracja e-maili panel_users.
+- 2026-08-12 | Wszystkie zapisy panelu do kart aktywnych (updateJpkSection,
+  resetJpkSection, updateFinalZapisVAT, ignoreFaktura + istniejacy wzorzec
+  approve*/resolveException na exceptions_queue) maja guard statusu
+  .in('status',['pending','pending_review']).select('id') — pusty wynik =
+  blad "Faktura zmienila status"; blad KTOREGOKOLWIEK z dwoch zapisow
+  (faktury + exceptions_queue) idzie do UI z nazwa tabeli, nigdy nie jest
+  polykany; resolveExceptionIds sprawdza error obu odczytow faktury, a
+  fallback "czysty queue-id" bierze WYLACZNIE przy data===null &&
+  error===null | bez guardu podwojny Enter/stala lista nadpisywaly karte juz
+  zaksiegowana (worker ksieguje z tych pol); `if (error && !queueId)`
+  raportowal nieudany zapis jako sukces; przejsciowy blad odczytu faktury
+  zamienial faktury.id w queue.id i UPDATE mogl trafic w CUDZA karte
+  (v2.id === faktury.id !== queue.id).

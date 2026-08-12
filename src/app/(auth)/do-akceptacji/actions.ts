@@ -190,40 +190,59 @@ function computeEditFlags(
   return { edycja_realna, edycja_ksiegowa }
 }
 
-// Helper to resolve fakturaId, queueId and coalesced exception object
+// Helper to resolve fakturaId, queueId and coalesced exception object.
+// Zwrócony error != null oznacza BŁĄD ODCZYTU — konsument MUSI przerwać
+// (return { success: false, error }), nic z pozostałych pól nie jest wiarygodne.
 async function resolveExceptionIds(
   supabase: any,
   exceptionId: number
-): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any; isDemo: boolean }> {
+): Promise<{ fakturaId: number | null; queueId: number | null; exception: any; faktura: any; isDemo: boolean; error: string | null }> {
   // Deterministycznie, bez .or() - sekwencje id faktury i exceptions_queue nakladaja sie,
   // wiec .or(id.eq.X, legacy_queue_id.eq.X) potrafi zwrocic 2 wiersze i zepsuc maybeSingle().
   const FAKTURA_COLS = 'id, legacy_queue_id, final_kwoty_per_kolumna, ai_kwoty_per_kolumna, client_nip, clients(is_demo)'
+  const fail = (error: string) =>
+    ({ fakturaId: null, queueId: null, exception: null, faktura: null, isDemo: false, error })
 
   // 1. Priorytet: exceptionId to faktury.id (tak przekazuje karta po F4)
-  let { data: faktura } = await supabase
+  const r1 = await supabase
     .from('faktury')
     .select(FAKTURA_COLS)
     .eq('id', exceptionId)
     .maybeSingle()
+  if (r1.error) {
+    return fail(`Błąd odczytu faktury (faktury, id=${exceptionId}): ${r1.error.message}`)
+  }
+  let faktura = r1.data
 
   // 2. Fallback: exceptionId to stare queue.id (wywolania z /wyjatki)
   if (!faktura) {
-    const r = await supabase
+    const r2 = await supabase
       .from('faktury')
       .select(FAKTURA_COLS)
       .eq('legacy_queue_id', exceptionId)
       .maybeSingle()
-    faktura = r.data
+    if (r2.error) {
+      return fail(`Błąd odczytu faktury (faktury, legacy_queue_id=${exceptionId}): ${r2.error.message}`)
+    }
+    faktura = r2.data
   }
 
   const fakturaId: number | null = faktura?.id ?? null
   // faktura po id, bez legacy -> nowy rekord, nie piszemy do queue;
-  // faktury brak wcale -> exceptionId to czysty queue-id (bardzo stare rekordy)
+  // faktury brak wcale -> exceptionId to czysty queue-id (bardzo stare rekordy).
+  // KRYTYCZNE: ten fallback wolno wziąć WYŁĄCZNIE przy data===null && error===null
+  // (oba odczyty wyżej sprawdzone) — przejściowy błąd odczytu zamieniałby
+  // faktury.id w queue.id i kolejny UPDATE mógłby zatwierdzić CUDZĄ kartę.
   const queueId: number | null = faktura ? (faktura.legacy_queue_id ?? null) : exceptionId
 
-  const { data: exception } = fakturaId
+  const excRes = fakturaId
     ? await supabase.from('exceptions_queue_v2').select('*').eq('id', fakturaId).maybeSingle()
     : await supabase.from('exceptions_queue').select('*, clients(is_demo)').eq('id', queueId).maybeSingle()
+  if (excRes.error) {
+    const table = fakturaId ? 'exceptions_queue_v2' : 'exceptions_queue'
+    return fail(`Błąd odczytu karty (${table}, id=${fakturaId ?? queueId}): ${excRes.error.message}`)
+  }
+  const exception = excRes.data
 
   // Wyciąganie flagi is_demo z faktury (lub z exception dla starych wpisów)
   let isDemo = false
@@ -233,7 +252,7 @@ async function resolveExceptionIds(
     isDemo = Boolean((exception.clients as any).is_demo)
   }
 
-  return { fakturaId, queueId, exception, faktura, isDemo }
+  return { fakturaId, queueId, exception, faktura, isDemo, error: null }
 }
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
@@ -247,7 +266,10 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception, faktura, isDemo } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, faktura, isDemo, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: `Exception null dla id=${exceptionId}, supabase schema=${(supabase as any).rest?.schemaName || '?'}` }
@@ -365,7 +387,10 @@ export async function approveWithEdit(exceptionId: number, opis: string, kwoty: 
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception, isDemo } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, isDemo, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
@@ -472,7 +497,10 @@ export async function approveExceptionFull(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception, isDemo } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, isDemo, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
@@ -584,26 +612,42 @@ export async function updateFinalZapisVAT(
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
   
-  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  // Guard statusu + jawny błąd KTÓREGOKOLWIEK z dwóch zapisów. Wcześniej
+  // `if (error && !queueId)` połykał nieudany zapis, a bez warunku statusu można
+  // było nadpisać final_* karty już zaksięgowanej (worker księguje z tych pól).
   if (queueId) {
-    const { error } = await supabase
+    const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({ final_zapis_vat_data: zapisVatData })
       .eq('id', queueId)
-    if (error) return { success: false, error: error.message }
+      .in('status', ['pending', 'pending_review'])
+      .select('id')
+    if (error) return { success: false, error: `Błąd zapisu VAT (exceptions_queue): ${error.message}` }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
   if (fakturaId) {
-    const { error } = await supabase
+    const { data: updatedFaktura, error } = await supabase
       .from('faktury')
       .update({ final_zapis_vat_data: zapisVatData })
       .eq('id', fakturaId)
-    if (error && !queueId) return { success: false, error: error.message }
+      .in('status', ['pending', 'pending_review'])
+      .select('id')
+    if (error) return { success: false, error: `Błąd zapisu VAT (faktury): ${error.message}` }
+    if (!updatedFaktura || updatedFaktura.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
   await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id ?? null, {
@@ -628,7 +672,10 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, isDemo, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
@@ -647,6 +694,10 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     ? mergeInlineEditsVat({ ...exception, final_zapis_vat_data: zapisVatData }, pozycjeEditable ?? [], scalonyPojazd)
     : mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
+  // Demo nie ma workera — jak w approve* karta od razu dostaje status końcowy
+  // 'auto_created' (status 'resolved' nie występuje w prod i karta demo by utknęła).
+  const targetStatus = isDemo ? 'auto_created' : 'resolved'
+
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
   const baseline4 = await resolveAiBaseline(supabase, exception, queueId)
   const diff4 = buildEditDiff(exception, baseline4, opis, roundedKwoty, baseVat, scalonyPojazd)
@@ -656,7 +707,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
-        status: 'resolved',
+        status: targetStatus,
         resolved_opis: opis,
         final_kwoty_per_kolumna: roundedKwoty,
         final_zapis_vat_data: baseVat,
@@ -682,7 +733,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     await supabase
       .from('faktury')
       .update({
-        status: 'resolved',
+        status: targetStatus,
         final_opis: opis,
         final_kwoty_per_kolumna: roundedKwoty,
         final_zapis_vat_data: baseVat,
@@ -700,7 +751,8 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     faktura_id: fakturaId,
     resolved_by: userEmail,
     opis,
-    type: 'manual_resolve'
+    type: 'manual_resolve',
+    ...(isDemo ? { demo: true } : {})
   })
 
   // ── Oś czasu: edited → approved ──
@@ -727,14 +779,20 @@ export async function ignoreFaktura(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { fakturaId, queueId, exception, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
+  // Guard statusu na OBU tabelach — Escape na karcie, którą ktoś zdążył
+  // zatwierdzić/zaksięgować, nie może nadpisać statusu na 'ignored'
+  // (Rachmistrz miałby zapis, a panel mówiłby „pominięto").
   if (queueId) {
-    const { error } = await supabase
+    const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')
       .update({
         status: 'ignored',
@@ -742,14 +800,19 @@ export async function ignoreFaktura(exceptionId: number) {
         resolved_at: new Date().toISOString()
       })
       .eq('id', queueId)
+      .in('status', ['pending', 'pending_review'])
+      .select('id')
 
     if (error) {
-      return { success: false, error: error.message }
+      return { success: false, error: `Błąd pomijania (exceptions_queue): ${error.message}` }
+    }
+    if (!updatedQueue || updatedQueue.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
     }
   }
 
   if (fakturaId) {
-    await supabase
+    const { data: updatedFaktura, error } = await supabase
       .from('faktury')
       .update({
         status: 'ignored',
@@ -757,6 +820,15 @@ export async function ignoreFaktura(exceptionId: number) {
         resolved_at: new Date().toISOString()
       })
       .eq('id', fakturaId)
+      .in('status', ['pending', 'pending_review'])
+      .select('id')
+
+    if (error) {
+      return { success: false, error: `Błąd pomijania (faktury): ${error.message}` }
+    }
+    if (!updatedFaktura || updatedFaktura.length === 0) {
+      return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+    }
   }
 
   await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id ?? null, {
@@ -783,7 +855,10 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
   const userEmail = await getUserEmail()
   const supabase = createSupabaseAdmin()
 
-  const { exception } = await resolveExceptionIds(supabase, exceptionId)
+  const { exception, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+  if (resolveError) {
+    return { success: false, error: resolveError }
+  }
 
   if (!exception || !exception.ai_proponowany_opis) {
     return { success: false, error: 'Brak danych propozycji AI' }
@@ -840,8 +915,12 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
   })
 
   // ── Oś czasu: opis_added_to_list ──
-  const { fakturaId: fId2, queueId: qId2 } = await resolveExceptionIds(supabase, exceptionId)
-  const opisWarning = await logFakturaEvent(supabase, fId2, qId2, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
+  // Błąd ponownego rozwiązania id nie cofa dodanego opisu — jak w logFakturaEvent
+  // ląduje jako warning (toast), nie jako porażka całej akcji.
+  const resolved2 = await resolveExceptionIds(supabase, exceptionId)
+  const opisWarning = resolved2.error
+    ? `Nie zapisano zdarzenia opis_added_to_list: ${resolved2.error}`
+    : await logFakturaEvent(supabase, resolved2.fakturaId, resolved2.queueId, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
 
   return { success: true, message: 'Opis dodany poprawnie.', warning: opisWarning ?? undefined }
 }
@@ -881,28 +960,46 @@ export async function updateJpkSection(
     const userEmail = await getUserEmail()
     const supabase = createSupabaseAdmin()
 
-    const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+    const { fakturaId, queueId, exception, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+    if (resolveError) {
+      return { success: false, error: resolveError }
+    }
 
     if (!exception) {
       return { success: false, error: 'Nie znaleziono faktury.' }
     }
 
+    // Guard statusu + jawny błąd KTÓREGOKOLWIEK z dwóch zapisów. Wcześniej
+    // `if (error && !queueId)`/`(error && !fakturaId)` połykały nieudany zapis
+    // (księgowa myślała, że zmieniła GTU/VAT/reżim — a księgowała się stara
+    // wartość), a bez warunku statusu można było nadpisać final_* karty już
+    // zaksięgowanej.
     if (fakturaId) {
-      const { error } = await supabase
+      const { data: updatedFaktura, error } = await supabase
         .from('faktury')
         .update(data)
         .eq('id', fakturaId)
+        .in('status', ['pending', 'pending_review'])
+        .select('id')
 
-      if (error && !queueId) return { success: false, error: error.message }
+      if (error) return { success: false, error: `Błąd zapisu sekcji (faktury): ${error.message}` }
+      if (!updatedFaktura || updatedFaktura.length === 0) {
+        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      }
     }
 
     if (queueId) {
-      const { error } = await supabase
+      const { data: updatedQueue, error } = await supabase
         .from('exceptions_queue')
         .update(data)
         .eq('id', queueId)
+        .in('status', ['pending', 'pending_review'])
+        .select('id')
 
-      if (error && !fakturaId) return { success: false, error: error.message }
+      if (error) return { success: false, error: `Błąd zapisu sekcji (exceptions_queue): ${error.message}` }
+      if (!updatedQueue || updatedQueue.length === 0) {
+        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      }
     }
 
     await logAudit(supabase, 'jpk_section_update', exception.client_nip, exception.zapis_id ?? null, {
@@ -932,28 +1029,43 @@ export async function resetJpkSection(
     const userEmail = await getUserEmail()
     const supabase = createSupabaseAdmin()
 
-    const { fakturaId, queueId, exception } = await resolveExceptionIds(supabase, exceptionId)
+    const { fakturaId, queueId, exception, error: resolveError } = await resolveExceptionIds(supabase, exceptionId)
+    if (resolveError) {
+      return { success: false, error: resolveError }
+    }
 
     if (!exception) {
       return { success: false, error: 'Nie znaleziono faktury.' }
     }
 
+    // Guard statusu + jawny błąd KTÓREGOKOLWIEK z dwóch zapisów (jak w
+    // updateJpkSection — reset sekcji to też zapis do pól, z których worker księguje).
     if (fakturaId) {
-      const { error } = await supabase
+      const { data: updatedFaktura, error } = await supabase
         .from('faktury')
         .update(fields)
         .eq('id', fakturaId)
+        .in('status', ['pending', 'pending_review'])
+        .select('id')
 
-      if (error && !queueId) return { success: false, error: error.message }
+      if (error) return { success: false, error: `Błąd resetu sekcji (faktury): ${error.message}` }
+      if (!updatedFaktura || updatedFaktura.length === 0) {
+        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      }
     }
 
     if (queueId) {
-      const { error } = await supabase
+      const { data: updatedQueue, error } = await supabase
         .from('exceptions_queue')
         .update(fields)
         .eq('id', queueId)
+        .in('status', ['pending', 'pending_review'])
+        .select('id')
 
-      if (error && !fakturaId) return { success: false, error: error.message }
+      if (error) return { success: false, error: `Błąd resetu sekcji (exceptions_queue): ${error.message}` }
+      if (!updatedQueue || updatedQueue.length === 0) {
+        return { success: false, error: 'Faktura zmieniła status — odśwież listę' }
+      }
     }
 
     await logAudit(supabase, 'jpk_section_reset', exception.client_nip, exception.zapis_id ?? null, {
