@@ -245,22 +245,31 @@ export function FakturaHistoriaSection({ fakturaId, queueId }: FakturaHistoriaSe
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<TimelineEntry[]>([])
 
-  // LAZY: dane pobierane dopiero przy PIERWSZYM rozwinięciu sekcji
+  // LAZY: dane pobierane dopiero przy PIERWSZYM rozwinięciu sekcji.
+  // try/finally: odrzucona obietnica (błąd sieci) nie może zostawić sekcji
+  // w wiecznym „Ładowanie…" — loaded zostaje false, więc ponowne rozwinięcie
+  // próbuje jeszcze raz (wzorzec jak w LearningSection).
   const handleToggle = async () => {
     const next = !isOpen
     setIsOpen(next)
     if (next && !loaded && !loading) {
       setLoading(true)
       setError(null)
-      const res = await fetchFakturaTimeline({ fakturaId, queueId })
-      if (res.error) {
-        setError(res.error)
+      try {
+        const res = await fetchFakturaTimeline({ fakturaId, queueId })
+        if (res.error) {
+          setError(res.error)
+          setEntries([])
+        } else {
+          setEntries(res.entries)
+        }
+        setLoaded(true)
+      } catch {
+        setError('Błąd połączenia z serwerem — zwiń i rozwiń sekcję, aby spróbować ponownie')
         setEntries([])
-      } else {
-        setEntries(res.entries)
+      } finally {
+        setLoading(false)
       }
-      setLoaded(true)
-      setLoading(false)
     }
   }
 

@@ -161,17 +161,26 @@ export function FakturaEventsDrawer({
     setError(null)
 
     const load = async () => {
-      const result = await fetchFakturaEvents({ fakturaId, queueId })
+      // try/finally: odrzucona obietnica (błąd sieci) nie może zostawić
+      // drawera w wiecznym „Ładowanie…" (wzorzec jak w LearningSection)
+      try {
+        const result = await fetchFakturaEvents({ fakturaId, queueId })
 
-      if (cancelled) return
+        if (cancelled) return
 
-      if (result.error) {
-        setError(result.error)
+        if (result.error) {
+          setError(result.error)
+          setEvents([])
+        } else {
+          setEvents(result.events as FakturaEvent[])
+        }
+      } catch {
+        if (cancelled) return
+        setError('Błąd połączenia z serwerem — zamknij i otwórz ponownie')
         setEvents([])
-      } else {
-        setEvents(result.events as FakturaEvent[])
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
     }
 
     load()
