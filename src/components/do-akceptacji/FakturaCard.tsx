@@ -582,6 +582,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             pozycjeFaktury={currentPozycje}
             classificationVersion={classificationVersion}
             officialVatTable={officialVatTable || undefined}
+            typDokumentu={exception.typ_dokumentu}
           />
         )}
         {/* Transakcja zagraniczna */}

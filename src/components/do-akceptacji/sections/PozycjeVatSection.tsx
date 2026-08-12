@@ -37,6 +37,8 @@ interface PozycjeVatSectionProps {
   classificationVersion?: number
   /** Official VAT table from XML (used to align rounding exactly) */
   officialVatTable?: PozycjaVatRow[]
+  /** Typ dokumentu — wykluczenia NKUP dotyczą wyłącznie VAT naliczonego (zakup). */
+  typDokumentu?: string | null
 }
 
 function calcVat(netto: number, stawka: string): number {
@@ -50,9 +52,22 @@ function calcBrutto(netto: number, vat: number): number {
 }
 
 /** Compute VAT rows from pozycje faktury based on classification */
-function computeVatFromPozycje(pozycje: FakturaPozycjaKarta[], officialVatTable?: PozycjaVatRow[]): PozycjaVatRow[] {
-  // Filter: only positions where vat_odliczalny != 'brak'
-  const included = pozycje.filter(p => p.effective_vat_odliczalny !== 'brak')
+function computeVatFromPozycje(
+  pozycje: FakturaPozycjaKarta[],
+  officialVatTable?: PozycjaVatRow[],
+  typDokumentu?: string | null,
+): PozycjaVatRow[] {
+  // Wykluczenia MUSZĄ być tą samą regułą co w computeEffectivePozycjeVat
+  // (merge-helpers): 'brak' ORAZ NKUP, i tylko dla zakupu. Wcześniej ta funkcja
+  // znała jedynie wymiar odliczenia, więc przycisk „Przelicz stawki VAT"
+  // produkował tabelę z kwotami pozycji NKUP; zapisana jako pozycje_vat_final
+  // była potem chroniona przed korektą (keepManualRows) i VAT od NKUP trafiał
+  // do rejestru.
+  const stosujWykluczenia = typDokumentu !== 'sprzedaz'
+  const included = pozycje.filter(p =>
+    p.effective_vat_odliczalny !== 'brak' &&
+    (!stosujWykluczenia || p.effective_kup_status !== 'nkup')
+  )
   if (included.length === 0) return [{ stawka: '23', netto: 0, vat: 0, brutto: 0 }]
 
   // Zlicz pozycje dla każdej stawki (ile jest w ogóle, ile zostało włączonych)
@@ -116,6 +131,7 @@ export function PozycjeVatSection({
   pozycjeFaktury,
   classificationVersion,
   officialVatTable,
+  typDokumentu,
 }: PozycjeVatSectionProps) {
   const initial: PozycjaVatRow[] = pozycjeVatFinal ?? pozycjeVatAi ?? []
   // Use ref for initial to avoid re-initialization on router.refresh()
@@ -137,7 +153,7 @@ export function PozycjeVatSection({
 
     if (!pozycjeFaktury || pozycjeFaktury.length === 0) return
 
-    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable)
+    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable, typDokumentu)
     
     // Check if new computed rows differ from current rows
     const isDifferent = JSON.stringify(computedRows) !== JSON.stringify(rows)
@@ -150,11 +166,11 @@ export function PozycjeVatSection({
     } else {
       setShowRecalcBanner(true)
     }
-  }, [classificationVersion, pozycjeFaktury, vatEditedManually, rows, officialVatTable])
+  }, [classificationVersion, pozycjeFaktury, vatEditedManually, rows, officialVatTable, typDokumentu])
 
   const handleRecalcClick = () => {
     if (!pozycjeFaktury) return
-    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable)
+    const computedRows = computeVatFromPozycje(pozycjeFaktury, officialVatTable, typDokumentu)
     setRows(computedRows)
     setDirty(true)
     setVatEditedManually(false)
