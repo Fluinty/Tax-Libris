@@ -16,6 +16,7 @@ const EVENT_LABELS: Record<string, string> = {
   edited: 'Księgowa zmieniła dane',
   approved: 'Zatwierdzono do księgowania',
   skipped: 'Pominięto',
+  restored: 'Przywrócono do kolejki',
   rezim_changed: 'Zmieniono reżim pojazdowy',
   opis_added_to_list: 'Dodano opis do listy klienta',
   rule_created: 'Utworzono regułę automatyczną',
@@ -39,6 +40,7 @@ function getDotColor(eventType: string): string {
     case 'edited':
     case 'rezim_changed':
     case 'opis_added_to_list':
+    case 'restored':
       return 'bg-blue-500'
     case 'validator_adjusted':
     case 'anomaly_flagged':
@@ -89,6 +91,13 @@ function buildPayloadDescription(eventType: string, payload: any): string | null
       return payload.error || payload.message || null
     case 'skipped':
       return payload.reason || null
+    case 'restored':
+      // Powód pominięcia bywa jedynym śladem, że fakturę zaksięgowano poza
+      // panelem — po przywróceniu karta go już nie ma, oś czasu tak.
+      return [
+        payload.nowy_status && `wraca jako ${payload.nowy_status}`,
+        payload.skip_reason_przed && `powód pominięcia: „${payload.skip_reason_przed}"`,
+      ].filter(Boolean).join(' · ') || null
     case 'approved':
       return payload.opis || null
     default:

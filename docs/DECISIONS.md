@@ -304,3 +304,83 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   naciska sie go, zeby zamknac cokolwiek. Zadnym guardem nie da sie naprawic
   zle dobranego skrotu; wlasciwa poprawka to usuniecie zachowania, nie kolejna
   warstwa warunkow.
+- 2026-08-13 | PRZYWRACANIE POMINIETYCH KART: akcja „Przywroc do kolejki" na
+  /faktury?status=ignored, wylacznie dla kart pominietych Z PANELU (status
+  'ignored' ORAZ resolved_by niepuste i rozne od 'fluinty_auto'). Kart 'skipped'
+  NIE dotykamy — to
+  pominiecia workera (13.08: wszystkie 115 ma resolved_by NULL, powody w evencie:
+  faktura_korygujaca, faktura_zaliczkowa, obca_waluta_EUR). Karta wraca do
+  'pending_review' gdy ma ai_proponowany_opis, inaczej do 'pending' (13.08:
+  100/100 kart 'ignored' ma opis AI). Zerujemy resolved_by / resolved_at /
+  skip_reason; ai_* i final_* nietkniete.
+  SKIP_REASON — ostrozniej niz „po prostu wyzerowac": kolumna istnieje TYLKO
+  w exceptions_queue (w `faktury` jej nie ma — PostgREST 42703, sprawdzone
+  13.08), a dla trzech kart niesie jedyny zapis tego, ze faktura zostala
+  zaksiegowana POZA panelem (13.08, zapytanie
+  `exceptions_queue?status=eq.ignored&skip_reason=not.is.null`: karty 1286
+  i 1289 „zaksiegowano bezposrednio w Rachmistrzu (DDK nie ma juz statusu
+  pending w Insercie)", karta 2274 „ST czerwcowy, VAT rozliczony recznie przez
+  ksiegowa"). Ciche skasowanie tego pola przy przywracaniu prowadzi wprost do
+  podwojnego ksiegowania, dlatego: (1) dialog pokazuje powod na czerwono PRZED
+  kliknieciem, (2) trafia on do payloadu eventu i audit_log jako
+  `skip_reason_przed`, razem z `pominieta_przez`/`pominieto_at` — bez tego po
+  przywroceniu nie dalo sie odtworzyc, kto i dlaczego pominal karte (dla 100
+  kart sprzed wdrozenia osi czasu nie ma nawet eventu 'skipped').
+  Guard `.eq('status','ignored')` na exceptions_queue; tabela `faktury`
+  guardowana SZERZEJ: `.in('status', ['ignored','pending','pending_review'])`.
+  Szerzej, bo rozjazd jest tu regula, nie wyjatkiem (13.08, statusy w `faktury`
+  dla 100 kart 'ignored': 40x ignored, 38x pending, 22x pending_review) i celem
+  jest zrownanie obu tabel. Ale NIE bez guardu: przy statusie terminalnym
+  (approved/external_booked) patch wyzerowalby resolved_by/resolved_at wiersza
+  juz zamknietego, kasujac informacje kto go zaksiegowal. Dzis takich
+  przypadkow nie ma (0/100), rozjazd jest jednak udokumentowany w obie strony,
+  wiec zamiast nadpisac — ostrzezenie w toascie (wzorzec updateFakturaOnFinish).
+  Autoryzacja: najpierw bramka roli (getAllowedNips + odrzucenie roli 'klient')
+  PRZED odczytem karty, dopiero potem assertCanWriteClient(NIP KARTY).
+  Kolejnosc ma znaczenie: przy odczycie przed bramka komunikaty „nie znaleziono
+  karty" vs „brak uprawnien" byly dla dowolnego zalogowanego wyrocznia
+  istnienia id w calej kolejce biura (ten sam wyciek, co naprawiony wczesniej
+  w checkExceptionStatus). NIE assertCanWrite(id): to rozwiazuje id najpierw
+  jako faktury.id, a sekwencje obu tabel sie
+  nakladaja, wiec dla queue-id autoryzowaloby na NIP-ie cudzej karty. Z tego
+  samego powodu akcja NIE uzywa resolveExceptionIds — fakture znajduje po
+  legacy_queue_id, i dodatkowo odmawia zapisu, gdy `faktury.client_nip` rozni
+  sie od NIP-u karty kolejki (nieaktualny klucz obcy = zapis do cudzej faktury;
+  wzorzec z gateFakturaHistory. 13.08: 100/100 kart ma wiersz w `faktury`
+  i zero niezgodnosci NIP — guard jest prospektywny).
+  Zdarzenie osi czasu: NOWY typ 'restored' (nie 'queued' — to zdarzenie
+  pipeline'u ingestu, drugie „Dodana do kolejki" myliloby czytajacego historie
+  i konsumentow rozrozniajacych zdarzenia systemowe od decyzji czlowieka).
+  Wymaga migracji CHECK: migrations/2026-08-restored.sql (STATUS: DO WYKONANIA
+  RECZNIE). Do czasu jej wykonania akcja dziala, a brak eventu wraca jako
+  ostrzezenie w toascie — logFakturaEvent nie wywraca operacji.
+  Migracja NIE odtwarza ograniczenia z listy 21 wartosci ani z szablonu:
+  czyta aktualna definicje i DOKLEJA jeden element do jej tablicy (replace na
+  `ARRAY[...]`), wiec ksztalt predykatu, rzutowania i ewentualne NOT VALID
+  zostaja bit w bit. Powod: listy nie da sie odczytac przez PostgREST, a typ
+  „dozwolony-ale-nieuzywany" ma zero wierszy, wiec skan ADD CONSTRAINT nie
+  wykrylby jego cichego skasowania. Blok jest fail-closed — przerywa przy
+  wiecej niz jednym CHECK-u na event_type, przy definicji bez ARRAY[...],
+  przy literalach lub AND/OR poza lista i gdy liczba elementow nie zgadza sie
+  z liczba przecinkow.
+  Ostrzezenie (nie blokada) w dialogu, gdy faktura jest z wczesniejszego
+  okresu — samo przywrocenie nie ksieguje, ale pozniejsze zatwierdzenie moze
+  trafic w zamkniety miesiac (DECISIONS 2026-07 o rollbackach). Liczone
+  z DATY DOKUMENTU (data_wystawienia, fallback data_sprzedazy), nie z daty
+  pominiecia: miesiac ksiegowania wynika z dokumentu, wiec faktura czerwcowa
+  dociagnieta z KSeF i pominieta w sierpniu nie moze uchodzic za biezaca.
+  Porownanie tekstowe prefiksu YYYY-MM z biezacym miesiacem w Europe/Warsaw —
+  bez new Date(), ktore przesuwaloby daty kalendarzowe o strefe przegladarki.
+  Metryki: przywrocenie przenosi karte ze skipped_count do pending_count,
+  pct_ksiegowa bez zmian, do ai_count wchodzi dopiero po realnym zatwierdzeniu.
+  Podstawa: odczyt pg_get_functiondef('fluinty.client_metrics') z 12.08
+  (ai_count filtruje status IN auto_created/resolved/approved) — DO
+  POTWIERDZENIA jednym pg_get_functiondef przy najblizszej sesji z MCP
+  (startowanej z katalogu projektu), zgodnie z regula o twierdzeniach popartych
+  zapytaniem.
+  Duplikaty przy ponownym ingescie: karta wracajaca do 'pending' nie zostanie
+  zdublowana, bo pre-filter workera blokuje wpisy z istniejacym rekordem —
+  oparte na DECISIONS 2026-07, NIETESTOWANE
+  | 'ignored' bylo slepym zaulkiem: 100 kart w produkcji i zero drogi powrotnej
+  z panelu (ROADMAP §1 „drzwi jednokierunkowe", 213 kart ignored+skipped);
+  pomylkowe pominiecie wymagalo interwencji wlasciciela na K1.

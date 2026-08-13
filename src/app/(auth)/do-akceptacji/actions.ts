@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
-import { assertCanWrite, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
+import { assertCanWrite, assertCanWriteClient, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
 import { KOLUMNY_PER_TYP } from '@/lib/kpir'
 import { parsePolishNumber } from '@/lib/parse-number'
 
@@ -77,6 +77,16 @@ async function getUserEmail(): Promise<string> {
   const supabase = await createSupabaseServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user?.email ?? 'system'
+}
+
+// Bramki (getAllowedNips/assertCanWrite*) sygnalizują brak sesji przez
+// redirect('/login'), który Next rzuca jako błąd z digestem NEXT_REDIRECT —
+// złapanie go w try/catch zamieniłoby przekierowanie na komunikat „Brak
+// uprawnień" i użytkownik utknąłby na stronie bez możliwości zalogowania.
+function jestRedirect(e: unknown): boolean {
+  return !!e && typeof e === 'object' && 'digest' in e &&
+    typeof (e as { digest?: unknown }).digest === 'string' &&
+    (e as { digest: string }).digest.startsWith('NEXT_REDIRECT')
 }
 
 // Helper to log audit
@@ -984,7 +994,194 @@ export async function ignoreFaktura(exceptionId: number) {
   return { success: true, warning: skipWarning ?? undefined }
 }
 
-// DODAJ PROPOZYCJĘ DO LISTY KLIENTA (reuse z sesji 5)
+// PRZYWRÓĆ DO KOLEJKI — cofnięcie pominięcia zrobionego z panelu.
+//
+// Wołane z /faktury?status=ignored, gdzie wiersz pochodzi wprost z
+// `exceptions_queue`, więc parametrem jest QUEUE ID i tylko queue id.
+// CELOWO nie używamy resolveExceptionIds: ono najpierw szuka `faktury` po
+// `id = X`, a sekwencje id obu tabel się nakładają (v2.id === faktury.id !==
+// queue.id — CLAUDE.md), więc podanie mu queue-id mogłoby trafić w CUDZĄ
+// fakturę. Tutaj rozwiązujemy jednoznacznie: faktury po `legacy_queue_id`.
+//
+// Zakres świadomie wąski: TYLKO status 'ignored'. Kart 'skipped' (worker,
+// resolved_by IS NULL, powody w evencie: faktura_korygujaca, zaliczkowa,
+// obca waluta) NIE dotykamy — mają własne uzasadnienia po stronie workera.
+export async function restoreFaktura(queueId: number): Promise<{
+  success: boolean
+  error?: string
+  warning?: string
+  status?: string
+}> {
+  if (!Number.isSafeInteger(queueId) || queueId <= 0) {
+    return { success: false, error: 'Nieprawidłowy identyfikator karty' }
+  }
+
+  // Bramka roli PRZED jakimkolwiek odczytem karty. Bez niej dowolny zalogowany
+  // (w tym rola 'klient') odróżniał po komunikacie („nie znaleziono" vs „brak
+  // uprawnień") id istniejące od nieistniejących w całej kolejce biura — ten sam
+  // wyciek, który naprawiono w checkExceptionStatus.
+  try {
+    const { panelUser } = await getAllowedNips()
+    if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
+  } catch (e: unknown) {
+    if (jestRedirect(e)) throw e
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
+  const supabase = createSupabaseAdmin()
+
+  const { data: karta, error: readError } = await supabase
+    .from('exceptions_queue')
+    .select('id, client_nip, status, resolved_by, resolved_at, skip_reason, zapis_id, ai_proponowany_opis')
+    .eq('id', queueId)
+    .maybeSingle()
+  if (readError) {
+    return { success: false, error: `Błąd odczytu karty (exceptions_queue): ${readError.message}` }
+  }
+  if (!karta) {
+    return { success: false, error: `Nie znaleziono karty o id ${queueId} (exceptions_queue)` }
+  }
+
+  // Autoryzacja po NIP KARTY, nie przez assertCanWrite(id). assertCanWrite
+  // rozwiązuje id najpierw jako `faktury.id`, a sekwencje obu tabel się
+  // nakładają — dla queue-id mogłoby więc autoryzować na podstawie NIP-u CUDZEJ
+  // karty. Tutaj NIP bierzemy z wiersza, który realnie modyfikujemy.
+  try {
+    await assertCanWriteClient(karta.client_nip)
+  } catch (e: unknown) {
+    if (jestRedirect(e)) throw e
+    return { success: false, error: e instanceof Error ? e.message : 'Brak uprawnień' }
+  }
+
+  const userEmail = await getUserEmail()
+  if (karta.status !== 'ignored') {
+    return { success: false, error: `Przywracać można tylko karty pominięte z panelu — ta ma status „${karta.status}"` }
+  }
+  // Drugi zamek na pominięcia nie-ludzkie: workerowe mają resolved_by NULL,
+  // automat panelu podpisuje się 'fluinty_auto' (tak filtruje zakładka „Auto"
+  // na /faktury). Cofanie decyzji automatu wymaga ścieżki po stronie workera.
+  if (!karta.resolved_by || karta.resolved_by === 'fluinty_auto') {
+    return {
+      success: false,
+      error: 'Ta karta nie została pominięta przez człowieka z panelu — przywrócenie wymaga decyzji po stronie workera, nie panelu',
+    }
+  }
+
+  // Dokąd wraca: tam, skąd karta trafiła do kolejki. Propozycja AI = karta
+  // gotowa do kliknięcia (pending_review), jej brak = decyzja księgowej (pending).
+  const targetStatus = karta.ai_proponowany_opis ? 'pending_review' : 'pending'
+
+  const { data: faktura, error: fakturaReadError } = await supabase
+    .from('faktury')
+    .select('id, status, client_nip')
+    .eq('legacy_queue_id', queueId)
+    .maybeSingle()
+  if (fakturaReadError) {
+    return { success: false, error: `Błąd odczytu faktury (faktury, legacy_queue_id=${queueId}): ${fakturaReadError.message}` }
+  }
+  // Autoryzacja poszła na NIP z exceptions_queue, a zapis trafi do wiersza
+  // wskazanego kluczem obcym. Jeśli te dwa NIP-y się różnią, klucz jest
+  // nieaktualny i zapis dotknąłby faktury INNEGO klienta — odmawiamy w całości
+  // (wzorzec z gateFakturaHistory: niespójne identyfikatory = odmowa).
+  if (faktura && faktura.client_nip !== karta.client_nip) {
+    return {
+      success: false,
+      error: `Niespójne dane karty: faktura #${faktura.id} należy do NIP ${faktura.client_nip}, a karta kolejki do ${karta.client_nip} — odmowa zapisu`,
+    }
+  }
+  // Rozjazd tabel jest tu regułą, nie wyjątkiem (13.08.2026: 60 ze 100 kart
+  // 'ignored' ma w `faktury` status pending*). Odnotowujemy go w evencie.
+  const rozjazdTabel = !!faktura && faktura.status !== 'ignored'
+
+  const patch = {
+    status: targetStatus,
+    resolved_by: null,
+    resolved_at: null,
+  }
+
+  const { data: updatedQueue, error } = await supabase
+    .from('exceptions_queue')
+    .update({ ...patch, skip_reason: null })
+    .eq('id', queueId)
+    .eq('status', 'ignored')
+    .select('id')
+  if (error) {
+    return { success: false, error: `Błąd przywracania (exceptions_queue): ${error.message}` }
+  }
+  if (!updatedQueue || updatedQueue.length === 0) {
+    return { success: false, error: 'Karta zmieniła status — odśwież listę' }
+  }
+
+  // Tabela faktury: guard statusu jak w Fali 1, ale SZERSZY niż na kolejce.
+  // Rozjazd jest tu regułą (13.08.2026: 40 ignored / 38 pending / 22
+  // pending_review dla 100 kart 'ignored'), więc pending* musi przejść —
+  // celem jest zrównanie obu tabel. Nie przechodzi natomiast status TERMINALNY
+  // (approved/external_booked/auto_created): tam `patch` wyzerowałby
+  // resolved_by/resolved_at wiersza już zamkniętego, kasując informację kto
+  // i kiedy go zaksięgował. Dziś takich przypadków nie ma, ale rozjazd jest
+  // udokumentowany w obie strony, więc zgłaszamy go zamiast nadpisywać.
+  // Nie ruszamy ai_* ani final_*.
+  let syncWarning: string | null = null
+  if (faktura) {
+    const { data: updatedFaktura, error: fErr } = await supabase
+      .from('faktury')
+      .update(patch)
+      .eq('id', faktura.id)
+      .in('status', ['ignored', 'pending', 'pending_review'])
+      .select('id')
+    if (fErr) {
+      syncWarning = `Karta przywrócona w exceptions_queue, ale nie zsynchronizowano tabeli faktury: ${fErr.message}`
+      console.error('[restoreFaktura]', syncWarning, { queueId, fakturaId: faktura.id })
+    } else if (!updatedFaktura || updatedFaktura.length === 0) {
+      syncWarning = `Karta przywrócona w kolejce, ale wiersz w tabeli faktury (#${faktura.id}) ma status „${faktura.status}" i NIE został zmieniony — sprawdź, czy faktura nie została już zaksięgowana`
+      console.error('[restoreFaktura]', syncWarning, { queueId, fakturaId: faktura.id })
+    }
+  } else {
+    syncWarning = `Karta nie ma odpowiednika w tabeli faktury (legacy_queue_id=${queueId}) — może nie pojawić się na liście „Do akceptacji"`
+    console.error('[restoreFaktura]', syncWarning, { queueId })
+  }
+
+  await logAudit(supabase, 'restored', karta.client_nip, karta.zapis_id ?? null, {
+    queue_id: queueId,
+    faktura_id: faktura?.id ?? null,
+    restored_by: userEmail,
+    poprzedni_status: 'ignored',
+    nowy_status: targetStatus,
+    rozjazd_tabel_naprawiony: rozjazdTabel,
+    // Kto/kiedy/dlaczego pominął — te trzy pola za chwilę znikną z karty
+    // (patch zeruje resolved_*, UPDATE zeruje skip_reason), a dla 100 kart
+    // sprzed wdrożenia osi czasu nie ma zdarzenia 'skipped', z którego dałoby
+    // się je odtworzyć. audit_log jest wtedy JEDYNYM nośnikiem.
+    pominieta_przez: karta.resolved_by,
+    pominieto_at: karta.resolved_at ?? null,
+    skip_reason_przed: karta.skip_reason ?? null,
+  })
+
+  // Typ 'restored' wymaga migracji CHECK (migrations/2026-08-restored.sql).
+  // Do czasu jej wykonania insert padnie, a logFakturaEvent zwróci ostrzeżenie —
+  // przywrócenie i tak jest już zapisane.
+  const eventWarning = await logFakturaEvent(
+    supabase, faktura?.id ?? null, queueId, karta.client_nip, 'restored', userEmail,
+    {
+      poprzedni_status: 'ignored',
+      nowy_status: targetStatus,
+      by: userEmail,
+      pominieta_przez: karta.resolved_by,
+      pominieto_at: karta.resolved_at ?? null,
+      ...(karta.skip_reason ? { skip_reason_przed: karta.skip_reason } : {}),
+      ...(rozjazdTabel ? { rozjazd_tabel_naprawiony: true, faktury_status_przed: faktura?.status } : {}),
+    },
+  )
+
+  revalidatePath('/faktury')
+  revalidatePath('/do-akceptacji')
+  return {
+    success: true,
+    status: targetStatus,
+    warning: [syncWarning, eventWarning].filter(Boolean).join('; ') || undefined,
+  }
+}
+
 export async function addProponowanyToClientOpisy(exceptionId: number) {
   try {
     await assertCanWrite(exceptionId)

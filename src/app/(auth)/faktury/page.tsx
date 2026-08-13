@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import type { ExceptionItem } from '@/types/database'
 import { FakturaHistoryButton } from '@/components/do-akceptacji/sections/FakturaHistoryButton'
+import { PrzywrocButton } from '@/components/faktury/PrzywrocButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -178,12 +179,31 @@ export default async function FakturyPage({ searchParams }: PageProps) {
                     {getStatusBadge(item)}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <FakturaHistoryButton
-                      queueId={item.id}
-                      currentStatus={item.status}
-                      ksiegoweNumer={item.ksiegowe_numer}
-                      nazwaDostawcy={item.nazwa_dostawcy}
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Przywracanie TYLKO dla pominiec zrobionych PRZEZ CZLOWIEKA
+                          z panelu: status 'ignored' + resolved_by inne niz
+                          'fluinty_auto' (workerowe 'skipped' maja resolved_by NULL
+                          i wlasne powody, automat panelu podpisuje sie
+                          'fluinty_auto'). Serwer sprawdza to samo ponownie. */}
+                      {item.status === 'ignored' && item.resolved_by && item.resolved_by !== 'fluinty_auto' && (
+                        <PrzywrocButton
+                          queueId={item.id}
+                          ksiegoweNumer={item.ksiegowe_numer}
+                          nazwaDostawcy={item.nazwa_dostawcy}
+                          klient={clientsMap.get(item.client_nip) || item.client_nip}
+                          kwotaBrutto={item.kwota_brutto}
+                          pominietoAt={item.resolved_at}
+                          dataDokumentu={item.data_wystawienia ?? item.data_sprzedazy ?? null}
+                          skipReason={item.skip_reason ?? null}
+                        />
+                      )}
+                      <FakturaHistoryButton
+                        queueId={item.id}
+                        currentStatus={item.status}
+                        ksiegoweNumer={item.ksiegowe_numer}
+                        nazwaDostawcy={item.nazwa_dostawcy}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

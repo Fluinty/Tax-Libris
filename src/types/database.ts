@@ -200,6 +200,8 @@ export interface ExceptionItem {
   resolved_by: string | null;
   auto_created_by?: string | null;
   resolved_at: string | null;
+  /** Ręczna adnotacja „dlaczego pominięto" — kolumna istnieje TYLKO w exceptions_queue. */
+  skip_reason?: string | null;
   rule_created_id: number | null;
   typ_dokumentu: TypDokumentu | null;
   created_at: string;
