@@ -18,6 +18,12 @@ pusta przestrzen; bledy PGRST205 z tego wynikaja.
 `v2.id === faktury.id !== queue.id`. Pomylka aktualizuje cudza karte.
 * Kolumn `ai\_\*` NIE nadpisujemy nigdy. `final\_\*` ustawia wylacznie realna edycja
 ksiegowej — zatwierdzenie bez zmian NIE kopiuje ai->final (final zostaje null).
+Od Fali 2 kryterium jest PER POLE: zapisujemy `final\_X` tylko wtedy, gdy różni
+się od tego, co worker i tak wyliczy z `ai\_*`. Skutek, który trzeba znać:
+`final\_\* != null` NIE dowodzi edycji księgowej (może to być wartość wyprowadzona
+przez panel — wykluczenia art. 88/NKUP, auto-korekta rodzaju odliczenia).
+O edycji świadczą WYŁĄCZNIE flagi `edycja\_realna`/`edycja\_ksiegowa` i eventy.
+Szczegóły: docs/DECISIONS.md, wpisy z 12.08.2026.
 * Przy kazdym zakonczeniu karty (approve/resolve) ustawiac flagi:
 `edycja\_realna` (jakakolwiek zmiana vs AI), `edycja\_ksiegowa` (zmiana z wylaczeniem
 samego opisu). Czysty klik = oba false (jawnie). Diff liczyc z pominieciem kluczy
@@ -28,6 +34,12 @@ czysci tylko dane transakcyjne + client\_changes\_log (patrz src/lib/demo-seed.t
 external\_booked / skipped / ignored / rollback\_requested / rollback\_failed.
 `rollback\_requested` ustawia panel, wykonuje worker — panel nie dotyka pol
 `zapis\_\*\_rachmistrz`.
+* ŹRÓDŁEM PRAWDY O STATUSIE KARTY jest `exceptions\_queue` — to z niej księguje
+worker. Tabela `faktury` i widok v2 potrafią pokazywać co innego (v2 serwuje
+status z `faktury`; realny przykład 12.08.2026: queue 2125/2127 = `external\_booked`,
+`faktury` = `pending`, więc karty wyglądały w kolejce na otwarte). Rozjazd jest
+DO NAPRAWY; do tego czasu każdą analizę statusów prowadzić na `exceptions\_queue`,
+nigdy na `faktury`.
 
 ## UI — pulapki, ktore juz raz kosztowaly godziny
 
@@ -60,7 +72,24 @@ nie tylko fragment (lekcja: resetDemo x4).
 * Na starcie KAŻDEGO zadania: git fetch + pull (rebase przy lokalnych zmianach).
 W repo pracuje też drugi agent (Antigravity) — przed pushem sprawdź, czy origin
 nie uciekł. Konflikt = zatrzymaj się i zgłoś, nie rozwiązuj po cichu.
-* Przed zadaniem wykraczającym poza czysty frontend przeczytaj docs/ARCHITECTURE.md;
-nie zmieniaj zachowań opisanych w docs/DECISIONS.md bez wyraźnej zgody; przy każdej
-istotnej decyzji architektonicznej DOPISZ wpis do DECISIONS.md w commicie ze zmianą.
+* NA STARCIE KAŻDEJ SESJI przeczytaj docs/DECISIONS.md — to rejestr decyzji, nie
+archiwum; są tam wpisy, bez których łatwo powtórzyć cudzy błąd (m.in. semantyka
+`final\_\* != null` i rozjazd statusów faktury vs exceptions\_queue z 12.08.2026).
+Nie zmieniaj zachowań z tej listy bez wyraźnej zgody; przy każdej istotnej decyzji
+architektonicznej DOPISZ wpis w commicie ze zmianą. Przed zadaniem wykraczającym
+poza czysty frontend dodatkowo docs/ARCHITECTURE.md.
+* ZAKAZ TWIERDZEŃ O STANIE DANYCH BEZ ZAPYTANIA. Każde „jest X kart takich a takich"
+— w commicie, w docs, w podsumowaniu dla właściciela — musi być poparte zapytaniem
+WYKONANYM w tej sesji, z wklejonym wynikiem. Bez zapytania formułuj warunkowo
+(„jeśli takie karty istnieją…"). Liczby z wcześniejszych audytów też wymagają
+odświeżenia — bywają nieaktualne. Lekcja: commit c751b52 uzasadniał decyzję
+zdaniem o „4 kartach sprzedaży, którym approve wycinał VAT należny"; weryfikacja
+per wiersz tego nie potwierdziła (sprostowanie w 67b8999) — teza brzmiała
+wiarygodnie, bo wynikała z kodu, ale danych nikt nie sprawdził.
+* ŚCIEŻKA ZAPISU ZA JAWNYM ZATWIERDZENIEM. Baza domyślnie READ-ONLY (SELECT-y do
+introspekcji i weryfikacji tez — tak, DDL/DML — nie). Wszystko, co dotyka workera,
+Bridge'a albo nexo (w tym zmiany kontraktu pól, z których worker księguje:
+`final\_\*`, `resolved\_opis`, statusy, bramka auto-write) — najpierw plan
+i potwierdzenie właściciela, dopiero potem wykonanie. Migracje z migrations/
+uruchamia wyłącznie człowiek.
 

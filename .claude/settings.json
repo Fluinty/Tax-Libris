@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch --list:*)",
+      "Bash(git remote -v)",
+      "Bash(git check-ignore:*)",
+      "Bash(psql --command=SELECT *)",
+      "Bash(psql -c SELECT *)",
+      "Bash(node C:/Users/Adamn/AppData/Local/Temp/claude/*)",
+      "Bash(node C:\\Users\\Adamn\\AppData\\Local\\Temp\\claude\\*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)"
+    ]
+  }
+}

@@ -48,3 +48,6 @@ Umowa ramowa*.pdf
 
 # MCP — lokalna konfiguracja serwerów (token przez env var, plik nie do repo)
 .mcp.json
+
+# Claude Code — ustawienia osobiste (allowlista jest w .claude/settings.json)
+.claude/settings.local.json
