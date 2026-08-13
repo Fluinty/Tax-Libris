@@ -35,11 +35,12 @@ external\_booked / skipped / ignored / rollback\_requested / rollback\_failed.
 `rollback\_requested` ustawia panel, wykonuje worker — panel nie dotyka pol
 `zapis\_\*\_rachmistrz`.
 * ŹRÓDŁEM PRAWDY O STATUSIE KARTY jest `exceptions\_queue` — to z niej księguje
-worker. Tabela `faktury` i widok v2 potrafią pokazywać co innego (v2 serwuje
-status z `faktury`; realny przykład 12.08.2026: queue 2125/2127 = `external\_booked`,
-`faktury` = `pending`, więc karty wyglądały w kolejce na otwarte). Rozjazd jest
-DO NAPRAWY; do tego czasu każdą analizę statusów prowadzić na `exceptions\_queue`,
-nigdy na `faktury`.
+worker I to z niej widok v2 bierze kolumnę `status` (sprawdzone 13.08.2026:
+faktury.id 440 ma `faktury.status='pending'`, a v2 pokazuje `ignored`). Tabela
+`faktury` prowadzi WŁASNY, często nieaktualny status — 13.08.2026 rozjazd na
+60 ze 100 kart `ignored`. Skutek praktyczny: karta niewidoczna w kolejce może
+mieć w `faktury` status pending, więc każdą analizę statusów prowadzić na
+`exceptions\_queue`, nigdy na `faktury`. Rozjazd sam w sobie jest DO NAPRAWY.
 
 ## UI — pulapki, ktore juz raz kosztowaly godziny
 

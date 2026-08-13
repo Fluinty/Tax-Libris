@@ -195,10 +195,17 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   pod final=null i przy nim ksieguje z ai_*.
 - 2026-08-12 | Statusy w `faktury` i w `exceptions_queue` POTRAFIA SIE ROZJECHAC
   (przyklad z 12.08: queue 2125 i 2127 maja `external_booked`, a odpowiadajace
-  im wiersze `faktury` — `pending`; widok v2 serwuje status z `faktury`, wiec
-  karty wygladaja w kolejce na otwarte). Zrodlem prawdy o stanie karty jest
-  `exceptions_queue` — to z niej ksieguje worker; kazda analize statusow
+  im wiersze `faktury` — `pending`; 13.08 rozjazd na 60 ze 100 kart `ignored`).
+  Zrodlem prawdy o stanie karty jest `exceptions_queue` — to z niej ksieguje
+  worker i to z niej widok v2 bierze kolumne `status`; kazda analize statusow
   prowadzic na queue, nie na faktury.
+  SPROSTOWANIE 13.08.2026: pierwotna wersja tego wpisu twierdzila, ze „widok v2
+  serwuje status z faktury, wiec karty wygladaja w kolejce na otwarte" — to
+  NIEPRAWDA i nikt tego wtedy nie sprawdzil zapytaniem. Weryfikacja: faktury.id
+  440 ma faktury.status='pending', a exceptions_queue_v2 pokazuje 'ignored';
+  zadna ze 100 kart 'ignored' nie jest widoczna w kolejce (344 karty pending*,
+  z tego 0 ignored w queue). Kierunek jest odwrotny: v2 idzie za queue, a to
+  `faktury` niesie nieaktualny status.
 - 2026-08-12 | SEMANTYKA `final_* != null` PO FALI 2: to NIE znaczy „ksiegowa
   edytowala". Znaczy tylko tyle, ze wartosc WYPROWADZONA przez panel rozni sie
   od surowego `ai_*` — a rozni sie takze bez udzialu ksiegowej: wykluczenia

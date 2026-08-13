@@ -10,8 +10,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CalcInput } from '@/components/ui/calc-input'
-import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2, RefreshCw, History } from 'lucide-react'
+import { Bot, Check, ChevronsUpDown, Clock, Building2, User, FileText, AlertCircle, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Eye, EyeOff, Maximize2, RefreshCw, History, MinusCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { EditModal } from './EditModal'
@@ -1055,6 +1056,34 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
             <History className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Historia</span>
           </Button>
+          {/* „Pomiń" także w nagłówku — od 13.08.2026 pominięcie nie ma skrótu
+              klawiszowego, a jedyny przycisk leżał na samym dole karty, za całym
+              stosem klasyfikacji. Drugie wejście do TEJ SAMEJ akcji (ten sam
+              handleIgnore, to samo potwierdzenie po stronie serwera).
+              „Zatwierdź i księguj" ŚWIADOMIE zostaje wyłącznie na dole: akcja
+              nieodwracalna nie ma być klikalna przed przewinięciem klasyfikacji. */}
+          {(stan === 'pending_review' || stan === 'pending') && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleIgnore}
+                    disabled={isSubmitting}
+                    className="h-7 px-2 text-xs gap-1 text-[#64748B] hover:text-amber-700 hover:bg-amber-50 border border-transparent hover:border-amber-200"
+                  >
+                    <MinusCircle className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Pomiń</span>
+                  </Button>
+                }
+              />
+              <TooltipContent>
+                Pomija fakturę — zniknie z kolejki i NIE zostanie zaksięgowana.
+                Przywrócenie wymaga dziś interwencji poza panelem.
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
