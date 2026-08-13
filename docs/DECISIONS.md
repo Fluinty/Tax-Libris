@@ -157,6 +157,32 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   sa dzis niewidzialne w panelu (kolejka bierze pending/pending_review) —
   zanim dostana UI, musi byc jasne, ze to nie jest zywa czesc kontraktu
   panel-worker.
+- 2026-08-13 | UZUPELNIENIE do wpisu o 'rolled_back' — SKAD SIE WZIELA CZESC
+  TYCH KART, i sprostowanie tezy o ryczaltowcach. Przy przegladzie 100 kart
+  'ignored' (13.08) napisalem najpierw, ze 54 z nich pominieto slusznie, bo
+  "panel wyklucza klientow na ryczalcie (applyNipFilter), a zadna karta tych
+  klientow nie zostala zaksiegowana". OBA CZLONY SA FALSZYWE:
+  1. Filtr ryczaltu wszedl commitem f74e4c0 z 2026-06-30 11:03:07, a wszystkie
+     54 pominiecia sa z 29.06 07:10-09:20 — DZIEN WCZESNIEJ. W chwili
+     pominiecia te karty byly normalnie widoczne w panelu, wiec filtr niczego
+     w tamtym momencie nie tlumaczy.
+  2. Karty tych klientow BYLY ksiegowane w Rachmistrzu: 11 z nich ma
+     naglowek_id_rachmistrz (Pilarczyk 6770051077 -> 118002, 118004, 118006,
+     118008, 118010; Kicka 8942368371 -> 109722, 109724, 109726, 109728;
+     Swierkot 6521724577 -> 110060, 110062) i wlasnie te karty maja dzis
+     status 'rolled_back'.
+  Faktyczny przebieg (jedna akcja porzadkowa, nie seria omylek): 29.06 rano
+  reczne wyczyszczenie z kolejki trzech ryczaltowcow (07:10-09:20) -> 09:32-09:35
+  worker ksieguje 11 pozostalych ich kart -> cofniecie tych zapisow
+  ('rolled_back') -> 30.06 11:03 filtr wykluczajacy ryczalt z calego panelu.
+  Kontrapunkt do zapamietania: klientow na ryczalcie jest 14, wyczyszczono
+  TRZECH; pozostalych 11 ma otwarte karty, ktorych nikt nie pomijal — bo po
+  30.06 sa dla panelu niewidoczni. "Ryczalt => pomijamy" NIGDY nie bylo
+  polityka biura, bylo jednorazowe czyszczenie
+  | teza brzmiala wiarygodnie i zgadzala sie z kodem, ktory widzialem DZIS —
+  ale kod byl mlodszy od zdarzenia, ktore mial tlumaczyc. Przy analizie
+  zdarzen historycznych sprawdzac date commita wzgledem daty zdarzenia
+  (git show -s --format=%ci), nie tylko stan biezacy repo.
 - 2026-08-12 | KONTRAKT final_* PRZYWROCONY: zatwierdzenie BEZ realnej edycji
   zapisuje final_kwoty_per_kolumna = final_zapis_vat_data =
   final_kpir_pojazdowe_data = NULL w OBU tabelach (dotad szly tam kopie ai_*,
@@ -384,3 +410,26 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | 'ignored' bylo slepym zaulkiem: 100 kart w produkcji i zero drogi powrotnej
   z panelu (ROADMAP §1 „drzwi jednokierunkowe", 213 kart ignored+skipped);
   pomylkowe pominiecie wymagalo interwencji wlasciciela na K1.
+- 2026-08-13 | REGULA METODOLOGICZNA: `naglowek_id_rachmistrz` = NULL (ani
+  `zapis_id_rachmistrz`, ani `faktury.rachmistrz_*`) NIE DOWODZI, ze dokument
+  nie trafil do ksiag. Dowod: karta #1430 (DDK 100239, FS 3435/MK, klient
+  6481825609) ma NULL we wszystkich tych polach i status 'ignored', a w
+  audit_log sa DWA udane `auto_create_full` dla tego samego DDK —
+  naglowek_id 112525 (2026-07-20T12:26:32) i 112529 (2026-07-21T07:39:50).
+  Kolumna bywa czyszczona/nieustawiana przy zmianach statusu, wiec jej pustka
+  jest brakiem informacji, nie informacja o braku.
+  SKUTEK: kazda analiza „czy ten dokument jest juz zaksiegowany" musi isc
+  przez Rachmistrza/Bridge (K1) albo — jako poszlaka, nie dowod — przez
+  audit_log (akcje auto_create_full / external_booked / approved / resolved
+  z `details.naglowek_id`). Nigdy przez pola rachmistrz_* w Supabase.
+  UWAGA przy czytaniu audit_log pod tym katem: dla akcji `auto_create_full`
+  kolumna `audit_log.zapis_id` trzyma NOWY numer DDK powstaly przy ksiegowaniu,
+  a DDK zrodlowy siedzi w `details.ddk_nr` — kluczowanie wylacznie po kolumnie
+  gubi wtedy WSZYSTKIE zdarzenia zaksiegowania (934 wiersze w bazie, 100%
+  rozjazdu dla tej akcji). Klucz dokumentu to para (client_nip, DDK), bo sam
+  DDK koliduje miedzy klientami; `details.exception_id` jest nieufny — raz
+  niesie exceptions_queue.id, raz faktury.id, a sekwencje obu tabel sie
+  nakladaja
+  | przy przegladzie 100 kart 'ignored' (13.08) pole rachmistrz_* bylo
+  pierwszym kandydatem na kryterium „czy juz zaksiegowane"; dla 100/100 kart
+  jest NULL, co wygladalo na czysty wynik, a #1430 pokazalo, ze jest bezwartosciowe.
