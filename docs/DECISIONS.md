@@ -193,6 +193,12 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | „final = kopia ai" lamalo kontrakt, zatruwalo badge „kandydat auto"
   i bylo mina dla kazdego konsumenta ufajacego docs; worker jest zbudowany
   pod final=null i przy nim ksieguje z ai_*.
+- 2026-08-12 | Statusy w `faktury` i w `exceptions_queue` POTRAFIA SIE ROZJECHAC
+  (przyklad z 12.08: queue 2125 i 2127 maja `external_booked`, a odpowiadajace
+  im wiersze `faktury` — `pending`; widok v2 serwuje status z `faktury`, wiec
+  karty wygladaja w kolejce na otwarte). Zrodlem prawdy o stanie karty jest
+  `exceptions_queue` — to z niej ksieguje worker; kazda analize statusow
+  prowadzic na queue, nie na faktury.
 - 2026-08-12 | SEMANTYKA `final_* != null` PO FALI 2: to NIE znaczy „ksiegowa
   edytowala". Znaczy tylko tyle, ze wartosc WYPROWADZONA przez panel rozni sie
   od surowego `ai_*` — a rozni sie takze bez udzialu ksiegowej: wykluczenia
@@ -219,9 +225,14 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   applyPozycjeVatFinal + computeEffectivePozycjeVat (merge-helpers), wolane
   i przez FakturaCard.renderZapisVat, i przez mergeInlineEditsVat. Przy
   scalaniu dwoch kopii rozstrzygniete swiadomie: (a) wykluczenia art.88/NKUP
-  TYLKO dla zakupu (NULL=zakup) — art. 88 dotyczy VAT naliczonego, a w prod
-  sa 4 karty sprzedazy z pozycja nkup/brak (3 otwarte), ktorym approve
-  wycinal VAT nalezny z rejestru, choc podglad pokazywal pelny; (b) reczna
+  TYLKO dla zakupu (NULL=zakup) — art. 88 dotyczy VAT naliczonego; w prod jest
+  39 kart zakupu z pozycja nkup/brak i niepustym rejestrem VAT (4 otwarte)
+  oraz 0 takich kart sprzedazy, wiec scenariusz sprzedazowy jest PROSPEKTYWNY:
+  takie karty nie maja rejestru VAT (zapis_vat_data NULL), a przy pustej bazie
+  wykluczenia i tak sie nie uruchamiaja (SPROSTOWANIE 12.08.2026 — pierwotne
+  uzasadnienie mowilo o „4 kartach sprzedazy, ktorym approve wycinal VAT
+  nalezny"; weryfikacja per wiersz tego nie potwierdzila, decyzja zostaje
+  sluszna merytorycznie); (b) reczna
   tabela VAT ksiegowej NIE jest przeliczana z pozycji (keepManualRows) —
   dotad blok wykluczen nadpisywal ja bezwarunkowo i korekta znikala;
   (c) stawka odliczalna nieobecna w zapisie AI jest DOKLADANA do rejestru
