@@ -56,9 +56,11 @@ export function RealtimeToast({ currentPendingCount }: RealtimeToastProps) {
               <span className="font-mono bg-white px-2 py-1 rounded border shadow-sm">E</span>
               <span className="text-slate-600">Edytuj kwoty</span>
             </div>
+            {/* Pominięcie NIE ma skrótu klawiszowego — wyłącznie przycisk
+                „Pomiń" na karcie (docs/DECISIONS.md 2026-08-13). */}
             <div className="flex items-center justify-between p-2 rounded bg-slate-50">
               <span className="font-mono bg-white px-2 py-1 rounded border shadow-sm">Esc</span>
-              <span className="text-slate-600">Pomiń fakturę</span>
+              <span className="text-slate-600">Zamyka otwarte okno</span>
             </div>
           </div>
         </div>

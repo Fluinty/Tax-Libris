@@ -251,7 +251,10 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   150 tys proporcja 75%" dawalo rezim 100% zamiast 75% (koszt zawyzony
   o 1/3); „55,56%" (realna wartosc rezim_proc w prod) bylo dotad null.
   Lepszy brak rezimu niz zly rezim.
-- 2026-08-12 | Escape na karcie NIGDY nie pomija faktury, gdy w DOM jest
+- 2026-08-12 | [NIEAKTUALNE — uchylone 2026-08-13, patrz ostatni wpis pliku:
+  Esc nie pomija juz faktury NIGDY, na zadnej sciezce; ponizsza regula warunkowa
+  NIE obowiazuje i nie wolno jej odtwarzac]
+  Escape na karcie NIGDY nie pomija faktury, gdy w DOM jest
   otwarta jakakolwiek nakladka (dialog/sheet/popover/select/tooltip,
   takze cudza i ta w trakcie animacji zamykania) ani gdy fokus jest na
   INPUT/TEXTAREA/SELECT/contentEditable | dotad ochrone dawal wylacznie
@@ -274,3 +277,23 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   (faktury.id), niz zapisywaly (exceptions_queue.id) — nakladajace sie
   sekwencje id = dostep do cudzej karty; kod bez importera nie przechodzi
   przez review zmian i gnije w miejscu, gdzie sekwencja id sie naklada.
+- 2026-08-13 | Escape NIE POMIJA JUZ FAKTURY — w ogole, na zadnej sciezce.
+  Klawisz obsluguja wylacznie same nakladki (Base UI zamyka dialog/sheet/
+  popover/select i zatrzymuje propagacje); handler karty nie ma juz galezi
+  Escape. Pominiecie zostaje dostepne WYLACZNIE przyciskiem „Pomin" na karcie;
+  domyslnie NIE MA dla niego skrotu klawiszowego, a gdyby kiedys mial wrocic —
+  inna litera niz Esc i z potwierdzeniem w UI. Legenda na karcie i okno
+  „Skroty klawiszowe" (RealtimeToast) juz Esc jako „pomin" nie obiecuja.
+  Poprzednie podejscie (12.08: trojwarstwowy guard blokujacy Esc, gdy otwarta
+  jest nakladka) NIE moglo tego naprawic i test na demo to potwierdzil: na
+  karcie BEZ nakladki wszystkie trzy warunki przechodzily i pominiecie sie
+  wykonywalo — dwa odruchowe Esc daly dwie karty w 'ignored'. Rozwinieta sekcja
+  tez nie chronila, bo Collapsible renderuje sie inline (data-slot
+  collapsible-content), a nie jako nakladka
+  | pominiecie to decyzja z konsekwencjami — 100 kart w 'ignored' (COUNT na
+  produkcji 13.08.2026, zweryfikowany przy tej zmianie)
+  i zero drogi powrotnej z panelu (przywrocenie do kolejki to osobny, jeszcze
+  niezrobiony punkt raportu rozwojowego) — a Esc jest klawiszem odruchowym:
+  naciska sie go, zeby zamknac cokolwiek. Zadnym guardem nie da sie naprawic
+  zle dobranego skrotu; wlasciwa poprawka to usuniecie zachowania, nie kolejna
+  warstwa warunkow.

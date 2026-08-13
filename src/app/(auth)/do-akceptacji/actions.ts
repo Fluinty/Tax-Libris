@@ -915,9 +915,10 @@ export async function ignoreFaktura(exceptionId: number) {
     return { success: false, error: 'Nie znaleziono faktury.' }
   }
 
-  // Guard statusu na OBU tabelach — Escape na karcie, którą ktoś zdążył
+  // Guard statusu na OBU tabelach — pominięcie karty, którą ktoś zdążył
   // zatwierdzić/zaksięgować, nie może nadpisać statusu na 'ignored'
-  // (Rachmistrz miałby zapis, a panel mówiłby „pominięto").
+  // (Rachmistrz miałby zapis, a panel mówiłby „pominięto"). Od 13.08.2026
+  // jedynym wejściem tutaj jest przycisk „Pomiń" — Esc nie pomija już faktur.
   if (queueId) {
     const { data: updatedQueue, error } = await supabase
       .from('exceptions_queue')

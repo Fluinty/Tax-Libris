@@ -80,9 +80,17 @@ Migracje znajdują się w `supabase/migrations/`.
 
 ## ⌨️ Skróty klawiszowe (strona Do Akceptacji)
 
+Działają na AKTYWNEJ karcie (dziś: pierwsza karta sekcji „Czeka na akceptację")
+i nie działają, gdy fokus stoi w polu formularza, na przycisku albo w otwartym
+oknie.
+
 | Skrót | Akcja |
 |-------|-------|
-| ↑ / ↓ | Nawigacja między kartami |
 | Enter | Zatwierdź aktywną kartę |
-| Esc | Pomiń aktywną kartę |
-| / | Focus na wyszukiwarkę klientów |
+| E | Edytuj kwoty (modal) |
+| ⌘K / Ctrl+K | Wyszukiwarka globalna |
+| Esc | Zamyka otwarte okno lub powiększony podgląd |
+
+**Pominięcie faktury NIE MA skrótu klawiszowego** — wyłącznie przycisk „Pomiń"
+na karcie. Do 13.08.2026 robił to Esc; zostało to usunięte, bo pominięcia nie da
+się cofnąć z panelu, a Esc jest klawiszem odruchowym (docs/DECISIONS.md).

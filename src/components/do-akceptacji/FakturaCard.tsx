@@ -102,8 +102,10 @@ function getKolumnaLabel(typ: TypDokumentu | null, numer: number): string {
   return kol ? `Kolumna ${kol.displayNumer} (${kol.labelKrotki})` : `Kolumna ${kpirDisplayNum(numer)}`
 }
 
-/** Nakładki renderowane w portalu (Base UI). Escape wewnątrz nich ma je
- *  zamykać, a nie oznaczać faktury jako pominiętej. */
+/** Nakładki renderowane w portalu (Base UI) — cardRef.contains() ich nie
+ *  obejmuje, więc rozpoznajemy je po data-slot. Służy guardowi skrótów Enter/„E":
+ *  spod otwartej nakładki nie wolno zatwierdzić karty. Esc nie ma tu nic do
+ *  rzeczy — nakładki zamykają się same (DECISIONS 2026-08-13). */
 const OVERLAY_SELECTOR = [
   '[data-slot="dialog-content"]',
   '[data-slot="alert-dialog-content"]',
@@ -281,8 +283,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const keyActionsRef = useRef<{
     approve: () => void
     resolve: () => void
-    ignore: () => void
-  }>({ approve: () => {}, resolve: () => {}, ignore: () => {} })
+  }>({ approve: () => {}, resolve: () => {} })
 
   // Flagi nakładek w ref — listener nie musi się przez nie przemontowywać
   // (spójnie z keyActionsRef powyżej).
@@ -296,18 +297,40 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
 
-      // 1) Pola edycyjne — doszły SELECT (trzy natywne <select> w sekcjach:
-      //    PozycjeVatSection, ProceduryJpkSection, TransakcjaZagranicznaSection)
-      //    i contentEditable. Escape na sfokusowanym selekcie pomijał fakturę.
+      // Guard dotyczy teraz WYŁĄCZNIE Enter i „E" — Esc nie ma już gałęzi
+      // (patrz niżej). Enter w polu formularza, na sfokusowanym elemencie
+      // interaktywnym albo w otwartej nakładce nie może zatwierdzić karty.
+      // 1) Pola edycyjne, w tym natywne SELECT (PozycjeVatSection,
+      //    ProceduryJpkSection, TransakcjaZagranicznaSection) i contentEditable.
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
         return
       }
-      // 2) Fokus wewnątrz nakładki — nakładki renderują się w portalu, więc
+      // 2) Sfokusowany przycisk/link — Enter musi go AKTYWOWAĆ, nie zatwierdzić
+      //    karty. Bez tego dojście Tabem do „Pomiń" i naciśnięcie Enter
+      //    księgowało fakturę (preventDefault kasował natywny klik przycisku),
+      //    czyli jedyna dozwolona droga pominięcia robiła z klawiatury coś
+      //    dokładnie odwrotnego. Dotyczy też „Edytuj" i triggerów sekcji, które
+      //    zostają sfokusowane po kliknięciu myszą.
+      if (target?.closest?.('button, a[href], [role="button"], [role="link"]')) return
+      // 3) Fokus wewnątrz nakładki — nakładki renderują się w portalu, więc
       //    cardRef.contains() ich nie obejmuje; identyfikujemy po data-slot.
       if (target?.closest?.(OVERLAY_SELECTOR)) return
-      // 3) Stany nakładek karty (tania ścieżka, czytelna intencja).
+      // 4) Stany nakładek karty (tania ścieżka, czytelna intencja).
       if (overlayStateRef.current) return
 
+      // ESCAPE NIE MA TU ŻADNEJ GAŁĘZI — i celowo nigdy jej nie dostanie.
+      // Do 13.08.2026 Esc ustawiał kartę na 'ignored'. Skrót był źle dobrany:
+      // pominięcie to decyzja z konsekwencjami (100 kart w 'ignored' — COUNT
+      // z produkcji 13.08.2026 — i zero drogi powrotnej z panelu), a Esc to
+      // klawisz odruchowy — naciska się
+      // go, żeby zamknąć cokolwiek. Poprzednia próba (guard na otwarte nakładki)
+      // nie mogła tego naprawić: na karcie BEZ nakładki wszystkie warunki
+      // przechodziły i pominięcie się wykonywało. Test na demo: dwa odruchowe
+      // Esc = dwie karty w 'ignored'.
+      // Esc obsługują wyłącznie same nakładki (Base UI zamyka dialog/sheet/
+      // popover/select i zatrzymuje propagację). Pominięcie zostaje wyłącznie
+      // pod przyciskiem „Pomiń". Nie dodawać tu innej litery bez potwierdzenia
+      // w UI — patrz docs/DECISIONS.md 2026-08-13.
       if (e.key === 'Enter') {
         e.preventDefault()
         if (stan === 'pending_review') keyActionsRef.current.approve()
@@ -315,15 +338,6 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       } else if (e.key === 'e' || e.key === 'E') {
         e.preventDefault()
         if (stan === 'pending_review') setShowEditModal(true)
-      } else if (e.key === 'Escape') {
-        // Escape NIGDY nie pomija faktury, gdy w DOM jest otwarta jakakolwiek
-        // nakładka — także cudza (SimilarPozycjeModal, Selecty w sekcjach) albo
-        // taka, która jest w trakcie animacji zamykania. Dziś ochronę daje
-        // wyłącznie stopPropagation w Base UI; to jest warstwa własna panelu,
-        // niezależna od wersji biblioteki. Zapytanie do DOM tylko w tej gałęzi.
-        if (document.querySelector(OVERLAY_SELECTOR)) return
-        e.preventDefault()
-        if (stan === 'pending_review' || stan === 'pending') keyActionsRef.current.ignore()
       }
     }
 
@@ -446,7 +460,9 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   }
 
   // Świeże domknięcia dla skrótów klawiszowych (patrz komentarz przy keyActionsRef).
-  keyActionsRef.current = { approve: handleApprove, resolve: handleResolve, ignore: handleIgnore }
+  // BEZ `ignore` — pominięcie nie ma i nie ma mieć skrótu (DECISIONS 2026-08-13);
+  // gotowy uchwyt w refie byłby zaproszeniem do przywrócenia go jedną linijką.
+  keyActionsRef.current = { approve: handleApprove, resolve: handleResolve }
 
   const handleAddAiProposalToClient = async () => {
     if (isSubmitting) return
@@ -1284,9 +1300,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
 
           <div className="mt-5 flex flex-col sm:flex-row items-center justify-between border-t border-blue-200/50 pt-4">
             <div className="text-xs text-[#64748B] mb-3 sm:mb-0">
-              <kbd className="bg-white border rounded px-1.5 py-0.5 mr-1 font-mono shadow-sm">Enter</kbd> zatwierdź · 
-              <kbd className="bg-white border rounded px-1.5 py-0.5 mx-1 font-mono shadow-sm">E</kbd> edytuj · 
-              <kbd className="bg-white border rounded px-1.5 py-0.5 mx-1 font-mono shadow-sm">Esc</kbd> pomiń
+              {/* Bez Esc — pominięcie wyłącznie przyciskiem „Pomiń" obok
+                  (docs/DECISIONS.md 2026-08-13). */}
+              <kbd className="bg-white border rounded px-1.5 py-0.5 mr-1 font-mono shadow-sm">Enter</kbd> zatwierdź ·
+              <kbd className="bg-white border rounded px-1.5 py-0.5 mx-1 font-mono shadow-sm">E</kbd> edytuj
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowEditModal(true)} disabled={isSubmitting}>
