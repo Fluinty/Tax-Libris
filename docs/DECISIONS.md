@@ -193,6 +193,28 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | „final = kopia ai" lamalo kontrakt, zatruwalo badge „kandydat auto"
   i bylo mina dla kazdego konsumenta ufajacego docs; worker jest zbudowany
   pod final=null i przy nim ksieguje z ai_*.
+- 2026-08-12 | SEMANTYKA `final_* != null` PO FALI 2: to NIE znaczy „ksiegowa
+  edytowala". Znaczy tylko tyle, ze wartosc WYPROWADZONA przez panel rozni sie
+  od surowego `ai_*` — a rozni sie takze bez udzialu ksiegowej: wykluczenia
+  art. 88 / NKUP liczone z klasyfikacji pozycji i auto-korekta
+  `rodzaj_odliczenia` 1->2 przy pozycjach czesciowych trafiaja do
+  `final_zapis_vat_data` przy zwyklym „Zatwierdz i ksieguj".
+  JEDYNE zrodlo prawdy o edycji ksiegowej to flagi `edycja_realna` /
+  `edycja_ksiegowa` oraz eventy `faktura_events` (edited / rezim_changed).
+  Kazdy przyszly konsument — metryki, badge „kandydat auto", sekcja nauki,
+  raporty dla biura, przyszla bramka auto-write — ma pytac o FLAGI i EVENTY,
+  nigdy o `final_kwoty_per_kolumna IS NOT NULL` czy `final_zapis_vat_data
+  IS NOT NULL`. Analogicznie w druga strone: `final = null` nie znaczy „brak
+  danych", tylko „worker ma uzyc ai_*"
+  OTWARTE (zlecenie na K1, task.md): czy workerowy S40 REBUILD (sciezka
+  null+null) stosuje te same wykluczenia art. 88 / NKUP co panel. Jesli tak —
+  kryterium dla `final_zapis_vat_data` da sie uproscic do samej edycji
+  ksiegowej; jesli nie — obecne porownanie per pole jest jedynym poprawnym
+  | przed Fala 2 `final != null` bylo (nieprawdziwym, bo panel kopiowal ai->final)
+  skrotem na „byla edycja"; po zmianie kontraktu ten skrot jest juz nie tylko
+  nieprawdziwy, ale i mylacy w druga strone — bez tego wpisu pierwszy konsument
+  policzy wykluczenia art. 88 jako „korekty ksiegowej" i zanizy czystosc
+  ksiegowa, ktora jest fundamentem decyzji o auto-write.
 - 2026-08-12 | Rejestr VAT liczy JEDNA funkcja dla podgladu i dla zapisu:
   applyPozycjeVatFinal + computeEffectivePozycjeVat (merge-helpers), wolane
   i przez FakturaCard.renderZapisVat, i przez mergeInlineEditsVat. Przy
