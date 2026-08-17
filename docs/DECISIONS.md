@@ -525,3 +525,31 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   (tam tez brakowalo 'skipped'). Wszystkie trzy uzupelnione przy backfillu
   | union w types mowi, co MOZE przyjsc, ale o tym, co uzytkownik ZOBACZY,
   decyduja mapy w komponentach — i one nie maja kompilatorowej siatki.
+- 2026-08-17 | MODEL SWIEZOSCI KARTY po pakiecie perf (commit 71f8379):
+  inline-edycja pozycji (updatePozycjaWymiar) CELOWO nie robi revalidatePath —
+  zmiana dropdownu nie przebudowuje calej kolejki (~2,4 MB odczytu v2 +
+  pelny RSC render na kazde kliknieciecie). Swiezosc utrzymuje stan lokalny:
+  PozycjeFakturySection renderuje z localPozycje, karta trzyma currentPozycje
+  (resync z propem przy kazdym refreshu — wzorzec ref-compare), a caly tor
+  VAT karty (effVatMemo, hasCzesciowe, podsumy per kolumna, prefill
+  EditModala) czyta currentPozycje, NIE surowy prop. Zapis do bazy bez zmian:
+  approve*/resolve czytaja pozycje SWIEZO z DB przed scaleniem, wiec dane
+  ksiegowane sa poprawne niezaleznie od stanu ekranu.
+  ZAAKCEPTOWANE RYZYKO REZYDUALNE (decyzja wlasciciela 17.08, wariant a):
+  baza zapisu wysylana z klienta (exception.final_zapis_vat_data z propow)
+  moze byc przeterminowana w oknie do 30 s (auto-refresh) przy sekwencji
+  edycja -> refresh dostarcza propsy -> COFNIECIE edycji -> approve <30 s
+  na tej samej karcie. Skutkiem jest zapis stanu, ktory ksiegowa sama
+  ustawila chwile wczesniej — ryzyko klasy kosmetycznej; okno istnialo
+  zawsze (przed pakietem 1-2 s, teraz do 30 s). Pelne domkniecie (akcja
+  zwraca swieze final_* po triggerach DB i karta wpina je do stanu) w
+  backlogu z adnotacja: wraca jako pilne, jesli scenariusz wystapi w danych.
+  Przy okazji pakietu naprawiony REALNY bug produkcyjny (nie wydajnosc):
+  batch faktury_pozycje bez stronicowania vs serwerowy max-rows=1000 —
+  pending mial 17.08 1046 wierszy pozycji, 46 wierszy z 8 kart znikalo
+  PO CICHU (karty z niekompletnymi pozycjami; nkupCount/tabela VAT liczone
+  z niepelnej listy). Teraz range() w petli
+  | pelny rebuild kolejki przy kazdym dropdownie kosztowal 2-4 s na
+  klikniecie przy 100+ kartach dziennie, a jedyny konsument swiezosci
+  (ekran karty) da sie utrzymac lokalnie; okno wyscigu o skutku
+  "zapis wlasnego sprzed chwili" nie uzasadnia tego kosztu.
