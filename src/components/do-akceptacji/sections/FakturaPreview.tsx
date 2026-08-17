@@ -26,7 +26,7 @@
  */
 
 import type { ExceptionWithClient, PozycjaXml, PozycjaVAT } from '@/types/database'
-import { getOfficialVatTable, computeLayer2 } from '@/lib/vat'
+import { getOfficialVatTable, computeLayer2, deriveDoZaplaty } from '@/lib/vat'
 import { Badge } from '@/components/ui/badge'
 
 interface FakturaPreviewProps {
@@ -250,12 +250,7 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
   // saldo, a drugi nie (AUDIT §3).
   const podglad = (e.podglad_faktury as any) || {}
   const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
-  const doZaplatyPodglad = typeof podglad.kwotaDoZaplaty === 'string'
-    ? parseFloat(String(podglad.kwotaDoZaplaty).replace(',', '.').replace('−', '-'))
-    : Number(podglad.kwotaDoZaplaty)
-  const doZaplaty = Number.isFinite(doZaplatyPodglad) && doZaplatyPodglad !== 0
-    ? doZaplatyPodglad
-    : (e.kwota_brutto ?? 0)
+  const doZaplaty = deriveDoZaplaty(podglad.kwotaDoZaplaty, e.kwota_brutto)
   const { layer2Diff, showLayer2Row } = computeLayer2(doZaplaty, sumaBrutto ?? 0, dodatkoweRozliczenia)
 
   // ── Flagi dokumentu (Korekta/Zaliczka/Marża/MPP + rabat nagłówkowy) ──────

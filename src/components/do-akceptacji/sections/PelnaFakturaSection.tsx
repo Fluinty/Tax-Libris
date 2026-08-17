@@ -29,7 +29,7 @@ import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Car, AlertTriangle } from 'lucide-react'
 import { ExceptionItem } from '@/types/database'
-import { computeLayer2 } from '@/lib/vat'
+import { computeLayer2, deriveDoZaplaty } from '@/lib/vat'
 
 interface Props {
   exception: ExceptionItem
@@ -63,7 +63,13 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   } = podglad
 
   const naleznosc = parseAmount(kwotaNaleznosciOgolem)
+  // Surowa wartość z KSeF — WYŁĄCZNIE do wyświetlenia (wierny obraz dokumentu)
   const doZaplaty = parseAmount(kwotaDoZaplaty)
+  // Baza OBLICZEŃ (Layer 2 + alert rabatu) — wspólne wyprowadzenie z Preview
+  // (deriveDoZaplaty w @/lib/vat): brak/0 → fallback kwota_brutto karty.
+  // Bez tego przy kwotaDoZaplaty=0/braku Pełna pokazywała saldo/alert,
+  // a Preview nie (recenzja Fali 3; dziś 0 kart rozjechanych).
+  const doZaplatyBaza = deriveDoZaplaty(kwotaDoZaplaty, exception.kwota_brutto)
   const items = Array.isArray(wiersze) ? wiersze : []
   
   let mpp = false
@@ -84,10 +90,10 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
   // Wiersz roznicy Layer 2 — WSPOLNY computeLayer2 z @/lib/vat (AUDIT §3):
   // ta sama baza i prog co w FakturaPreview, jeden wzor w obu widokach.
-  const { layer2Diff, showLayer2Row } = computeLayer2(doZaplaty, vatTableBrutto, dodatkoweRozliczenia)
+  const { layer2Diff, showLayer2Row } = computeLayer2(doZaplatyBaza, vatTableBrutto, dodatkoweRozliczenia)
 
   // Diff rounding (to avoid float issues)
-  const discountDiff = Math.abs(sumBruttoWiersze - doZaplaty) > 0.02 ? (sumBruttoWiersze - doZaplaty) : 0
+  const discountDiff = Math.abs(sumBruttoWiersze - doZaplatyBaza) > 0.02 ? (sumBruttoWiersze - doZaplatyBaza) : 0
 
   return (
     <CollapsibleJpkSection title="Pełna faktura (KSeF)" icon={<FileText className="w-4 h-4" />}>
@@ -214,9 +220,12 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
               <div className="font-medium text-slate-400 text-right border-b pb-1">Netto</div>
               <div className="font-medium text-slate-400 text-right border-b pb-1">VAT</div>
               <div className="font-medium text-slate-400 text-right border-b pb-1">Brutto</div>
-              {Object.entries(officialVatTable).map(([rate, vals]: [string, any]) => (
-                <div key={rate} className="col-span-4 grid grid-cols-[80px_1fr_1fr_1fr] gap-4">
-                  <div className="font-medium text-slate-700">{rate}</div>
+              {/* getOfficialVatTable zwraca TABLICĘ wierszy — Object.entries
+                  dawało w kolumnie „Stawka" indeksy '0','1','2' zamiast stawek
+                  (recenzja Fali 3; Preview pokazywał stawki poprawnie). */}
+              {Object.values(officialVatTable).map((vals: any, i: number) => (
+                <div key={i} className="col-span-4 grid grid-cols-[80px_1fr_1fr_1fr] gap-4">
+                  <div className="font-medium text-slate-700">{vals.stawka_symbol ?? vals.stawka ?? '—'}</div>
                   <div className="text-right text-slate-600">{vals.netto.toFixed(2)}</div>
                   <div className="text-right text-slate-600">{vals.vat.toFixed(2)}</div>
                   <div className="text-right font-medium text-slate-800">{vals.brutto.toFixed(2)}</div>

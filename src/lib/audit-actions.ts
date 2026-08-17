@@ -34,8 +34,11 @@ export interface AuditActionMeta {
 
 export const AUDIT_ACTION_META: Record<string, AuditActionMeta> = {
   // ── pipeline workera ──
-  auto_create_full: { label: 'Zaksięgowano w Rachmistrzu', tone: 'green', icon: 'check' },
-  resolved_to_auto_create: { label: 'Zaksięgowano w Rachmistrzu (po rozwiązaniu)', tone: 'green', icon: 'check' },
+  // 'check-circle': przed scaleniem bliźnięta się różniły (sheet: CheckCircle2,
+  // lista: Check) — ujednolicone do kółka zgodnie z semantyką ikon poniżej
+  // ('check-circle' = zatwierdzenie/księgowanie, jak approved/external_booked).
+  auto_create_full: { label: 'Zaksięgowano w Rachmistrzu', tone: 'green', icon: 'check-circle' },
+  resolved_to_auto_create: { label: 'Zaksięgowano w Rachmistrzu (po rozwiązaniu)', tone: 'green', icon: 'check-circle' },
   external_booked: { label: 'Zaksięgowano ręcznie w Rachmistrzu (poza panelem)', tone: 'purple', icon: 'check-circle' },
   pre_fill_pending_review: { label: 'Pre-fill gotowy do akceptacji', tone: 'gray', icon: 'file' },
   exception: { label: 'Wyjątek — wymaga decyzji', tone: 'orange', icon: 'alert' },
@@ -55,6 +58,8 @@ export const AUDIT_ACTION_META: Record<string, AuditActionMeta> = {
   jpk_section_update: { label: 'Edycja sekcji JPK/VAT', tone: 'gray', icon: 'wrench' },
   jpk_section_reset: { label: 'Reset sekcji JPK/VAT do AI', tone: 'gray', icon: 'wrench' },
   opis_added_from_ai: { label: 'Opis AI dodany do listy klienta', tone: 'green', icon: 'check' },
+  opis_reactivated_from_ai: { label: 'Opis AI reaktywowany na liście klienta', tone: 'green', icon: 'check' },
+  update_final_zapis_vat: { label: 'Edycja zapisu VAT (transakcja zagraniczna)', tone: 'gray', icon: 'wrench' },
   auto_write_toggled: { label: 'Przełączono auto-write klienta', tone: 'purple', icon: 'wrench' },
 
   // ── legacy (moduł wyjatki / reguły) ──

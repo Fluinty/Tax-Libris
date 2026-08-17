@@ -50,6 +50,8 @@ export function TransakcjaZagranicznaSection({ exceptionId, zapisVat, readOnly =
         setSelTransakcjaId(prev)
       } else {
         toast.success('Transakcja zaktualizowana')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Błąd zapisu')

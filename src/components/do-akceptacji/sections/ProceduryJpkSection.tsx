@@ -63,6 +63,8 @@ export function ProceduryJpkSection({ exceptionId, proceduraJpk, typDokumentuJpk
         setDirty(false)
       } else {
         toast.success('Procedury JPK zapisane')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setSavedBitmask(bitmask)
         setSavedTypDok(typDok)
         setDirty(false)
@@ -102,6 +104,8 @@ export function ProceduryJpkSection({ exceptionId, proceduraJpk, typDokumentuJpk
         setSavedTypDok(aiTyp)
         setDirty(false)
         toast.success('Przywrócono AI')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch (e: unknown) {
       toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)

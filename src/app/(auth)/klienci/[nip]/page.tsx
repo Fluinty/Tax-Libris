@@ -35,12 +35,17 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
 
   const supabase = createSupabaseAdmin()
 
+  // maybeSingle + błąd sprawdzany PRZED notFound: przy .single() KAŻDY błąd
+  // (także awaria bazy) dawał data=null, więc `if (!client) notFound()` ubiegał
+  // check błędu — awaria Supabase renderowała mylące 404 „klient nie istnieje"
+  // (recenzja Fali 3). Teraz: błąd odczytu → BladOdczytu; brak wiersza → 404.
   const { data: client, error: clientError } = await supabase
     .from('clients')
     .select('*')
     .eq('nip', nip)
-    .single()
+    .maybeSingle()
 
+  if (clientError) return <BladOdczytu tabela="clients" message={clientError.message} />
   if (!client) {
     notFound()
   }
@@ -50,12 +55,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
   const thirtyDaysIso = thirtyDaysAgo.toISOString()
 
-  // 1. Zsumowane exception
-  const { count: exceptionsCount } = await supabase.from('exceptions_queue').select('*', { count: 'exact', head: true }).eq('client_nip', nip).in('status', ['pending', 'pending_review'])
+  // 1. Zsumowane exception (błąd countu NIE może po cichu pokazać „0 zaległości")
+  const { count: exceptionsCount, error: exCountError } = await supabase.from('exceptions_queue').select('*', { count: 'exact', head: true }).eq('client_nip', nip).in('status', ['pending', 'pending_review'])
 
   // 2. Faktury z tego miesiąca (z auditu action = 'auto_create_full' lub 'set_opis')
   const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-  const { count: invoicesMonth } = await supabase.from('audit_log')
+  const { count: invoicesMonth, error: invCountError } = await supabase.from('audit_log')
     .select('*', { count: 'exact', head: true })
     .eq('client_nip', nip)
     .in('action', ['auto_create_full', 'set_opis'])
@@ -145,7 +150,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
     .limit(20)
 
   // AUDIT §2 (C8): awaria odczytu = komunikat z tabela, nie pusta karta klienta
-  if (clientError) return <BladOdczytu tabela="clients" message={clientError.message} />
+  // (clientError obsłużony wyżej, przed notFound — patrz komentarz przy odczycie)
+  if (exCountError) return <BladOdczytu tabela="exceptions_queue (licznik pending)" message={exCountError.message} />
+  if (invCountError) return <BladOdczytu tabela="audit_log (licznik miesiąca)" message={invCountError.message} />
   if (pojazdyError) return <BladOdczytu tabela="client_pojazdy" message={pojazdyError.message} />
   if (auditsError) return <BladOdczytu tabela="audit_log" message={auditsError.message} />
   if (opisyError) return <BladOdczytu tabela="client_opisy" message={opisyError.message} />

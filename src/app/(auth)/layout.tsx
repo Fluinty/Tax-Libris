@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
+import { WylogujButton } from '@/components/auth/WylogujButton'
 import type { UserProfile } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
@@ -49,6 +50,9 @@ export default async function AuthLayout({
           <p className="text-xs text-slate-400 mt-4">
             Zalogowano jako {user.email}
           </p>
+          {/* Bez TopBara strona nie miała ŻADNEJ drogi wylogowania
+              (middleware odsyła zalogowanych z /login) — recenzja Fali 3 */}
+          <WylogujButton />
         </div>
       </div>
     )

@@ -36,6 +36,8 @@ export function SrodekTrwalySection({ exception }: { exception: ExceptionItem })
         setKsiegujSt(prev)
       } else {
         toast.success(checked ? 'Oznaczono jako środek trwały' : 'Usunięto oznaczenie środka trwałego')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch {
       toast.error('Błąd połączenia')

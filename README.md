@@ -15,7 +15,7 @@ worker wykonuje).
 
 - **Next.js 15.5** (App Router, server actions) + TypeScript strict
 - **TailwindCSS** + shadcn/ui, Lucide, Recharts, Sonner
-- **Supabase** — PostgreSQL (schema `fluinty`, zawsze jawnie), Auth (Magic Link)
+- **Supabase** — PostgreSQL (schema `fluinty`, zawsze jawnie), Auth (e-mail + hasło)
 - **react-hook-form + zod**
 - **Hosting:** Vercel
 
@@ -36,7 +36,7 @@ Wymagane zmienne: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 
 ```
 /                → redirect do /do-akceptacji (lub /login)
-/login           → logowanie Magic Link (whitelist panel_users)
+/login           → logowanie e-mail + hasło (whitelist panel_users)
 /do-akceptacji   → GŁÓWNA: kolejka kart do akceptacji przez księgową
 /klienci         → lista klientów biura
 /klienci/[nip]   → karta klienta (auto-write, symulacja bramki, pojazdy, opisy)
@@ -58,9 +58,12 @@ stronie SSR → RLS jako defense-in-depth.
 
 ## Migracje SQL
 
-Katalog `migrations/` (nie `supabase/migrations/`). Migracje uruchamia
-wyłącznie człowiek — nigdy agent ani CI. Stan wykonania i kolejność:
-nagłówki plików + docs/DECISIONS.md.
+Nowe migracje idą do katalogu `migrations/`. Katalog `supabase/migrations/`
+też istnieje i zawiera historyczne, JUŻ WYKONANE migracje (20260428 →
+20260806_edycja_flags.sql — m.in. definicje flag `edycja_realna`/`edycja_ksiegowa`,
+wciąż żywy kontrakt); przy audycie wykonanego DDL uwzględnij oba katalogi.
+Migracje uruchamia wyłącznie człowiek — nigdy agent ani CI. Stan wykonania
+i kolejność: nagłówki plików + docs/DECISIONS.md.
 
 ## Skróty klawiszowe (/do-akceptacji)
 

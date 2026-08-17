@@ -605,3 +605,26 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   ruszamy (decyzja wlasciciela 17.08: koniec zmian w migracjach) | czytelnik
   rejestru nie moze czekac na migracje, ktora juz przeszla, ani probowac
   wykonac jej drugi raz.
+- 2026-08-17 | UZUPELNIENIE blokady roli 'klient' (recenzja Fali 3): layout
+  (auth) NIE jest "jedynym wejsciem" do danych biura — server actions to
+  publiczne POST-y niezalezne od layoutu (auth-helpers mowi to wprost:
+  "kontrola musi byc jawna i fail-closed"). Recenzja znalazla jedyna akcje
+  odczytu bez bramki roli: getGlobalSearchData (search.ts) — klient
+  z biuro_klienci_nipy=NULL dostawalby tor "wszyscy poza demo/ryczalt"
+  (lista klientow, opisy, pojazdy, do 1000 numerow KSeF). Dodany jawny
+  check roli na wejsciu (pusta zwrotka, bez bledu). KONTRAKT: kazda NOWA
+  akcja odczytu dostaje jawna bramke roli jak zapisowe (assertNipReadAccess
+  / check rola==='klient') — bramka layoutu chroni tylko strony. Przy okazji:
+  neutralna strona klienta dostala przycisk "Wyloguj" (bez TopBara nie bylo
+  ZADNEJ drogi wylogowania — middleware odsyla zalogowanych z /login)
+  | rola bez pokrycia toru akcji to iluzja blokady, a kazdy przyszly
+  portal klienta zacznie od tego samego modelu.
+- 2026-08-17 | WSPOLNA BAZA "do zaplaty" Layer 2 (recenzja Fali 3):
+  deriveDoZaplaty w @/lib/vat — jedno wyprowadzenie w OBU podgladach
+  (legalne 0 ORAZ brak/nieparsowalna wartosc -> fallback kwota_brutto karty).
+  Dotad Preview mial fallback, a Pelna liczyla z surowego 0 — rozjazd
+  latentny (0 kart w prod 17.08; 2 karty z doZaplaty=0 maja tez brutto=0).
+  W Pelnej surowa wartosc kwotaDoZaplaty zostaje WYLACZNIE do wyswietlenia
+  (wierny obraz KSeF), obliczenia (saldo + alert rabatu) ida z bazy wspolnej
+  | komentarze "ta sama baza" z A3 byly falszywe w tej klasie danych —
+  teraz sa prawdziwe, a przyszly rozjazd pipeline'u nie rozjedzie widokow.

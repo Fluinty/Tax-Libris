@@ -138,7 +138,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const autoRateData = autoRateRes.data
 
   const pendingExceptions = pendingRes.count
-  const exceptionsTrend: number | null = days
+  // Błąd licznika POPRZEDNIEGO okna nie zdejmuje całego dashboardu (metryka
+  // czysto dekoracyjna), ale nie może liczyć trendu od count=null — pokazywałby
+  // fałszywy „wzrost o pełną liczbę pending". Degradacja: trend znika,
+  // ślad w console.error (logi Vercel) — wzorzec dekoracyjnych odczytów C8.
+  if (prevPendingRes.error) {
+    console.error('[dashboard] Błąd licznika poprzedniego okna (exceptions_queue):', prevPendingRes.error.message)
+  }
+  const exceptionsTrend: number | null = days && !prevPendingRes.error
     ? (pendingExceptions ?? 0) - (prevPendingRes.count ?? 0)
     : null
 

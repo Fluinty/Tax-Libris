@@ -84,6 +84,8 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
           vat_odliczalny: 'VAT odliczalny',
         }
         toast.success(`${labels[wymiar]} zaktualizowane`)
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (result.warning) toast.warning(result.warning)
         // Update lokalny + powiadomienie rodzica — BEZ router.refresh():
         // akcja celowo nie robi już revalidatePath (pełny rebuild kolejki
         // przy zmianie jednego dropdownu), a effective_* liczymy lokalnie

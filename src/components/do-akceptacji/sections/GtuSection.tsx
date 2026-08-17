@@ -55,6 +55,8 @@ export function GtuSection({ exceptionId, gtuBitmask, gtuSources, gtuBitmaskFina
         setDirty(false)
       } else {
         toast.success('GTU zapisane')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setSavedBitmask(bitmask)
         setDirty(false)
       }
@@ -89,6 +91,8 @@ export function GtuSection({ exceptionId, gtuBitmask, gtuSources, gtuBitmaskFina
         setDirty(false)
         setLocalEdited(false)
         toast.success('Przywrócono AI')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch (e: unknown) {
       toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)

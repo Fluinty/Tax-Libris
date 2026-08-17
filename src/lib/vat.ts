@@ -125,6 +125,18 @@ export interface Layer2Result {
   sumaDodatkowych: number
 }
 
+// Baza „do zapłaty" dla wiersza Layer 2 — JEDNO wyprowadzenie w OBU widokach
+// (recenzja Fali 3: Preview miał fallback na kwota_brutto, Pełna liczyła
+// z surowego 0 przy braku/zerze kwotaDoZaplaty — latentny rozjazd bliźniaków;
+// w prod 17.08: 0 kart rozjechanych, 2 karty z doZaplaty=0 mają też brutto=0).
+// Legalne 0 ORAZ brak/nieparsowalna wartość → fallback na kwota_brutto karty.
+export function deriveDoZaplaty(kwotaDoZaplaty: unknown, kwotaBrutto: number | null | undefined): number {
+  const parsed = typeof kwotaDoZaplaty === 'string'
+    ? parseFloat(kwotaDoZaplaty.replace(',', '.').replace('−', '-'))
+    : Number(kwotaDoZaplaty)
+  return Number.isFinite(parsed) && parsed !== 0 ? parsed : (kwotaBrutto ?? 0)
+}
+
 export function computeLayer2(
   doZaplaty: number,
   vatTableBrutto: number,

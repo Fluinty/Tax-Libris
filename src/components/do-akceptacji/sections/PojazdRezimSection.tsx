@@ -105,6 +105,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
         setDirty(prevDirty)
       } else {
         toast.success('Zapisano')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setDirty(false)
       }
     } catch (e: unknown) {
@@ -141,6 +143,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
         setDirty(prevDirty)
       } else {
         toast.success('Zapisano')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setDirty(false)
       }
     } catch (e: unknown) {
@@ -173,6 +177,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
         setDirty(prevDirty)
       } else {
         toast.success('Zapisano')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setDirty(false)
       }
     } catch (e: unknown) {
@@ -201,6 +207,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
         setDirty(prevDirty)
       } else {
         toast.success('Reżim zapisany')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setDirty(false)
       }
     } catch (e: unknown) {
@@ -234,6 +242,8 @@ export function PojazdRezimSection({ exceptionId, clientNip, clientPojazdy, aiPo
         setSelRezim(aiRezim ?? (workerSaysVehicle ? (PROCENT_ENUM_TO_REZIM[kpirPojazdoweData!.procent_do_ujecia_w_kosztach] ?? '50_75') : '50_75'))
         setDirty(false)
         toast.success('Przywrócono AI')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch (e: unknown) {
       toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)

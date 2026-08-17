@@ -246,6 +246,8 @@ export function PozycjeVatSection({
         setDirty(false)
       } else {
         toast.success('Pozycje VAT zapisane')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
         setSavedRows(rows)
         setDirty(false)
       }
@@ -278,6 +280,8 @@ export function PozycjeVatSection({
         setVatEditedManually(false)
         setShowRecalcBanner(false)
         toast.success('Przywrócono propozycję AI')
+        // C9: blad zapisu audytu nie przerywa operacji, ale ma byc widoczny (DECISIONS 17.08)
+        if (res.warning) toast.warning(res.warning)
       }
     } catch (e: unknown) {
       toast.error(`Nie zapisano zmiany: ${e instanceof Error ? e.message : 'Błąd resetu'}`)

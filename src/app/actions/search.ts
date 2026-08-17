@@ -15,7 +15,17 @@ export interface SearchData {
 
 export async function getGlobalSearchData(): Promise<SearchData> {
   const supabase = createSupabaseAdmin()
-  const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
+  const { nips, isAdmin, ryczaltNips, demoNips, panelUser } = await getAllowedNips()
+
+  // Blokada roli 'klient' — server action to publiczny POST niezależny od
+  // layoutu (auth), więc bramka layoutu go NIE obejmuje (auth-helpers: „kontrola
+  // musi być jawna i fail-closed"). Bez tego checka klient z biuro_klienci_nipy
+  // = NULL dostawał tor „wszyscy poza demo/ryczałt": listę klientów biura,
+  // opisy, pojazdy i do 1000 numerów KSeF (recenzja Fali 3). Pusto, bez błędu —
+  // jak neutralna strona layoutu.
+  if (panelUser?.rola === 'klient') {
+    return { clients: [], opisy: [], pojazdy: [], ksefs: [] }
+  }
 
   // Klienci (bez ryczałtowców)
   let clientsQuery = supabase
