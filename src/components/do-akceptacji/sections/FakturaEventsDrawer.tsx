@@ -203,8 +203,10 @@ export function FakturaEventsDrawer({
     auto_created: 'Auto-zatwierdzono',
     resolved: 'Rozwiązano',
     ignored: 'Pominięto',
+    skipped: 'Pominięte (system)',
     booked: 'Zaksięgowano',
     external_booked: 'Zaksięgowano (zewn.)',
+    rolled_back: 'Cofnięta',
   }
 
   return (

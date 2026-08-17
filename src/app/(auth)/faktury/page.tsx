@@ -80,6 +80,20 @@ export default async function FakturyPage({ searchParams }: PageProps) {
             Pominięte
           </Badge>
         )}
+        {/* Statusy, które przechodziły przez luźną mapę jako PUSTA kolumna
+            (COUNT 17.08: external_booked 436, rolled_back 36 w exceptions_queue) */}
+        {item.status === 'external_booked' && (
+          <Badge className="bg-sky-100 text-sky-800 border-0 flex items-center gap-1" title="Zaksięgowana ręcznie w Rachmistrzu poza panelem">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Zaksięgowano zewn.
+          </Badge>
+        )}
+        {item.status === 'rolled_back' && (
+          <Badge className="bg-orange-100 text-orange-800 border-0 flex items-center gap-1" title="Księgowanie cofnięte (status historyczny — ręczne rollbacki z K1)">
+            <XCircle className="w-3.5 h-3.5" />
+            Cofnięta
+          </Badge>
+        )}
         {isAuto && (
           <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-purple-600" />

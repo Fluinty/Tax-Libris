@@ -34,6 +34,19 @@ const getStatusBadge = (item: ExceptionItem) => {
           Pominięte
         </Badge>
       )}
+      {/* Luźna mapa dawała pustą kolumnę dla tych statusów (jak w /faktury) */}
+      {item.status === 'external_booked' && (
+        <Badge className="bg-sky-100 text-sky-800 border-0 flex items-center gap-1" title="Zaksięgowana ręcznie w Rachmistrzu poza panelem">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Zaksięgowano zewn.
+        </Badge>
+      )}
+      {item.status === 'rolled_back' && (
+        <Badge className="bg-orange-100 text-orange-800 border-0 flex items-center gap-1" title="Księgowanie cofnięte (status historyczny)">
+          <XCircle className="w-3.5 h-3.5" />
+          Cofnięta
+        </Badge>
+      )}
       {isAuto && (
         <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-purple-600" />

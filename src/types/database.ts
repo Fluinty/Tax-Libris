@@ -195,7 +195,11 @@ export interface ExceptionItem {
   nip_dostawcy: string | null;
   nazwa_dostawcy: string | null;
   kwota_brutto: number | null;
-  status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored' | 'skipped';
+  /** Statusy realnie występujące w danych (COUNT 17.08.2026): external_booked
+   *  436 w exceptions_queue / 434 w v2, rolled_back 36 w exceptions_queue /
+   *  25 w v2 — serwowane do tego typu, choć union ich nie znał. rolled_back
+   *  to status HISTORYCZNY (DECISIONS 12.08), nowych kart nie tworzyć. */
+  status: 'pending' | 'pending_review' | 'resolved' | 'approved' | 'auto_created' | 'ignored' | 'skipped' | 'external_booked' | 'rolled_back';
   resolved_opis: string | null;
   resolved_by: string | null;
   auto_created_by?: string | null;

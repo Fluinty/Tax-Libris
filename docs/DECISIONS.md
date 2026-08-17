@@ -464,3 +464,47 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   zmiana auto_write_gate w workerze to osobne zlecenie na K1 za zgoda wlasciciela
   | decyzja o uzbrojeniu fali 1 na zlej metryce = automat mylacy sie w co
   czwartym ksiegowaniu od pierwszego dnia.
+- 2026-08-17 | KONTRAKT SYNCHRONIZACJI STATUSOW faktury <-> exceptions_queue
+  (wariant b, zatwierdzony przez wlasciciela). Zrodlem prawdy jest
+  exceptions_queue; faktury.status ma NADAZAC, bo (1) guardy zapisu panelu
+  (`.in('status', pending*)` na faktury) to druga linia obrony i przy stale
+  statusie dziala tylko queue-owa polowa — a w updateJpkSection/resetJpkSection
+  zapis do faktury idzie PIERWSZY, wiec stale pending* przepuszcza zapis
+  czesciowy do karty zamknietej (po backfillu: czysty stop na wejsciu),
+  (2) faktury.status to docelowy nosnik statusu dla przyszlych kart
+  faktury-native (bez wiersza queue). UWAGA: os czasu NIE jest konsumentem —
+  fetchFakturaTimeline selektuje status, ale zdarzenia implicytne liczy
+  wylacznie z kolumn czasowych i czyta najpierw queue (sprawdzone 17.08;
+  wczesniejsza mapa konsumentow twierdzila inaczej). PREMISA "v2 serwuje
+  stale statusy" jest FALSZYWA: pg_get_viewdef 17.08 pokazuje
+  COALESCE(eq.status, f.status), a wierszy faktury bez pary w queue jest 0 —
+  kolejka zawsze pokazywala prawde z queue.
+  Kontrakt: PANEL pisze status do OBU tabel z guardem przy kazdej zmianie
+  (od fali 1: approve*/resolve przez updateFakturaOnFinish, ignoreFaktura,
+  restoreFaktura — zweryfikowane 17.08, zadna akcja panelu nie pomija synca).
+  WORKER synchronizuje faktury przy auto_created (780/780 zgodnych w prod),
+  ale NIE przy external_booked i rollbacku — stad caly rozjazd: 338 kart
+  (macierz 17.08: external_booked 253, ignored-legacy 60 sprzed fali 1,
+  rolled_back 25; kierunek WYLACZNIE queue-dalej-niz-faktury, zero odwrotnych).
+  Domkniecie po stronie workera = zlecenie na K1 (osobny blok, poza tym repo).
+  Backfill jednorazowy: migrations/2026-08-status-backfill.sql (STATUS: DO
+  WYKONANIA RECZNIE) — WYLACZNIE kolumna status; resolved_by/resolved_at
+  celowo nietkniete (dla external_booked queue.resolved_by bywa wartoscia
+  systemowa wykrycia, nie osoba ktora zaksiegowala — kopiowanie utrwaliloby
+  falszywa atrybucje; decyzja wlasciciela 17.08). Migracja fail-closed:
+  kierunek rozjazdu sprawdzany zapytaniem o dozwolone pary, kazda para spoza
+  listy (w tym odwrotna) przerywa z lista wierszy. Po drodze rozszerza CHECK
+  faktury_status_check o 'rolled_back' (constraint go nie znal, a queue tak
+  — pg_get_constraintdef 17.08); union ExceptionItem.status dostal
+  external_booked i rolled_back (COUNT 17.08: 436 i 36 w exceptions_queue,
+  434 i 25 przez v2). Trigger trg_log_korekta_faktury sprawdzony: reaguje tylko na
+  final_*, zmiana statusu nie smieci do klasyfikacja_korekty.
+  CELOWO BEZ TRIGGERA SQL synchronizujacego status automatycznie — i to jest
+  decyzja, nie zaniedbanie: rozjazd bywa diagnostycznie CENNY (analiza 100
+  kart ignored z 13.08 odtworzyla sekcje kolejki sprzed pominiecia WYLACZNIE
+  dzieki temu, ze faktury.status pamietal stan sprzed decyzji — 60/60
+  zgodnosci z rekonstrukcja z audit_log). Trigger zabralby ten sygnal i ukryl
+  bledy synca zamiast je pokazywac. NIE "usprawniac" tego triggerem
+  | jedna tabela klamiaca o statusie to pulapka na kazdego przyszlego
+  konsumenta i analityka (CLAUDE.md: kazda analiza statusow na queue), a dwie
+  tabele mowiace to samo — warunek zaufania do guardow i osi czasu.

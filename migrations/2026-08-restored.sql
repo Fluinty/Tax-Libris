@@ -1,5 +1,9 @@
 -- ============================================================================
 -- STATUS: DO WYKONANIA RĘCZNIE (Supabase SQL Editor). Agent NIE wykonuje.
+-- KOLEJNOŚĆ WZGLĘDEM INNYCH MIGRACJI: obojętna — plik dokleja do CHECK-a
+-- faktura_events.event_type czytanego dynamicznie (pg_get_constraintdef
+-- w momencie wykonania, zero hardkodów); 2026-08-fala1.sql (RLS) i
+-- 2026-08-status-backfill.sql (faktury.status) dotykają innych obiektów.
 -- ============================================================================
 
 -- ============================================================================

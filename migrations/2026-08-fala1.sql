@@ -1,5 +1,9 @@
 -- ============================================================================
 -- STATUS: DO WYKONANIA RĘCZNIE (Supabase SQL Editor). Agent NIE wykonuje.
+-- KOLEJNOŚĆ WZGLĘDEM INNYCH MIGRACJI: obojętna — plik tylko włącza RLS na
+-- faktura_events; 2026-08-restored.sql (CHECK event_type) i
+-- 2026-08-status-backfill.sql (faktury.status) dotykają innych obiektów,
+-- oba czytają definicje dynamicznie w momencie wykonania.
 -- ============================================================================
 
 -- ============================================================================
