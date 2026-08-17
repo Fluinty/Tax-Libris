@@ -10,6 +10,12 @@ import { cn } from '@/lib/utils'
 import type { ClientPojazd } from '@/types/database'
 import { fakturaWymagaUwagi } from '@/lib/faktura-uwaga'
 
+// Stale puste listy dla klientow bez wpisow: `?? []` tworzylo NOWA tablice
+// przy kazdym renderze listy i unicestwialo React.memo na FakturaCard
+// (plytkie porownanie propsow widzialo "zmiane").
+const EMPTY_OPISY: never[] = []
+const EMPTY_POJAZDY: ClientPojazd[] = []
+
 interface FakturaListClientProps {
   pendingReview: any[]
   pending: any[]
@@ -296,8 +302,8 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                 stan="pending_review" 
                 exception={exc} 
                 isActive={idx === 0} 
-                clientOpisy={clientOpisyMap.get(exc.client_nip) ?? []} 
-                clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                clientOpisy={clientOpisyMap.get(exc.client_nip) ?? EMPTY_OPISY} 
+                clientPojazdy={clientPojazdyMap[exc.client_nip] ?? EMPTY_POJAZDY}
                 onResolved={handleResolved}
               />
             ))}
@@ -317,8 +323,8 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                 stan="pending" 
                 exception={exc} 
                 isActive={false} 
-                clientOpisy={clientOpisyMap.get(exc.client_nip) ?? []} 
-                clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                clientOpisy={clientOpisyMap.get(exc.client_nip) ?? EMPTY_OPISY} 
+                clientPojazdy={clientPojazdyMap[exc.client_nip] ?? EMPTY_POJAZDY}
                 onResolved={handleResolved}
               />
             ))}
@@ -340,8 +346,8 @@ export function FakturaListClient({ pendingReview, pending, autoCreated, clientO
                   stan="auto_created" 
                   exception={exc} 
                   isActive={false} 
-                  clientOpisy={[]} 
-                  clientPojazdy={clientPojazdyMap[exc.client_nip] ?? []}
+                  clientOpisy={EMPTY_OPISY} 
+                  clientPojazdy={clientPojazdyMap[exc.client_nip] ?? EMPTY_POJAZDY}
                   onResolved={handleResolved}
                 />
               ))}

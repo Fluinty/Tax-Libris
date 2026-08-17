@@ -90,45 +90,113 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       exceptionsQuery = exceptionsQuery.order('created_at', { ascending: true })
   }
 
-  const { data: rawExceptions, error: rawError } = await exceptionsQuery
+  // ── ETAP 1: trzy niezależne zapytania RÓWNOLEGLE ──────────────────────────
+  // Graf zależności: (A) lista v2, (G) statystyki dnia i (H) pozycje sidebara
+  // zależą WYŁĄCZNIE od nips z getAllowedNips — dotąd leciały sekwencyjnie na
+  // końcu waterfalla. (H) w ogóle nie strzela, gdy lista nie ma filtra
+  // klient/typ: wtedy (A) zawiera dokładnie te same wiersze pending* i sidebar
+  // liczy się z already-pobranych danych (dedup — trzeci strzał w v2 był kopią
+  // pierwszego).
+  const hasListFilter = Boolean(params.client) || typFilter === 'zakup' || typFilter === 'sprzedaz'
+
+  const todayStatsQuery = applyNipFilter(
+    supabase
+      .from('exceptions_queue_v2')
+      .select('status, ai_confidence')
+      .gte('created_at', today.toISOString()),
+    nips,
+    'client_nip',
+    ryczaltNips,
+    demoNips,
+    isAdmin
+  )
+  const sidebarQuery = applyNipFilter(
+    supabase
+      .from('exceptions_queue_v2')
+      .select('client_nip, typ_dokumentu, ai_proponowany_opis')
+      .in('status', ['pending', 'pending_review']),
+    nips,
+    'client_nip',
+    ryczaltNips,
+    demoNips,
+    isAdmin
+  )
+
+  const [{ data: rawExceptions, error: rawError }, { data: todayStatsData }, sidebarRes] =
+    await Promise.all([
+      exceptionsQuery,
+      todayStatsQuery,
+      hasListFilter ? sidebarQuery : Promise.resolve(null),
+    ])
 
   console.log('[do-akceptacji] rawExceptions count:', rawExceptions?.length, 'error:', rawError?.message ?? 'none')
 
-  // 1b. Fetch clients separately and build lookup map
+  // ── ETAP 2: cztery zapytania zależne od wyniku (A) — RÓWNOLEGLE ───────────
+  // clients/pozycje/opisy/pojazdy potrzebują nips-ów i id z listy, ale są
+  // niezależne od siebie. Zapytania o ai_review_log CELOWO BRAK: tabela jest
+  // pusta (reviewer v1 wyłączony), a strzał leciał przy KAŻDYM załadowaniu
+  // kolejki i auto-refreshu co 30 s. Komponenty renderujące recenzję zostają
+  // z guardem na brak danych — reviewer może wrócić (DECISIONS: tylko z żywym
+  // groundingiem), wtedy przywrócić fetch.
   const exceptionNips = [...new Set(rawExceptions?.map(e => e.client_nip) ?? [])]
-  const { data: clientsData } = exceptionNips.length > 0
-    ? await supabase
-        .from('clients')
-        .select('nip, nazwa, platnik_vat, is_demo')
-        .in('nip', exceptionNips)
-    : { data: [] as { nip: string; nazwa: string; platnik_vat: boolean; is_demo: boolean }[] }
+  const exceptionIds = rawExceptions?.map(e => e.id) ?? []
+
+  // Stronicowanie pozycji: serwerowy max-rows PostgREST tnie odpowiedź do
+  // 1000 wierszy PO CICHU, a pending* ma ich dziś 1046 (pomiar 17.08) —
+  // bez range() 46 wierszy o najwyższych lp znikało z 8 kart (karta
+  // pokazywała niekompletne pozycje). Defekt istniał przed pakietem perf,
+  // ujawnił go audyt payloadów.
+  const POZYCJE_PAGE = 1000
+  async function fetchPozycjeAll(ids: number[]) {
+    const out: any[] = []
+    for (let from = 0; ; from += POZYCJE_PAGE) {
+      const { data, error } = await supabase
+        .from('faktury_pozycje')
+        .select(POZYCJE_KARTY_COLUMNS)
+        .in('faktura_id', ids)
+        .order('faktura_id', { ascending: true })
+        .order('lp', { ascending: true })
+        .range(from, from + POZYCJE_PAGE - 1)
+      if (error) {
+        console.error('[do-akceptacji] blad odczytu pozycji (faktury_pozycje):', error.message)
+        break
+      }
+      out.push(...(data ?? []))
+      if (!data || data.length < POZYCJE_PAGE) break
+    }
+    return out
+  }
+  // Sidebar może wskazywać NIP-y spoza przefiltrowanej listy — clients
+  // pobieramy dla sumy obu zbiorów (dotąd: osobne dociąganie na końcu).
+  const sidebarItemsRaw = hasListFilter ? (sidebarRes?.data ?? []) : (rawExceptions ?? [])
+  const clientNipsToFetch = [
+    ...new Set([...exceptionNips, ...sidebarItemsRaw.map((i: { client_nip: string }) => i.client_nip)]),
+  ]
+
+  const [{ data: clientsData }, { data: pozycjeData }, { data: clientOpisyData }, { data: pojazdyData }] =
+    await Promise.all([
+      clientNipsToFetch.length > 0
+        ? supabase
+            .from('clients')
+            .select('nip, nazwa, platnik_vat, is_demo')
+            .in('nip', clientNipsToFetch)
+        : Promise.resolve({ data: [] as { nip: string; nazwa: string; platnik_vat: boolean; is_demo: boolean }[] }),
+      exceptionIds.length > 0
+        ? fetchPozycjeAll(exceptionIds).then(rows => ({ data: rows }))
+        : Promise.resolve({ data: [] as any[] }),
+      supabase
+        .from('client_opisy')
+        .select('id, client_nip, opis, aktywny, typ_dokumentu')
+        .in('client_nip', exceptionNips.length > 0 ? exceptionNips : ['dummy']),
+      supabase
+        .from('client_pojazdy')
+        .select('*')
+        .in('client_nip', exceptionNips.length > 0 ? exceptionNips : ['dummy']),
+    ])
 
   const clientsMap = new Map(
     (clientsData ?? []).map(c => [c.nip, c])
   )
-
-  // 1c. Fetch ai_review_log and faktury_pozycje separately
-  const exceptionIds = rawExceptions?.map(e => e.id) ?? []
-  const [{ data: reviewLogsData }, { data: pozycjeData }] = exceptionIds.length > 0
-    ? await Promise.all([
-        supabase
-          .from('ai_review_log')
-          .select('id, queue_id, review_ok, review_pewnosc, review_ostrzezenia, review_sugestie, data_utworzenia')
-          .in('queue_id', exceptionIds),
-        supabase
-          .from('faktury_pozycje')
-          .select(POZYCJE_KARTY_COLUMNS)
-          .in('faktura_id', exceptionIds)
-          .order('lp', { ascending: true })
-      ])
-    : [{ data: [] as any[] }, { data: [] as any[] }]
-
-  const reviewMap = new Map<number, typeof reviewLogsData>()
-  for (const log of reviewLogsData ?? []) {
-    const existing = reviewMap.get(log.queue_id) ?? []
-    existing.push(log)
-    reviewMap.set(log.queue_id, existing)
-  }
 
   const pozycjeMap = new Map<number, any[]>()
   for (const p of pozycjeData ?? []) {
@@ -147,7 +215,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
       client: {
         platnik_vat: c?.platnik_vat ?? true,
       } as any,
-      ai_review_log: reviewMap.get(e.id) ?? [],
+      ai_review_log: [], // reviewer v1 wyłączony — patrz komentarz przy 1c
       pozycje_editable: pozycjeMap.get(e.id) ?? [],
     }
   })
@@ -161,14 +229,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const pendingReview = typedExceptions.filter(e => e.status === 'pending_review')
   const pending = typedExceptions.filter(e => e.status === 'pending')
 
-  // 2. Fetch all client descriptions for the comboboxes
-  // Collect unique NIPs
-  const currentNips = Array.from(new Set(typedExceptions.map(e => e.client_nip)))
-  const { data: clientOpisyData } = await supabase
-    .from('client_opisy')
-    .select('id, client_nip, opis, aktywny, typ_dokumentu')
-    .in('client_nip', currentNips.length > 0 ? currentNips : ['dummy'])
-
+  // 2. Opisy klientów do comboboxów (pobrane w ETAPIE 2)
   const clientOpisyRecord: Record<string, { id: number, nazwa: string, aktywny: boolean, typ_dokumentu: string | null }[]> = {}
   for (const op of clientOpisyData ?? []) {
     if (!clientOpisyRecord[op.client_nip]) {
@@ -182,12 +243,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     })
   }
 
-  // 2b. Fetch all vehicle data for the comboboxes (pre-fetch, sesja 7)
-  const { data: pojazdyData } = await supabase
-    .from('client_pojazdy')
-    .select('*')
-    .in('client_nip', currentNips.length > 0 ? currentNips : ['dummy'])
-
+  // 2b. Pojazdy do comboboxów (pobrane w ETAPIE 2)
   const clientPojazdyRecord: Record<string, ClientPojazd[]> = {}
   for (const p of (pojazdyData ?? []) as ClientPojazd[]) {
     if (!clientPojazdyRecord[p.client_nip]) {
@@ -196,19 +252,7 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     clientPojazdyRecord[p.client_nip].push(p)
   }
 
-  // 3. Statystyki dnia (obliczane ze wszystkich faktur z dzisiaj)
-  const { data: todayStatsData } = await applyNipFilter(
-    supabase
-      .from('exceptions_queue_v2')
-      .select('status, ai_confidence, created_at')
-      .gte('created_at', today.toISOString()),
-    nips,
-    'client_nip',
-    ryczaltNips,
-    demoNips,
-    isAdmin
-  )
-
+  // 3. Statystyki dnia (pobrane w ETAPIE 1)
   const todayStats = todayStatsData ?? []
   const todayTotal = todayStats.length
   const todayToAccept = todayStats.filter(e => e.status === 'pending_review').length
@@ -218,34 +262,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
   const highConfidenceProposals = todayStats.filter(e => e.ai_confidence && e.ai_confidence >= 0.8).length
   const hitRate = todayTotal > 0 ? Math.round((highConfidenceProposals / todayTotal) * 100) : 0
 
-  // 4. Sidebar - count items per client (count pending and pending_review)
-  // 4a. Sidebar - fetch pending items from view (without clients join)
-  const { data: allPendingItems } = await applyNipFilter(
-    supabase
-      .from('exceptions_queue_v2')
-      .select('client_nip, typ_dokumentu, ai_proponowany_opis')
-      .in('status', ['pending', 'pending_review']),
-    nips,
-    'client_nip',
-    ryczaltNips,
-    demoNips,
-    isAdmin
-  )
-
-  const filteredItemsForSidebar = allPendingItems ?? []
-
-  // 4b. Fetch client names for sidebar (reuse clientsMap if NIPs overlap, else fetch)
-  const sidebarNips = [...new Set(filteredItemsForSidebar.map(i => i.client_nip))]
-  const missingSidebarNips = sidebarNips.filter(n => !clientsMap.has(n))
-  if (missingSidebarNips.length > 0) {
-    const { data: extraClients } = await supabase
-      .from('clients')
-      .select('nip, nazwa, platnik_vat, is_demo')
-      .in('nip', missingSidebarNips)
-    for (const c of extraClients ?? []) {
-      clientsMap.set(c.nip, c)
-    }
-  }
+  // 4. Sidebar — bez własnego zapytania: przy braku filtra listy liczony
+  // z danych (A) z ETAPU 1 (te same wiersze pending*), przy filtrze —
+  // z sidebarRes; nazwy klientów już w clientsMap (ETAP 2 pobiera sumę
+  // NIP-ów listy i sidebara, dawne dociąganie 4b zbędne).
+  const filteredItemsForSidebar = sidebarItemsRaw
 
   function aggregateCounts(items: any[]): ClientExceptionCount[] {
     const counts = new Map<string, ClientExceptionCount>()

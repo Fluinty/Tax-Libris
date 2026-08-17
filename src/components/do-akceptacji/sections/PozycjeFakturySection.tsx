@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -67,7 +66,6 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
     localPozycjeRef.current = pozycje
     setLocalPozycje(pozycje)
   }
-  const router = useRouter()
   const kolumny = getKolumnyForTyp(typDokumentu)
   const isSprzedaz = typDokumentu === 'sprzedaz'
 
@@ -86,19 +84,25 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
           vat_odliczalny: 'VAT odliczalny',
         }
         toast.success(`${labels[wymiar]} zaktualizowane`)
-        // Update local state with the change and notify parent
-        if (wymiar === 'kup_status' || wymiar === 'vat_odliczalny') {
-          const updatedPozycje = localPozycje.map(p => {
-            if (p.id !== pozycjaId) return p
-            if (wymiar === 'kup_status') {
-              return { ...p, effective_kup_status: value as 'kup' | 'nkup', final_kup_status: value as 'kup' | 'nkup' }
-            }
+        // Update lokalny + powiadomienie rodzica — BEZ router.refresh():
+        // akcja celowo nie robi już revalidatePath (pełny rebuild kolejki
+        // przy zmianie jednego dropdownu), a effective_* liczymy lokalnie
+        // dokładnie tak, jak GENERATED w bazie: COALESCE(final_..., reszta) —
+        // skoro ustawiamy final, effective = final.
+        const updatedPozycje = localPozycje.map(p => {
+          if (p.id !== pozycjaId) return p
+          if (wymiar === 'kup_status') {
+            return { ...p, effective_kup_status: value as 'kup' | 'nkup', final_kup_status: value as 'kup' | 'nkup' }
+          }
+          if (wymiar === 'vat_odliczalny') {
             return { ...p, effective_vat_odliczalny: value as FakturaPozycjaKarta['effective_vat_odliczalny'], final_vat_odliczalny: value as FakturaPozycjaKarta['final_vat_odliczalny'] }
-          })
-          setLocalPozycje(updatedPozycje)
-          onClassificationChange?.(updatedPozycje)
-          router.refresh()
-        }
+          }
+          // kolumna_kpir — dotąd BEZ gałęzi lokalnej: sekcja pokazywała starą
+          // wartość aż do pełnego odświeżenia strony (maskował to revalidate)
+          return { ...p, final_kolumna_kpir: val as number, effective_kolumna_kpir: val as number }
+        })
+        setLocalPozycje(updatedPozycje)
+        onClassificationChange?.(updatedPozycje)
       } else {
         toast.error('Błąd', { description: result.error })
       }
@@ -313,23 +317,23 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
         </div>
 
         <div className="divide-y divide-slate-100">
-          {pozycje.length > 5 ? (
+          {localPozycje.length > 5 ? (
             <Collapsible>
-              {pozycje.slice(0, 5).map(poz => (
+              {localPozycje.slice(0, 5).map(poz => (
                 <PozycjaRow key={poz.id} poz={poz} />
               ))}
               <CollapsibleContent>
-                {pozycje.slice(5).map(poz => (
+                {localPozycje.slice(5).map(poz => (
                   <PozycjaRow key={poz.id} poz={poz} />
                 ))}
               </CollapsibleContent>
               <CollapsibleTrigger className="w-full py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-2 text-xs font-medium transition-colors">
                 <ChevronsUpDown className="w-3.5 h-3.5" />
-                Pokaż wszystkie pozycje ({pozycje.length})
+                Pokaż wszystkie pozycje ({localPozycje.length})
               </CollapsibleTrigger>
             </Collapsible>
           ) : (
-            pozycje.map(poz => (
+            localPozycje.map(poz => (
               <PozycjaRow key={poz.id} poz={poz} />
             ))
           )}
@@ -340,7 +344,7 @@ export function PozycjeFakturySection({ pozycje, typDokumentu, readOnly = false,
       {similarModalPozycjaId && (
         <SimilarPozycjeModal
           pozycjaId={similarModalPozycjaId}
-          pozycjaNazwa={pozycje.find(p => p.id === similarModalPozycjaId)?.nazwa || ''}
+          pozycjaNazwa={localPozycje.find(p => p.id === similarModalPozycjaId)?.nazwa || ''}
           open={!!similarModalPozycjaId}
           onOpenChange={(open) => !open && setSimilarModalPozycjaId(null)}
         />

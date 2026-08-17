@@ -133,9 +133,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   const isCandidate = totalCount >= 50 && editRatePct < 5
   const candidateStats = { isCandidate, editRatePct, totalCount }
 
+  // JAWNA lista kolumn: tabela ma 80 kolumn z ciezkimi jsonb (pozycje_xml_full,
+  // zapis_vat_data), a RecentExceptionsTable czyta 8 pol — pelne wiersze to
+  // ~2,5 kB/szt. niepotrzebnego transferu na kazde wejscie na karte klienta.
   const { data: recentExceptions } = await supabase
     .from('exceptions_queue')
-    .select('*')
+    .select('id, client_nip, status, ksiegowe_numer, nazwa_dostawcy, kwota_brutto, created_at, resolved_by, auto_created_by')
     .eq('client_nip', nip)
     .order('id', { ascending: false })
     .limit(20)
@@ -160,7 +163,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
         {/* Dane LAZY — obie sekcje strzelają do swoich akcji przy pierwszym rozwinięciu */}
         <GateSimulationSection nip={nip} />
         <LearningSection nip={nip} />
-        <RecentExceptionsTable items={recentExceptions || []} />
+        {/* Cast przez unknown — zawezony select to podzbior ExceptionItem,
+            komponent czyta wylacznie te 8 pol (grep item.*) */}
+        <RecentExceptionsTable items={(recentExceptions || []) as unknown as import('@/types/database').ExceptionItem[]} />
         <PojazdyTable nip={nip} pojazdy={pojazdy || []} />
         <OpisyTable nip={nip} opisy={opisy || []} />
         <ClientChangesLog logs={logs || []} />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -129,7 +129,7 @@ function formatStawka(raw: string | null | undefined): string {
   return Number.isFinite(Number(s)) ? `${s}%` : s
 }
 
-export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPojazdy = [], onResolved }: FakturaCardProps) {
+function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazdy = [], onResolved }: FakturaCardProps) {
   const showAlarms = hasVendorAlarms(exception)
   const weakCount = getWeakDimensionsCount(exception.confidence_reasons)
   const confidenceCardClasses = getConfidenceCardClasses(exception.confidence_overall)
@@ -141,6 +141,16 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const [showEventsDrawer, setShowEventsDrawer] = useState(false)
   const [currentPozycje, setCurrentPozycje] = useState(exception.pozycje_editable ?? [])
   const [classificationVersion, setClassificationVersion] = useState(0)
+  // Resync z serwera przy zmianie propa (wzorzec z PozycjeFakturySection):
+  // odkąd tor VAT czyta currentPozycje (nie prop), bez tego karta nigdy nie
+  // zobaczyłaby zmian przychodzących z refreshy (walidator, inna sesja).
+  // Serwerowy stan PO inline-edycji zawiera już tę edycję (zapis idzie przed
+  // jakimkolwiek refreshem), więc nadpisanie lokalnego stanu jest bezpieczne.
+  const pozycjeEditablePropRef = useRef(exception.pozycje_editable)
+  if (exception.pozycje_editable !== pozycjeEditablePropRef.current) {
+    pozycjeEditablePropRef.current = exception.pozycje_editable
+    setCurrentPozycje(exception.pozycje_editable ?? [])
+  }
 
   const officialVatTable = useMemo(() => getOfficialVatTable(exception.pozycje_xml_full), [exception.pozycje_xml_full])
 
@@ -385,7 +395,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       toast.success('Zatwierdzono do księgowania')
       if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
-      router.refresh()
+      // BEZ router.refresh(): akcja robi revalidatePath('/do-akceptacji'),
+      // więc świeży RSC payload wraca w odpowiedzi SAMEJ akcji — drugi strzał
+      // renderował całą stronę jeszcze raz (podwójny refresh po każdej akcji).
+      // Kartę zdejmuje optimistic removal (onResolved).
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -417,7 +430,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       toast.success('Zapisano z edytowanymi kwotami')
       if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
-      router.refresh()
+      // BEZ router.refresh() — revalidatePath w akcji dostarcza swiezy payload (patrz handleApprove)
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -437,7 +450,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       toast.success('Wyjątek rozwiązany')
       if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
-      router.refresh()
+      // BEZ router.refresh() — revalidatePath w akcji dostarcza swiezy payload (patrz handleApprove)
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -453,7 +466,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
       toast.success('Faktura pominięta')
       if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
-      router.refresh()
+      // BEZ router.refresh() — revalidatePath w akcji dostarcza swiezy payload (patrz handleApprove)
     } else {
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
@@ -498,12 +511,54 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
   const aiKwoty = exception.ai_kwoty_per_kolumna || {}
   const finalKwoty = exception.final_kwoty_per_kolumna || exception.ai_kwoty_per_kolumna || {}
 
+  // ── Nietanie obliczenia wyciągnięte z renderu (useMemo) ────────────────────
+  // joinPozycjeWithKlasyfikacja jest O(n²) i było liczone przy KAŻDYM renderze
+  // karty w dwóch miejscach; wynik zależy wyłącznie od danych karty.
+  const joinedPozycjeXml = useMemo(
+    () =>
+      exception.pozycje_xml_full && exception.pozycje_xml_full.length > 0
+        ? joinPozycjeWithKlasyfikacja(exception.pozycje_xml_full, exception.ai_klasyfikacja_pozycji || [])
+        : [],
+    [exception.pozycje_xml_full, exception.ai_klasyfikacja_pozycji]
+  )
+
+  // Rejestr VAT (applyPozycjeVatFinal → computeEffectivePozycjeVat) — iteracje
+  // po pozycjach przy każdym renderze; identyczna ścieżka co zapis approve,
+  // więc memo NIE zmienia wartości, tylko częstość liczenia.
+  const effVatMemo = useMemo(() => {
+    const zapisVat = exception.final_zapis_vat_data || exception.zapis_vat_data
+    if (!zapisVat) return null
+    // currentPozycje, nie exception.pozycje_editable: po inline-edycji KUP/VAT
+    // prop jest stale az do refreshu, a rejestr VAT musi pokazywac to, co
+    // approve zapisze (DECISIONS: podglad = zapis)
+    const pozycjeEditable = currentPozycje
+    const reczneVat = applyPozycjeVatFinal(zapisVat.pozycje_vat, exception.pozycje_vat_final)
+    const eff = computeEffectivePozycjeVat({
+      pozycjeVat: reczneVat ? reczneVat.pozycje : zapisVat.pozycje_vat,
+      sumy: reczneVat ? reczneVat.sumy : {
+        netto: Number(zapisVat.suma_netto ?? 0),
+        vat: Number(zapisVat.suma_vat ?? 0),
+        brutto: Number(zapisVat.suma_brutto ?? 0),
+      },
+      pozycjeEditable,
+      applyExclusions: exception.typ_dokumentu !== 'sprzedaz',
+      keepManualRows: reczneVat !== null,
+    })
+    return { reczneVat, eff }
+  }, [
+    exception.final_zapis_vat_data,
+    exception.zapis_vat_data,
+    exception.pozycje_vat_final,
+    currentPozycje,
+    exception.typ_dokumentu,
+  ])
+
   const renderPozycjeXml = () => {
     if (!exception.pozycje_xml_full || exception.pozycje_xml_full.length === 0) {
       return null
     }
 
-    const pozycje = joinPozycjeWithKlasyfikacja(exception.pozycje_xml_full, exception.ai_klasyfikacja_pozycji || [])
+    const pozycje = joinedPozycjeXml
     const dozwoloneKlucze = getKolumnyForTyp(exception.typ_dokumentu).map(k => k.numer)
 
     const PozycjeList = ({ items }: { items: JoinedPozycja[] }) => (
@@ -718,7 +773,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     const isBadTransakcja = isZakup ? (zapisVat.transakcja_id === 1) : (zapisVat.transakcja_id === 16 || zapisVat.transakcja_id === 15);
 
     // Wykryj czy jakies pozycje maja czesciowe odliczenie VAT (50% / 25%)
-    const pozycjeEditable = exception.pozycje_editable ?? []
+    const pozycjeEditable = currentPozycje // swieze po inline-edycji (jak effVatMemo)
     const hasCzesciowe50 = pozycjeEditable.some(p => p.effective_vat_odliczalny === 'czesciowe_50')
     const hasCzesciowe25 = pozycjeEditable.some(p => p.effective_vat_odliczalny === 'czesciowe_25')
     const hasCzescioweVat = hasCzesciowe50 || hasCzesciowe25
@@ -731,18 +786,10 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     // Wcześniej ta sekcja miała własną kopię logiki wykluczeń i w ogóle nie
     // widziała ręcznej tabeli VAT — księgowa widziała wiersze AI, a do bazy
     // szły jej własne (audyt 2026-08 §3).
-    const reczneVat = applyPozycjeVatFinal(zapisVat.pozycje_vat, exception.pozycje_vat_final)
-    const eff = computeEffectivePozycjeVat({
-      pozycjeVat: reczneVat ? reczneVat.pozycje : zapisVat.pozycje_vat,
-      sumy: reczneVat ? reczneVat.sumy : {
-        netto: Number(zapisVat.suma_netto ?? 0),
-        vat: Number(zapisVat.suma_vat ?? 0),
-        brutto: Number(zapisVat.suma_brutto ?? 0),
-      },
-      pozycjeEditable,
-      applyExclusions: exception.typ_dokumentu !== 'sprzedaz',
-      keepManualRows: reczneVat !== null,
-    })
+    // Obliczenie w useMemo na górze komponentu (effVatMemo) — tu tylko odczyt;
+    // zapisVat != null w tym miejscu gwarantuje wcześniejszy early-return,
+    // więc effVatMemo nie może być null.
+    const { reczneVat, eff } = effVatMemo!
     const effectivePozycjeVat = eff.pozycjeVat
     const excludedStawki = eff.excludedStawki
     const addedStawki = eff.addedStawki
@@ -1158,8 +1205,8 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
               <div className="space-y-1">
                 {(() => {
                   const getKolumnaPozycjeSumy = (colNumer: number): { netto: number; brutto: number } | null => {
-                    if (exception.pozycje_editable && exception.pozycje_editable.length > 0) {
-                      const matched = exception.pozycje_editable.filter(p => {
+                    if (currentPozycje && currentPozycje.length > 0) {
+                      const matched = currentPozycje.filter(p => {
                         const effCol = p.effective_kolumna_kpir ?? p.final_kolumna_kpir ?? p.ai_kolumna_kpir;
                         return effCol === colNumer && p.effective_kup_status !== 'nkup';
                       });
@@ -1170,7 +1217,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
                       return { netto, brutto };
                     }
                     if (exception.pozycje_xml_full && exception.pozycje_xml_full.length > 0) {
-                      const joined = joinPozycjeWithKlasyfikacja(exception.pozycje_xml_full, exception.ai_klasyfikacja_pozycji || []);
+                      const joined = joinedPozycjeXml;
                       const matched = joined.filter(p => p.kolumna_kpir === colNumer);
                       if (matched.length === 0) return null;
                       const netto = matched.reduce((acc, p) => acc + Number(p.wartoscNetto || 0), 0);
@@ -1410,6 +1457,7 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           {exception.pozycje_editable && exception.pozycje_editable.length > 0 ? (
             <PozycjeFakturySection
               pozycje={exception.pozycje_editable}
+              onClassificationChange={handleClassificationChange}
               typDokumentu={exception.typ_dokumentu}
               readOnly={false}
             />
@@ -1583,11 +1631,11 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
           onOpenChange={setShowEditModal}
           initialOpis={exception.ai_proponowany_opis || ''}
           initialKwoty={currentKpirKwoty}
-          initialZapisVatData={mergeInlineEditsVat(exception, exception.pozycje_editable, mergeInlineEditsPojazd(exception)) || exception.zapis_vat_data || null}
+          initialZapisVatData={mergeInlineEditsVat(exception, currentPozycje, mergeInlineEditsPojazd(exception)) || exception.zapis_vat_data || null}
           kwotaBrutto={exception.kwota_brutto}
           kwotaNetto={exception.zapis_vat_data?.suma_netto ?? null}
           isVatPayer={exception.client?.platnik_vat !== false}
-          pozycjeEditable={exception.pozycje_editable}
+          pozycjeEditable={currentPozycje}
           typDokumentu={exception.typ_dokumentu}
           clientOpisy={clientOpisy}
           onSave={handleEditSave}
@@ -1622,3 +1670,12 @@ export function FakturaCard({ exception, stan, isActive, clientOpisy, clientPoja
     </Card>
   )
 }
+
+// React.memo z domyślnym płytkim porównaniem: przy 333 kartach w DOM każdy
+// filtr / optimistic-remove / refresh re-renderował WSZYSTKIE karty
+// (1500-liniowy komponent × 333). Warunki działania memo — stabilne
+// referencje propsów — zapewnia FakturaListClient: handleResolved w
+// useCallback, puste listy jako stałe modułowe (EMPTY_*), mapy z RSC
+// referencyjnie stałe między client-side renderami.
+export const FakturaCard = memo(FakturaCardInner)
+FakturaCard.displayName = 'FakturaCard'

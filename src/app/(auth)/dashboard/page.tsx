@@ -41,9 +41,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const supabase = createSupabaseAdmin()
   const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
-  // ========== METRICS ==========
-
-  // ========== CLIENT MAPPING & LIST ==========
+  // ── ETAP 1: trzy zapytania zależne WYŁĄCZNIE od nips — RÓWNOLEGLE ─────────
+  // Graf zależności dashboardu: clients (→ targetNips), audit_log i lista
+  // klientów KPiR (→ kpirNips) nie zależą od siebie; dotąd leciały
+  // sekwencyjnie. Metryki (ETAP 2) potrzebują targetNips/kpirNips.
   let clientsQuery = supabase
     .from('clients')
     .select('nip, nazwa, is_demo')
@@ -51,19 +52,38 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .order('nazwa', { ascending: true })
   clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
-  const { data: allClients } = await clientsQuery
+  let recentQuery = supabase
+    .from('audit_log')
+    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, rule_id, details')
+    .order('timestamp', { ascending: false })
+    .limit(20)
+  if (selectedClient) recentQuery = recentQuery.eq('client_nip', selectedClient)
+  if (days) recentQuery = recentQuery.gte('timestamp', formatDateSQL(days))
+  recentQuery = applyNipFilter(recentQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
+
+  let kpirClientsQuery = supabase
+    .from('clients')
+    .select('nip, nazwa')
+    .eq('forma_opodatkowania', 'kpir')
+    .eq('aktywny', true)
+  kpirClientsQuery = applyNipFilter(kpirClientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
+  if (selectedClient) kpirClientsQuery = kpirClientsQuery.eq('nip', selectedClient)
+
+  const [{ data: allClients }, { data: recentRaw }, { data: kpirClientsData }] =
+    await Promise.all([clientsQuery, recentQuery, kpirClientsQuery])
+
   const clientMap = new Map((allClients ?? []).map(c => [c.nip, c.nazwa]))
-  
+
   // NIPy nie-demo do filtrowania metryk globalnych
   // Admin widzi wszystkich nie-demo (żeby demo nie brudziło mu metryk).
   // Zwykły użytkownik widzi dokładnie to, co ma przypisane (łącznie z demo, jeśli ma do niego dostęp).
-  const targetNips = nips === null 
+  const targetNips = nips === null
     ? (allClients ?? []).filter(c => !c.is_demo).map(c => c.nip)
     : (allClients ?? []).map(c => c.nip)
 
-  // ========== METRICS ==========
+  const kpirNips = (kpirClientsData ?? []).map(c => c.nip)
 
-  // --- Pending exceptions ---
+  // ── ETAP 2: metryki zależne od targetNips/kpirNips — RÓWNOLEGLE ───────────
   let pendingQuery = supabase
     .from('exceptions_queue')
     .select('id', { count: 'exact' })
@@ -71,24 +91,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (selectedClient) pendingQuery = pendingQuery.eq('client_nip', selectedClient)
   else pendingQuery = pendingQuery.in('client_nip', targetNips)
   pendingQuery = applyNipFilter(pendingQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { count: pendingExceptions } = await pendingQuery
 
-  // Pending trend
-  let exceptionsTrend: number | null = null
+  let prevPendingQuery = null
   if (days) {
-    let prevPendingQuery = supabase
+    let q = supabase
       .from('exceptions_queue')
       .select('id', { count: 'exact' })
       .eq('status', 'pending')
       .lte('created_at', formatDateSQL(days))
-    if (selectedClient) prevPendingQuery = prevPendingQuery.eq('client_nip', selectedClient)
-    else prevPendingQuery = prevPendingQuery.in('client_nip', targetNips)
-    prevPendingQuery = applyNipFilter(prevPendingQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-    const { count: prevPending } = await prevPendingQuery
-    exceptionsTrend = (pendingExceptions ?? 0) - (prevPending ?? 0)
+    if (selectedClient) q = q.eq('client_nip', selectedClient)
+    else q = q.in('client_nip', targetNips)
+    prevPendingQuery = applyNipFilter(q, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
   }
 
-  // --- Automation rate (current month) ---
   const now = new Date()
   const firstDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)).toISOString()
   let autoRateQuery = supabase
@@ -98,7 +113,20 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   if (selectedClient) autoRateQuery = autoRateQuery.eq('client_nip', selectedClient)
   else autoRateQuery = autoRateQuery.in('client_nip', targetNips)
   autoRateQuery = applyNipFilter(autoRateQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { data: autoRateData } = await autoRateQuery
+
+  const [pendingRes, prevPendingRes, { data: autoRateData }, wolumenRes] = await Promise.all([
+    pendingQuery,
+    prevPendingQuery ?? Promise.resolve({ count: null }),
+    autoRateQuery,
+    kpirNips.length > 0
+      ? supabase.from('wolumen_kpir_view').select('*').in('client_nip', kpirNips)
+      : Promise.resolve({ data: [] as WolumenKpirViewRow[] }),
+  ])
+
+  const pendingExceptions = pendingRes.count
+  const exceptionsTrend: number | null = days
+    ? (pendingExceptions ?? 0) - (prevPendingRes.count ?? 0)
+    : null
 
   const sumAuto = (autoRateData ?? []).reduce((acc, r) => acc + (Number(r.auto_cnt) || 0), 0)
   const sumProcesowalne = (autoRateData ?? []).reduce((acc, r) => acc + (Number(r.procesowalne) || 0), 0)
@@ -109,19 +137,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     exceptionsTrend,
     automationRate,
   }
-
-  // ========== RECENT ACTIVITY ==========
-  let recentQuery = supabase
-    .from('audit_log')
-    .select('id, timestamp, action, client_nip, zapis_id, opis_zapisany, pozycja_xml, error_message, rule_id, details')
-    .order('timestamp', { ascending: false })
-    .limit(20)
-  if (selectedClient) recentQuery = recentQuery.eq('client_nip', selectedClient)
-  // else recentQuery = recentQuery.in('client_nip', targetNips) // audit log is filtered by applyNipFilter below anyway, but could be filtered here if we wanted to hide demo audit logs from admin. The prompt said "zero regresji dla admina", let's keep it as is since it wasn't using nonDemoNips before.
-  if (days) recentQuery = recentQuery.gte('timestamp', formatDateSQL(days))
-  recentQuery = applyNipFilter(recentQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-
-  const { data: recentRaw } = await recentQuery
 
   const recentActivity: RecentActivity[] = (recentRaw ?? []).map(r => ({
     ...r,
@@ -138,33 +153,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .sort((a, b) => b.pct - a.pct || b.auto - a.auto)
     .slice(0, 10)
 
-  // ========== WOLUMEN FAKTUR (KPiR) — aggregated SQL view ==========
-  // 1. Fetch KPiR client NIPs (forma_opodatkowania = 'kpir')
-  let kpirClientsQuery = supabase
-    .from('clients')
-    .select('nip, nazwa')
-    .eq('forma_opodatkowania', 'kpir')
-    .eq('aktywny', true)
-  kpirClientsQuery = applyNipFilter(kpirClientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
-  if (selectedClient) kpirClientsQuery = kpirClientsQuery.eq('nip', selectedClient)
-  const { data: kpirClientsData } = await kpirClientsQuery
-
-  const kpirNips = (kpirClientsData ?? []).map(c => c.nip)
+  // ========== WOLUMEN FAKTUR (KPiR) — pobrane w ETAPACH 1-2 ==========
   const kpirClientNames: Record<string, string> = {}
   for (const c of kpirClientsData ?? []) {
     kpirClientNames[c.nip] = c.nazwa
   }
-
-  // 2. Fetch pre-aggregated metrics from SQL view (no row limit issue)
-  let wolumenViewRows: WolumenKpirViewRow[] = []
-  if (kpirNips.length > 0) {
-    const { data: viewData } = await supabase
-      .from('wolumen_kpir_view')
-      .select('*')
-      .in('client_nip', kpirNips)
-
-    wolumenViewRows = (viewData ?? []) as WolumenKpirViewRow[]
-  }
+  const wolumenViewRows = (wolumenRes.data ?? []) as WolumenKpirViewRow[]
 
   return (
     <DashboardClient

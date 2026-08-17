@@ -2,7 +2,6 @@
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
-import { revalidatePath } from 'next/cache'
 import { assertCanWritePozycja, assertNipReadAccess } from '@/lib/auth-helpers'
 
 async function getUserEmail(): Promise<string> {
@@ -72,7 +71,12 @@ export async function updatePozycjaWymiar(
     },
   })
 
-  revalidatePath('/do-akceptacji')
+  // CELOWO bez revalidatePath: zmiana dropdownu pozycji przebudowywała CAŁĄ
+  // kolejkę (setki kart, pełny RSC render). Sekcja trzyma stan lokalnie
+  // (localPozycje + onClassificationChange w PozycjeFakturySection), a
+  // effective_* liczone lokalnie tak samo jak GENERATED w bazie
+  // (COALESCE(final, ...)). Świeże dane z serwera przyjdą przy następnej
+  // nawigacji/akcji kończącej kartę.
   return { success: true }
 }
 

@@ -19,9 +19,18 @@ export default async function FakturyPage({ searchParams }: PageProps) {
   const adminSupabase = createSupabaseAdmin()
   const { nips, isAdmin, ryczaltNips, demoNips } = await getAllowedNips()
 
+  // JAWNA lista kolumn zamiast select('*'): tabela ma 80 kolumn (w tym ciezkie
+  // jsonb: pozycje_xml_full, zapis_vat_data, confidence_reasons, adresy), a
+  // tabelka renderuje 14 pol — pelne wiersze to bylo ~433 kB/load, z czego
+  // ~90% nigdy nie trafialo na ekran. Lista = dokladnie pola czytane nizej
+  // (grep item.*) — przy dodawaniu kolumny do tabeli dopisz ja tutaj.
+  const FAKTURY_LIST_COLUMNS =
+    'id, client_nip, status, ksiegowe_numer, numer_ksef, nazwa_dostawcy, ' +
+    'kwota_brutto, created_at, resolved_at, resolved_by, auto_created_by, ' +
+    'data_wystawienia, data_sprzedazy, skip_reason'
   let query = adminSupabase
     .from('exceptions_queue')
-    .select('*')
+    .select(FAKTURY_LIST_COLUMNS)
     .order('created_at', { ascending: false })
     .limit(150)
 
@@ -40,7 +49,9 @@ export default async function FakturyPage({ searchParams }: PageProps) {
   }
 
   const { data: rawItems } = await query
-  const items = (rawItems ?? []) as ExceptionItem[]
+  // Przez unknown: inferencja PostgREST nie parsuje listy kolumn ze stalej;
+  // ksztalt gwarantuje FAKTURY_LIST_COLUMNS (podzbior ExceptionItem)
+  const items = (rawItems ?? []) as unknown as ExceptionItem[]
 
   // Fetch client names
   const clientNips = [...new Set(items.map(i => i.client_nip))]
