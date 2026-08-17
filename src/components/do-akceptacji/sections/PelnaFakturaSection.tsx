@@ -29,17 +29,17 @@ import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Car, AlertTriangle } from 'lucide-react'
 import { ExceptionItem } from '@/types/database'
-import { computeLayer2, deriveDoZaplaty } from '@/lib/vat'
+import { computeLayer2, deriveDoZaplaty, parseXmlKwota } from '@/lib/vat'
 
 interface Props {
   exception: ExceptionItem
   officialVatTable?: any
 }
 
+// Cienka nakładka na JEDYNE wejście parsowania kwot XML (parseXmlKwota
+// w @/lib/vat) — brak/nieparsowalne = 0, bo tu wyłącznie sumy i render.
 function parseAmount(v: any): number {
-  if (v == null) return 0
-  if (typeof v === 'number') return v
-  return parseFloat(v.toString().replace(',', '.')) || 0
+  return parseXmlKwota(v) ?? 0
 }
 
 const REGISTRATION_REGEX = /\b[A-Z]{1,3}\s?[A-Z0-9]{4,5}\b/

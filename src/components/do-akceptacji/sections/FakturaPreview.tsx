@@ -26,7 +26,7 @@
  */
 
 import type { ExceptionWithClient, PozycjaXml, PozycjaVAT } from '@/types/database'
-import { getOfficialVatTable, computeLayer2, deriveDoZaplaty } from '@/lib/vat'
+import { getOfficialVatTable, computeLayer2, deriveDoZaplaty, parseXmlKwota } from '@/lib/vat'
 import { Badge } from '@/components/ui/badge'
 
 interface FakturaPreviewProps {
@@ -39,8 +39,7 @@ interface FakturaPreviewProps {
 // renderuje kodWaluty, a kanoniczny Preview pokazywał EUR-owej fakturze „zł"
 // (AUDIT §3; dziś 0 faktur nie-PLN — prewencja). PLN → „zł" jak dotąd.
 function fmtKwota(n: number | string | null | undefined, waluta: string = 'zł'): string {
-  const parsed = typeof n === 'string' ? parseFloat(n.replace(',', '.').replace('−', '-')) : Number(n)
-  const v = isNaN(parsed) ? 0 : parsed
+  const v = parseXmlKwota(n) ?? 0
   return v.toLocaleString('pl-PL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -158,7 +157,7 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
 
   // Hide cena column when all items have ilosc=1 (redundant with netto)
   const allIloscOne = hasAnyPozycje && pozycje.every(p => {
-    const qty = Number(pVal(p, 'ilosc') || 1)
+    const qty = parseXmlKwota(pVal(p, 'ilosc')) ?? 1
     return qty === 1
   })
   if (allIloscOne) colHasData.cena = false
@@ -194,14 +193,15 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
         return raw.replace('Stawka', '').trim()
       }
       case 'brutto': {
-        const v = pVal(poz, 'wartoscBrutto', 'wartosc_brutto')
-        if (v && !isNaN(Number(v))) {
+        // parseXmlKwota: wspólny parser obu formatów — kropka z v2,
+        // przecinek z surowego XML/podglądu (DECISIONS 17.08, SPROSTOWANIE)
+        const v = parseXmlKwota(pVal(poz, 'wartoscBrutto', 'wartosc_brutto'))
+        if (v !== null) {
           return fmt(v)
         }
         // Brak wartoscBrutto -> policz netto * (1 + stawka/100) dla liczb lub pokaż netto/"—" dla nienumerycznych (zw, np, oo)
-        const nettoStr = pVal(poz, 'wartoscNetto', 'wartosc_netto')
-        if (!nettoStr || isNaN(Number(nettoStr))) return '—'
-        const netto = Number(nettoStr)
+        const netto = parseXmlKwota(pVal(poz, 'wartoscNetto', 'wartosc_netto'))
+        if (netto === null) return '—'
         const rawStawka = (pVal(poz, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
         if (!rawStawka || isNaN(Number(rawStawka))) {
           return fmt(netto)
@@ -263,10 +263,8 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
   const flagaZaliczka = podglad.zaliczka === 'True'
   const flagaMarza = podglad.fakturaMarza === 'True'
   const sumBruttoWiersze = wierszePodglad.reduce((a: number, it: any) => {
-    const v = typeof it?.wartoscBrutto === 'string'
-      ? parseFloat(String(it.wartoscBrutto).replace(',', '.').replace('−', '-'))
-      : Number(it?.wartoscBrutto)
-    return a + (Number.isFinite(v) ? v : 0)
+    const v = parseXmlKwota(it?.wartoscBrutto)
+    return a + (v ?? 0)
   }, 0)
   const rabatNaglowkowy = wierszePodglad.length > 0 && Math.abs(sumBruttoWiersze - doZaplaty) > 0.02
     ? sumBruttoWiersze - doZaplaty

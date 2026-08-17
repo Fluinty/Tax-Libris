@@ -628,3 +628,40 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   (wierny obraz KSeF), obliczenia (saldo + alert rabatu) ida z bazy wspolnej
   | komentarze "ta sama baza" z A3 byly falszywe w tej klasie danych —
   teraz sa prawdziwe, a przyszly rozjazd pipeline'u nie rozjedzie widokow.
+- 2026-08-17 | SPROSTOWANIE DIAGNOZY "przecinki zeruja tabele VAT"
+  + parseXmlKwota jako unifikacja parserow (NIE fix zachowania):
+  DWA zrodla "pozycje_xml_full" o ROZNYCH formatach liczb. Surowa tabela
+  exceptions_queue trzyma XML workera w formacie polskim (COUNT 17.08:
+  1285/1753 kart z przecinkiem "83,33", 157 calkowite, 311 tylko
+  cenaBrutto, zero kropek). ALE PANEL TEGO NIE CZYTA: jedyny renderer kart
+  (do-akceptacji/page.tsx) czyta widok exceptions_queue_v2, ktory
+  PRZEBUDOWUJE pozycje_xml_full z fluinty.faktury_pozycje
+  (pg_get_viewdef 17.08: wartoscNetto = wartosc_netto::text, numeric ->
+  zawsze kropka; bez kluczy wartoscBrutto/cenaBrutto). Pomiar przez v2
+  (17.08): 5163 pozycji z kropka / 14 calkowitych / 96 null (40 kart,
+  1 aktywna) / ZERO przecinkow z 5273. SKUTEK: raportowane wczesniej
+  "zerowanie tabeli VAT na 1285 kartach (319 aktywnych)" NIE ZACHODZILO
+  w panelu — diagnoza mierzona na surowej tabeli, ktorej panel nie czyta
+  (klasa bledu c751b52: teza z kodu, dane sprawdzone na zlym zrodle;
+  wykryte przez recenzje adwersaryjna PRZED pushem). Nikt nie zglaszal
+  zerowej tabeli, bo nikt jej nie widzial. Przecinki DOCIERAJA do
+  komponentow innym torem — przez podglad_faktury (pomiar recenzji 17.08:
+  kwotaDoZaplaty z przecinkiem na 341/376 kart z podgladem) — ale tamtejsze
+  parsery juz przed zmiana robily replace(',', '.').
+  CO ZATEM ROBI parseXmlKwota: ujednolica ~8 rozsianych parserow
+  (Number/parseFloat+replace) do jednego wejscia obslugujacego OBA formaty
+  (kropka z v2, przecinek z surowego XML/podgladu; strict parsePolishNumber
+  + prewencyjna normalizacja minusa U+2212 — 0 wystapien w prod 17.08).
+  Na zmierzonych danych zmiana jest BEHAWIORALNIE OBOJETNA (T4: karty
+  calkowite i null bit-w-bit identyczne przed/po). Wartosc kontraktu to
+  odpornosc na zmiane zrodla — np. karmienie komponentow surowa tabela
+  (dokladnie blad tej diagnozy) albo zmiane definicji v2 — nie naprawa
+  dzisiejszego zachowania. KONTRAKT: kazdy nowy konsument pol liczbowych
+  XML/podglad_faktury przechodzi przez parseXmlKwota. Poza zakresem
+  (celowo): EditModal (input uzytkownika), merge-helpers (procenty
+  rezimu), audit-format (kwoty details audytu)
+  | rozjazd format-zrodlo (tabela: przecinki, widok: kropki) wlasnie
+  kosztowal pelna, bledna diagnoze z harnessem "potwierdzajacym" zera,
+  ktorych produkcja nigdy nie renderowala — jedna funkcja z twardym
+  kontraktem i TEN wpis maja gwarantowac, ze nastepna analiza pozycji
+  zacznie od pytania "ktore zrodlo czyta konsument?".

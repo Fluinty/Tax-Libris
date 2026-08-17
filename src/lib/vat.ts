@@ -1,4 +1,4 @@
-import { roundKwota } from './parse-number'
+import { roundKwota, parsePolishNumber } from './parse-number'
 import type { ZapisVATData, TypDokumentu } from '@/types/database';
 
 export function getEtykietaSekcjiVAT(typ: TypDokumentu | null, hasVAT: boolean): string {
@@ -65,6 +65,24 @@ function pVal(poz: any, ...keys: string[]): string | null {
   return findVal(poz, ...keys)
 }
 
+// ── JEDYNE wejście parsowania liczb z XML KSeF / podglad_faktury ────────────
+// Dwa źródła, DWA formaty (pomiar 17.08): surowa exceptions_queue trzyma XML
+// workera z polskimi przecinkami ("83,33"; 1285/1753 kart), ale panel czyta
+// widok v2, który przebudowuje pozycje z faktury_pozycje (numeric::text →
+// zawsze kropka; 0 przecinków w 5273 pozycjach). Przecinki docierają do
+// komponentów torem podglad_faktury (kwotaDoZaplaty, wiersze, rozliczenia).
+// Ta funkcja obsługuje OBA formaty, żeby konsument nie musiał wiedzieć,
+// którym torem przyszła liczba — i żeby zmiana źródła (np. serwowanie
+// surowego XML) niczego po cichu nie zerowała (DECISIONS 17.08, wpis
+// SPROSTOWANIE). null = brak/nieparsowalne — default wybiera wołający
+// (?? 0 dla sum, ?? 1 dla ilości). Minus '−' (U+2212) normalizowany
+// prewencyjnie — 0 wystąpień w prod 17.08.
+export function parseXmlKwota(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+  return parsePolishNumber(String(raw).replace('−', '-'))
+}
+
 export function normalizeStawka(raw: string | null | undefined): string {
   const s = String(raw ?? '').replace(/stawka/i, '').replace('%', '').trim().toLowerCase()
   if (s === '') return 'zw'
@@ -86,8 +104,8 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
     const stawka = normalizeStawka(pVal(p, 'stawkaVat', 'stawka'))
     if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
     
-    const nettoVal = Number(pVal(p, 'wartoscNetto', 'wartosc_netto') || 0)
-    let bruttoVal = Number(pVal(p, 'wartoscBrutto', 'wartosc_brutto') || 0)
+    const nettoVal = parseXmlKwota(pVal(p, 'wartoscNetto', 'wartosc_netto')) ?? 0
+    let bruttoVal = parseXmlKwota(pVal(p, 'wartoscBrutto', 'wartosc_brutto')) ?? 0
     
     if (!bruttoVal && nettoVal) {
       const stawkaNum = parseFloat(stawka)
@@ -131,10 +149,8 @@ export interface Layer2Result {
 // w prod 17.08: 0 kart rozjechanych, 2 karty z doZaplaty=0 mają też brutto=0).
 // Legalne 0 ORAZ brak/nieparsowalna wartość → fallback na kwota_brutto karty.
 export function deriveDoZaplaty(kwotaDoZaplaty: unknown, kwotaBrutto: number | null | undefined): number {
-  const parsed = typeof kwotaDoZaplaty === 'string'
-    ? parseFloat(kwotaDoZaplaty.replace(',', '.').replace('−', '-'))
-    : Number(kwotaDoZaplaty)
-  return Number.isFinite(parsed) && parsed !== 0 ? parsed : (kwotaBrutto ?? 0)
+  const parsed = parseXmlKwota(kwotaDoZaplaty)
+  return parsed !== null && parsed !== 0 ? parsed : (kwotaBrutto ?? 0)
 }
 
 export function computeLayer2(
@@ -145,9 +161,8 @@ export function computeLayer2(
   const rozliczenia = Array.isArray(dodatkoweRozliczenia) ? dodatkoweRozliczenia : []
   let sumaDodatkowych = 0
   for (const roz of rozliczenia as { kwota?: unknown; typ?: string }[]) {
-    const raw = roz?.kwota
-    const parsed = typeof raw === 'string' ? parseFloat(raw.replace(',', '.').replace('−', '-')) : Number(raw)
-    if (!isNaN(parsed)) {
+    const parsed = parseXmlKwota(roz?.kwota)
+    if (parsed !== null) {
       const isOdliczenie = roz?.typ?.toLowerCase().includes('odliczenie')
       sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
     }

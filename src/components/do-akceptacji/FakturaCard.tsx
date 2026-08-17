@@ -74,7 +74,7 @@ interface FakturaCardProps {
 }
 
 import { getKolumnyForTyp, getEtykietaKontrahenta, getEtykietaSekcjiKwot, computeKpirFromPozycje } from '@/lib/kpir'
-import { getEtykietaSekcjiVAT, isFakturaZwolniona, getOfficialVatTable, normalizeStawka } from '@/lib/vat'
+import { getEtykietaSekcjiVAT, isFakturaZwolniona, getOfficialVatTable, normalizeStawka, parseXmlKwota } from '@/lib/vat'
 
 interface JoinedPozycja extends PozycjaXml {
   kolumna_kpir: number | null
@@ -572,7 +572,7 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
                 {poz.nazwaTowaru}
               </div>
               <div className="text-[13px] text-slate-500 mb-1">
-                {poz.wartosc_brutto !== null ? `${Number(poz.wartosc_brutto).toFixed(2)} zł brutto` : `${Number(poz.wartoscNetto || 0).toFixed(2)} zł netto`} · ilość: {poz.ilosc} {poz.jednostkaMiary} · VAT {poz.stawkaVat.replace('Stawka', '')}%
+                {poz.wartosc_brutto !== null ? `${Number(poz.wartosc_brutto).toFixed(2)} zł brutto` : `${(parseXmlKwota(poz.wartoscNetto) ?? 0).toFixed(2)} zł netto`} · ilość: {poz.ilosc} {poz.jednostkaMiary} · VAT {poz.stawkaVat.replace('Stawka', '')}%
               </div>
               <div className="text-sm flex items-center gap-1.5">
                 <span className="text-slate-400">→</span>
@@ -1220,7 +1220,7 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
                       const joined = joinedPozycjeXml;
                       const matched = joined.filter(p => p.kolumna_kpir === colNumer);
                       if (matched.length === 0) return null;
-                      const netto = matched.reduce((acc, p) => acc + Number(p.wartoscNetto || 0), 0);
+                      const netto = matched.reduce((acc, p) => acc + (parseXmlKwota(p.wartoscNetto) ?? 0), 0);
                       const brutto = matched.reduce((acc, p) => acc + Number(p.wartosc_brutto || 0), 0);
                       if ((netto === 0 && brutto === 0) || isNaN(netto) || isNaN(brutto)) return null;
                       return { netto, brutto };
