@@ -125,6 +125,31 @@ o tym decyduje per-klient sekcja „Symulacja automatu", nie średnia.
   repo; wymaga osobnego zlecenia i zgody właściciela (DECISIONS: wszystko, co
   dotyka workera, za jawnym zatwierdzeniem).
 
+## Co to znaczy dla decyzji
+
+1. **Progi „≥50 dekretów AI, >50% czystości" (PRODUCT.md) mierzą złą wielkość
+   i nie powinny być podstawą uzbrojenia.** Czystość ogółem opisuje całą pracę
+   systemu, a księgować będzie bramka — podzbiór kart. Klient może mieć 91,9%
+   czystości ogółem i 85,4% precyzji na kartach, które automat faktycznie by
+   księgował (Czajecki).
+2. **Rekomendowany start: wariant W3 per klient** — wykluczenie dostawców
+   z historią korekt (na innej karcie) + tylko zaufani kontrahenci z kartoteki
+   workera. Przy dzisiejszych danych: **98,0% precyzji na ~50 kartach**
+   (1 błędna — #1986, u klienta, który per-klient i tak jest poniżej progu).
+   Rozszerzanie w stronę W1 (87,8% / 123 karty) w miarę jak pętla nauki
+   wyklucza kolejnych poprawianych dostawców.
+3. **Implementacja W3 to zmiana `auto_write_gate` w workerze (K1), poza tym
+   repo.** Kryterium „zaufany kontrahent" już istnieje w `client_kontrahenci`
+   (kolumna `zaufany`; 17.08: 32 wpisy na 864 wiersze kartoteki). Kryterium
+   „dostawca bez korekt" wymaga po stronie workera zapytania o historię edycji
+   per (client_nip, nip_dostawcy) — dane są w `exceptions_queue`
+   (`edycja_ksiegowa`), worker ma do nich dostęp.
+
+Uwaga do czytania tego dokumentu: globalne 73,5% NIE znaczy „projekt niegotowy".
+Znaczy: obecna bramka jest ZA SZEROKA. Po zawężeniu do W3 automat jest gotowy —
+wąsko, na podzbiorze, który potrafi księgować bezbłędnie — i ma zdefiniowaną
+ścieżkę rozszerzania popartą liczbami.
+
 ## Dane źródłowe
 
 Karty błędne z pełnym rozbiciem (klient, numer, kwota, dostawca, NIP dostawcy,
