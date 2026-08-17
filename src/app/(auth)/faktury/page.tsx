@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { ExceptionItem } from '@/types/database'
 import { FakturaHistoryButton } from '@/components/do-akceptacji/sections/FakturaHistoryButton'
 import { PrzywrocButton } from '@/components/faktury/PrzywrocButton'
+import { BladOdczytu } from '@/components/shared/BladOdczytu'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,17 +49,21 @@ export default async function FakturyPage({ searchParams }: PageProps) {
     query = query.eq('status', 'skipped')
   }
 
-  const { data: rawItems } = await query
+  const { data: rawItems, error: itemsError } = await query
   // Przez unknown: inferencja PostgREST nie parsuje listy kolumn ze stalej;
   // ksztalt gwarantuje FAKTURY_LIST_COLUMNS (podzbior ExceptionItem)
   const items = (rawItems ?? []) as unknown as ExceptionItem[]
 
   // Fetch client names
   const clientNips = [...new Set(items.map(i => i.client_nip))]
-  const { data: clientsData } = clientNips.length > 0
+  const { data: clientsData, error: fClientsError } = clientNips.length > 0
     ? await adminSupabase.from('clients').select('nip, nazwa').in('nip', clientNips)
-    : { data: [] }
+    : { data: [], error: null as { message: string } | null }
   const clientsMap = new Map((clientsData ?? []).map(c => [c.nip, c.nazwa]))
+
+  // AUDIT §2 (C8): awaria odczytu = komunikat z tabela, nie pusta lista
+  if (itemsError) return <BladOdczytu tabela="exceptions_queue" message={itemsError.message} />
+  if (fClientsError) return <BladOdczytu tabela="clients" message={fClientsError.message} />
 
   const getStatusBadge = (item: ExceptionItem) => {
     const isAuto = item.resolved_by === 'fluinty_auto' || item.auto_created_by === 'fluinty_auto'

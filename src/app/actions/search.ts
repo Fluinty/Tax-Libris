@@ -8,6 +8,9 @@ export interface SearchData {
   opisy: { id: number; opis: string; client_nip: string; client_nazwa: string }[]
   pojazdy: { id: number; nr_rejestracyjny: string; client_nip: string; client_nazwa: string }[]
   ksefs: { numer_ksef: string; client_nip: string; client_nazwa: string; zapis_id: number }[]
+  /** AUDIT §2 (C8): bledy odczytu per zrodlo — search degraduje czesciowo,
+   *  ale nie polyka bledow po cichu (konsument moze pokazac ostrzezenie) */
+  errors?: string[]
 }
 
 export async function getGlobalSearchData(): Promise<SearchData> {
@@ -21,7 +24,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .eq('aktywny', true)
   clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
-  const { data: clientsData } = await clientsQuery
+  const { data: clientsData, error: clientsError } = await clientsQuery
   const clients = clientsData || []
   const clientMap = new Map(clients.map(c => [c.nip, c.nazwa]))
 
@@ -33,7 +36,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .select('id, opis, client_nip')
     .eq('aktywny', true)
   opisyQuery = applyNipFilter(opisyQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { data: opisyData } = await opisyQuery
+  const { data: opisyData, error: opisyError } = await opisyQuery
 
   const opisy = (opisyData || [])
     .filter(o => !ryczaltNipsSet.has(o.client_nip))
@@ -50,7 +53,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .select('id, nr_rejestracyjny, client_nip')
     .eq('aktywny', true)
   pojazdyQuery = applyNipFilter(pojazdyQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
-  const { data: pojazdyData } = await pojazdyQuery
+  const { data: pojazdyData, error: pojazdyError } = await pojazdyQuery
 
   const pojazdy = (pojazdyData || [])
     .filter(p => !ryczaltNipsSet.has(p.client_nip))
@@ -69,7 +72,7 @@ export async function getGlobalSearchData(): Promise<SearchData> {
     .limit(1000)
   ksefQuery = applyNipFilter(ksefQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
-  const { data: ksefData } = await ksefQuery
+  const { data: ksefData, error: ksefError } = await ksefQuery
 
   // deduplikacja po numer_ksef
   const ksefMap = new Map()
@@ -85,10 +88,22 @@ export async function getGlobalSearchData(): Promise<SearchData> {
   }
   const ksefs = Array.from(ksefMap.values())
 
+  // Bledy odczytu: kazde zrodlo osobno (wyszukiwarka dziala czesciowo na
+  // reszcie zrodel), ale kazdy blad jest zalogowany i zwrocony — zero
+  // cichego polykania (CLAUDE.md).
+  const errors = [
+    clientsError && `clients: ${clientsError.message}`,
+    opisyError && `client_opisy: ${opisyError.message}`,
+    pojazdyError && `client_pojazdy: ${pojazdyError.message}`,
+    ksefError && `exceptions_queue: ${ksefError.message}`,
+  ].filter((e): e is string => Boolean(e))
+  for (const e of errors) console.error('[getGlobalSearchData] blad odczytu:', e)
+
   return {
     clients,
     opisy,
     pojazdy,
-    ksefs
+    ksefs,
+    ...(errors.length > 0 ? { errors } : {}),
   }
 }

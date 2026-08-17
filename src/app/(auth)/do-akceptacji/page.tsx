@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, BarChart2 } from 'lucide-react'
 import { RealtimeToast } from '@/components/do-akceptacji/RealtimeToast'
 import { FakturaListClient } from './FakturaListClient'
+import { BladOdczytu } from '@/components/shared/BladOdczytu'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -122,14 +123,21 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     isAdmin
   )
 
-  const [{ data: rawExceptions, error: rawError }, { data: todayStatsData }, sidebarRes] =
-    await Promise.all([
-      exceptionsQuery,
-      todayStatsQuery,
-      hasListFilter ? sidebarQuery : Promise.resolve(null),
-    ])
+  const [
+    { data: rawExceptions, error: rawError },
+    { data: todayStatsData, error: todayError },
+    sidebarRes,
+  ] = await Promise.all([
+    exceptionsQuery,
+    todayStatsQuery,
+    hasListFilter ? sidebarQuery : Promise.resolve(null),
+  ])
 
-  console.log('[do-akceptacji] rawExceptions count:', rawExceptions?.length, 'error:', rawError?.message ?? 'none')
+  // AUDIT §2 (C7/C8): awaria odczytu = komunikat z nazwa tabeli, nie pusta
+  // kolejka; debugowe console.log usuniete z produkcji.
+  if (rawError) return <BladOdczytu tabela="exceptions_queue_v2" message={rawError.message} />
+  if (todayError) return <BladOdczytu tabela="exceptions_queue_v2 (statystyki dnia)" message={todayError.message} />
+  if (sidebarRes?.error) return <BladOdczytu tabela="exceptions_queue_v2 (sidebar)" message={sidebarRes.error.message} />
 
   // ── ETAP 2: cztery zapytania zależne od wyniku (A) — RÓWNOLEGLE ───────────
   // clients/pozycje/opisy/pojazdy potrzebują nips-ów i id z listy, ale są
@@ -157,14 +165,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
         .order('faktura_id', { ascending: true })
         .order('lp', { ascending: true })
         .range(from, from + POZYCJE_PAGE - 1)
-      if (error) {
-        console.error('[do-akceptacji] blad odczytu pozycji (faktury_pozycje):', error.message)
-        break
-      }
+      if (error) return { rows: out, error }
       out.push(...(data ?? []))
       if (!data || data.length < POZYCJE_PAGE) break
     }
-    return out
+    return { rows: out, error: null as { message: string } | null }
   }
   // Sidebar może wskazywać NIP-y spoza przefiltrowanej listy — clients
   // pobieramy dla sumy obu zbiorów (dotąd: osobne dociąganie na końcu).
@@ -173,17 +178,25 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     ...new Set([...exceptionNips, ...sidebarItemsRaw.map((i: { client_nip: string }) => i.client_nip)]),
   ]
 
-  const [{ data: clientsData }, { data: pozycjeData }, { data: clientOpisyData }, { data: pojazdyData }] =
+  const [
+    { data: clientsData, error: clientsError },
+    { data: pozycjeData, error: pozycjeError },
+    { data: clientOpisyData, error: opisyError },
+    { data: pojazdyData, error: pojazdyError },
+  ] =
     await Promise.all([
       clientNipsToFetch.length > 0
         ? supabase
             .from('clients')
             .select('nip, nazwa, platnik_vat, is_demo')
             .in('nip', clientNipsToFetch)
-        : Promise.resolve({ data: [] as { nip: string; nazwa: string; platnik_vat: boolean; is_demo: boolean }[] }),
+        : Promise.resolve({
+            data: [] as { nip: string; nazwa: string; platnik_vat: boolean; is_demo: boolean }[],
+            error: null as { message: string } | null,
+          }),
       exceptionIds.length > 0
-        ? fetchPozycjeAll(exceptionIds).then(rows => ({ data: rows }))
-        : Promise.resolve({ data: [] as any[] }),
+        ? fetchPozycjeAll(exceptionIds).then(r => ({ data: r.rows, error: r.error }))
+        : Promise.resolve({ data: [] as any[], error: null as { message: string } | null }),
       supabase
         .from('client_opisy')
         .select('id, client_nip, opis, aktywny, typ_dokumentu')
@@ -193,6 +206,11 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
         .select('*')
         .in('client_nip', exceptionNips.length > 0 ? exceptionNips : ['dummy']),
     ])
+
+  if (clientsError) return <BladOdczytu tabela="clients" message={clientsError.message} />
+  if (pozycjeError) return <BladOdczytu tabela="faktury_pozycje" message={pozycjeError.message} />
+  if (opisyError) return <BladOdczytu tabela="client_opisy" message={opisyError.message} />
+  if (pojazdyError) return <BladOdczytu tabela="client_pojazdy" message={pojazdyError.message} />
 
   const clientsMap = new Map(
     (clientsData ?? []).map(c => [c.nip, c])
@@ -220,7 +238,6 @@ export default async function DoAkceptacjiPage({ searchParams }: PageProps) {
     }
   })
 
-  console.log('[do-akceptacji] allExceptions count:', allExceptions.length)
 
   // Brak filtra typu na poziomie serwera - przekazujemy wszystko do klienta
   const typedExceptions = allExceptions

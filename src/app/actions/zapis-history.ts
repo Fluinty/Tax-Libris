@@ -83,15 +83,17 @@ export async function getZapisHistory(
   const oldestAudit = audits[0]
 
   // Fetch client name
-  const { data: client } = await supabase
+  const { data: client, error: clientError } = await supabase
     .from('clients')
     .select('nazwa')
     .eq('nip', clientNip)
     .single()
+  // Dekoracja naglowka — degradacja do 'Nieznany', ale blad NIE znika po cichu
+  if (clientError) console.error(`[getZapisHistory] odczyt klienta (clients, nip=${clientNip}): ${clientError.message}`)
   const clientNazwa = client?.nazwa ?? 'Nieznany'
 
   // Fetch exception_queue for richer info — też cięte do klienta
-  const { data: exception } = await supabase
+  const { data: exception, error: excInfoError } = await supabase
     .from('exceptions_queue')
     .select('numer_ksef, ksiegowe_numer, nazwa_dostawcy, pozycja_xml, typ_dokumentu')
     .eq('zapis_id', zapisId)
@@ -99,6 +101,7 @@ export async function getZapisHistory(
     .order('id', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (excInfoError) console.error(`[getZapisHistory] odczyt karty (exceptions_queue, zapis_id=${zapisId}): ${excInfoError.message}`)
 
   return {
     audits: audits as AuditEntry[],

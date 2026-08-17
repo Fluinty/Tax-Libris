@@ -1,5 +1,6 @@
 import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { getAllowedNips, applyNipFilter } from '@/lib/auth-helpers'
+import { BladOdczytu } from '@/components/shared/BladOdczytu'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import type {
   DashboardMetrics,
@@ -69,8 +70,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   kpirClientsQuery = applyNipFilter(kpirClientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
   if (selectedClient) kpirClientsQuery = kpirClientsQuery.eq('nip', selectedClient)
 
-  const [{ data: allClients }, { data: recentRaw }, { data: kpirClientsData }] =
-    await Promise.all([clientsQuery, recentQuery, kpirClientsQuery])
+  const [
+    { data: allClients, error: clientsError },
+    { data: recentRaw, error: recentError },
+    { data: kpirClientsData, error: kpirError },
+  ] = await Promise.all([clientsQuery, recentQuery, kpirClientsQuery])
+
+  // AUDIT §2 (C8): awaria odczytu = komunikat z tabela, nie pusty dashboard
+  if (clientsError) return <BladOdczytu tabela="clients" message={clientsError.message} />
+  if (recentError) return <BladOdczytu tabela="audit_log" message={recentError.message} />
+  if (kpirError) return <BladOdczytu tabela="clients (KPiR)" message={kpirError.message} />
 
   const clientMap = new Map((allClients ?? []).map(c => [c.nip, c.nazwa]))
 
@@ -114,14 +123,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   else autoRateQuery = autoRateQuery.in('client_nip', targetNips)
   autoRateQuery = applyNipFilter(autoRateQuery, nips, 'client_nip', ryczaltNips, demoNips, isAdmin)
 
-  const [pendingRes, prevPendingRes, { data: autoRateData }, wolumenRes] = await Promise.all([
+  const [pendingRes, prevPendingRes, autoRateRes, wolumenRes] = await Promise.all([
     pendingQuery,
-    prevPendingQuery ?? Promise.resolve({ count: null }),
+    prevPendingQuery ?? Promise.resolve({ count: null, error: null as { message: string } | null }),
     autoRateQuery,
     kpirNips.length > 0
       ? supabase.from('wolumen_kpir_view').select('*').in('client_nip', kpirNips)
-      : Promise.resolve({ data: [] as WolumenKpirViewRow[] }),
+      : Promise.resolve({ data: [] as WolumenKpirViewRow[], error: null as { message: string } | null }),
   ])
+
+  if (pendingRes.error) return <BladOdczytu tabela="exceptions_queue (liczniki)" message={pendingRes.error.message} />
+  if (autoRateRes.error) return <BladOdczytu tabela="v_automation_rate" message={autoRateRes.error.message} />
+  if (wolumenRes.error) return <BladOdczytu tabela="wolumen_kpir_view" message={wolumenRes.error.message} />
+  const autoRateData = autoRateRes.data
 
   const pendingExceptions = pendingRes.count
   const exceptionsTrend: number | null = days

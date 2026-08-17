@@ -13,6 +13,7 @@ import { AutoWriteSection } from '@/components/client-detail/AutoWriteSection'
 import { RecentExceptionsTable } from '@/components/client-detail/RecentExceptionsTable'
 import { LearningSection } from '@/components/client-detail/LearningSection'
 import { GateSimulationSection } from '@/components/client-detail/GateSimulationSection'
+import { BladOdczytu } from '@/components/shared/BladOdczytu'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
 
   const supabase = createSupabaseAdmin()
 
-  const { data: client } = await supabase
+  const { data: client, error: clientError } = await supabase
     .from('clients')
     .select('*')
     .eq('nip', nip)
@@ -61,11 +62,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
     .gte('timestamp', firstDayOfMonth)
 
   // 3. Pojazdy
-  const { data: pojazdy } = await supabase.from('client_pojazdy').select('*').eq('client_nip', nip).order('aktywny', { ascending: false }).order('data_dodania', { ascending: false })
+  const { data: pojazdy, error: pojazdyError } = await supabase.from('client_pojazdy').select('*').eq('client_nip', nip).order('aktywny', { ascending: false }).order('data_dodania', { ascending: false })
   const activePojazdyCount = pojazdy?.filter(p => p.aktywny).length || 0
 
   // 4. Hit rate (przybliżenie na bazie ostatnich 30 dni)
-  const { data: recentAudits } = await supabase.from('audit_log')
+  const { data: recentAudits, error: auditsError } = await supabase.from('audit_log')
     .select('action, timestamp')
     .eq('client_nip', nip)
     .in('action', ['auto_create_full', 'set_opis', 'exception'])
@@ -103,17 +104,17 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   }
 
   // Opisy
-  const { data: opisy } = await supabase.from('client_opisy').select('*').eq('client_nip', nip).order('hit_count', { ascending: false })
+  const { data: opisy, error: opisyError } = await supabase.from('client_opisy').select('*').eq('client_nip', nip).order('hit_count', { ascending: false })
 
   // Logi (ostatnie 20)
-  const { data: logs } = await supabase.from('client_changes_log')
+  const { data: logs, error: logsError } = await supabase.from('client_changes_log')
     .select('*')
     .eq('client_nip', nip)
     .order('changed_at', { ascending: false })
     .limit(20)
 
   // Kandydat na auto: policz z ostatnich 50 rekordów klienta o statusie approved/auto_created/resolved
-  const { data: candidateRecords } = await supabase
+  const { data: candidateRecords, error: candidateError } = await supabase
     .from('exceptions_queue')
     .select('final_kwoty_per_kolumna, final_zapis_vat_data, final_opis, final_kpir_pojazdowe_data')
     .eq('client_nip', nip)
@@ -136,12 +137,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
   // JAWNA lista kolumn: tabela ma 80 kolumn z ciezkimi jsonb (pozycje_xml_full,
   // zapis_vat_data), a RecentExceptionsTable czyta 8 pol — pelne wiersze to
   // ~2,5 kB/szt. niepotrzebnego transferu na kazde wejscie na karte klienta.
-  const { data: recentExceptions } = await supabase
+  const { data: recentExceptions, error: recentError } = await supabase
     .from('exceptions_queue')
     .select('id, client_nip, status, ksiegowe_numer, nazwa_dostawcy, kwota_brutto, created_at, resolved_by, auto_created_by')
     .eq('client_nip', nip)
     .order('id', { ascending: false })
     .limit(20)
+
+  // AUDIT §2 (C8): awaria odczytu = komunikat z tabela, nie pusta karta klienta
+  if (clientError) return <BladOdczytu tabela="clients" message={clientError.message} />
+  if (pojazdyError) return <BladOdczytu tabela="client_pojazdy" message={pojazdyError.message} />
+  if (auditsError) return <BladOdczytu tabela="audit_log" message={auditsError.message} />
+  if (opisyError) return <BladOdczytu tabela="client_opisy" message={opisyError.message} />
+  if (logsError) return <BladOdczytu tabela="client_changes_log" message={logsError.message} />
+  if (candidateError) return <BladOdczytu tabela="exceptions_queue (kandydat auto)" message={candidateError.message} />
+  if (recentError) return <BladOdczytu tabela="exceptions_queue (ostatnie karty)" message={recentError.message} />
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

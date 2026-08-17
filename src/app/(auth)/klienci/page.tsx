@@ -2,6 +2,7 @@ import { createSupabaseAdmin } from '@/lib/supabase/admin'
 import { getAllowedNips, applyNipFilter } from '@/lib/auth-helpers'
 import { ClientsTableClient } from '@/components/clients/ClientsTableClient'
 import type { ClientWithCounts, ClientMetricsRow } from '@/types/database'
+import { BladOdczytu } from '@/components/shared/BladOdczytu'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,16 +33,16 @@ export default async function KlienciPage({ searchParams }: { searchParams: Prom
     .order('nazwa', { ascending: true })
   clientsQuery = applyNipFilter(clientsQuery, nips, 'nip', ryczaltNips, demoNips, isAdmin)
 
-  const { data: clients } = await clientsQuery
+  const { data: clients, error: clientsError } = await clientsQuery
 
   // Fetch metrics from RPC (schemat fluinty — jawnie)
   const { data: metricsData, error: metricsError } = await supabase
     .schema('fluinty')
     .rpc('client_metrics', { since })
 
-  if (metricsError) {
-    console.error('[KlienciPage] RPC client_metrics error:', metricsError)
-  }
+  // AUDIT §2 (C8): awaria odczytu = komunikat, nie pusta lista klientow
+  if (clientsError) return <BladOdczytu tabela="clients" message={clientsError.message} />
+  if (metricsError) return <BladOdczytu tabela="client_metrics (RPC)" message={metricsError.message} />
 
   // Kill-switch globalny automatu — TYLKO odczyt; zmiana wyłącznie ręcznym SQL-em
   // właściciela (fluinty.config, key='auto_write_global'). Brak wiersza/tabeli
