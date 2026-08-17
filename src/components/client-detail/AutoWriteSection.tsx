@@ -69,7 +69,9 @@ export function AutoWriteSection({ client, isAdmin, candidateStats }: AutoWriteS
             <h2 className="text-lg font-bold text-[#1E293B]">Tryb Auto-write (Automatyczne księgowanie)</h2>
           </div>
           <p className="text-xs text-[#64748B] mt-1">
-            Faktury spełniające warunki pewności AI i limitu kwotowego są księgowane bez akceptacji księgowej.
+            Faktury spełniające warunki bramki (pewność AI, limit kwotowy, zero czerwonych flag)
+            są księgowane bez akceptacji księgowej. Badge „Kandydat" liczy się z edit-rate ogółem —
+            o gotowości do uzbrojenia decyduje precyzja bramki w sekcji „Symulacja automatu" poniżej.
           </p>
         </div>
 

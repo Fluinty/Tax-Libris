@@ -12,6 +12,7 @@ import { ClientChangesLog } from '@/components/client-detail/ClientChangesLog'
 import { AutoWriteSection } from '@/components/client-detail/AutoWriteSection'
 import { RecentExceptionsTable } from '@/components/client-detail/RecentExceptionsTable'
 import { LearningSection } from '@/components/client-detail/LearningSection'
+import { GateSimulationSection } from '@/components/client-detail/GateSimulationSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -156,7 +157,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ n
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Dane LAZY — sekcja strzela do fetchClientLearning przy pierwszym rozwinięciu */}
+        {/* Dane LAZY — obie sekcje strzelają do swoich akcji przy pierwszym rozwinięciu */}
+        <GateSimulationSection nip={nip} />
         <LearningSection nip={nip} />
         <RecentExceptionsTable items={recentExceptions || []} />
         <PojazdyTable nip={nip} pojazdy={pojazdy || []} />

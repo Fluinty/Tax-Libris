@@ -433,3 +433,34 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | przy przegladzie 100 kart 'ignored' (13.08) pole rachmistrz_* bylo
   pierwszym kandydatem na kryterium „czy juz zaksiegowane"; dla 100/100 kart
   jest NULL, co wygladalo na czysty wynik, a #1430 pokazalo, ze jest bezwartosciowe.
+- 2026-08-17 | PRECYZJA BRAMKI, nie czystosc ogolem, jest metryka decyzyjna dla
+  auto-write. Definicja: na kartach ZAKONCZONYCH (auto_created/approved/resolved;
+  external_booked poza symulacja — nie przeszly przez system) odtwarzamy warunki
+  auto_write_gate (pewnosc >= 0.95, kwota <= COALESCE(auto_max_kwota, 5000),
+  zero czerwonych flag) i liczymy: precyzja = czyste / (czyste + bledne) wsrod
+  kart PRZECHODZACYCH bramke, gdzie „bledna" = przeszlaby bramke AND
+  edycja_ksiegowa = true. Karty z edycja_ksiegowa IS NULL (sprzed flag) sa POZA
+  licznikiem i mianownikiem — null to brak danych, nie czystosc.
+  Powod: progi uzgodnione z biurem (>=50 dekretow AI, >50% czystosci) mierza
+  czystosc OGOLEM, a ksiegowac bedzie BRAMKA — podzbior kart. Te dwie liczby
+  rozjezdzaja sie w praktyce: Czajecki 91,9% czystosci ogolem, ale wsrod kart
+  przechodzacych bramke 41 przeszlo / 6 blednych = 85,4% precyzji (retro 12.08,
+  odtworzone co do karty przez src/lib/gate-simulation.ts 17.08). Globalnie
+  17.08: 181 kart przechodzi / 48 blednych = 73,5% — obecna bramka nie nadaje
+  sie do uzbrojenia.
+  Implementacja: src/lib/gate-simulation.ts (jedno zrodlo prawdy predykatu,
+  PARAMETRYZOWANE progi do analiz wariantow), fetchGateSimulation +
+  GateSimulationSection na /klienci/[nip] (lazy, gate jak fetchClientLearning),
+  docs/ANALIZA-zaciesnienia-bramki.md (warianty zaciesnienia).
+  Predykat ZWALIDOWANY na zywym obserwatorze 17.08: 33/33 eventow auto_candidate
+  (od 12.08) wskazuje karty przechodzace takze w symulacji; w druga strone zero
+  falszywych przepuszczen na realnych klientach (2 rozjazdy = klient DEMO,
+  ktorego worker pomija). Ustalenie z analizy wariantow, ktore trzeba znac:
+  PODNIESIENIE PROGU PEWNOSCI NIE ZACIESNIA BRAMKI (0.97 => precyzja SPADA do
+  72,0% przy wolumenie -72%, bo 131 ze 181 przechodzacych kart ma conf rowne
+  0.95, a bledne maja te same wartosci co czyste); sygnal jest w historii
+  dostawcy (69% blednych od dostawcow z >=1 inna korekta u tego klienta).
+  To narzedzie POMIARU — zadnych zmian w bramce, client_metrics ani flagach;
+  zmiana auto_write_gate w workerze to osobne zlecenie na K1 za zgoda wlasciciela
+  | decyzja o uzbrojeniu fali 1 na zlej metryce = automat mylacy sie w co
+  czwartym ksiegowaniu od pierwszego dnia.
