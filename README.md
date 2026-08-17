@@ -1,88 +1,71 @@
-# Fluinty — Panel Wyjątków KSeF
+# Fluinty — panel Tax-Libris
 
-Panel webowy dla księgowych biura rachunkowego. Pozwala rozwiązywać wyjątki — przypadki gdy automat (worker w Pythonie) nie wie jak opisać pozycję na fakturze KSeF. Po rozwiązaniu wyjątku tworzona jest reguła w bazie i automat uczy się.
+Panel akceptacji faktur dla biura rachunkowego. AI klasyfikuje faktury z KSeF,
+księgowa zatwierdza w panelu, lokalny worker księguje w InsERT Rachmistrz nexo
+przez Bridge. Panel działa na Vercel i nigdy nie dosięga Bridge'a — operacje
+wymagające Rachmistrza są asynchroniczne (panel ustawia status w Supabase,
+worker wykonuje).
 
-## 🛠 Stack
+> **Źródłem prawdy o architekturze i decyzjach jest katalog `docs/`** —
+> README to tylko mapa wejściowa. Przed pracą w repo przeczytaj
+> [docs/DECISIONS.md](docs/DECISIONS.md) (rejestr decyzji, nie archiwum)
+> oraz [CLAUDE.md](CLAUDE.md) (zasady żelazne dot. danych produkcyjnych).
 
-- **Frontend:** Next.js 16 (App Router) + TypeScript (strict mode)
-- **Style:** TailwindCSS + shadcn/ui
-- **Auth:** Supabase Auth (Magic Link)
-- **Database:** Supabase PostgreSQL (schema `fluinty`)
-- **Forms:** react-hook-form + zod
-- **Icons:** Lucide React
+## Stack
+
+- **Next.js 15.5** (App Router, server actions) + TypeScript strict
+- **TailwindCSS** + shadcn/ui, Lucide, Recharts, Sonner
+- **Supabase** — PostgreSQL (schema `fluinty`, zawsze jawnie), Auth (Magic Link)
+- **react-hook-form + zod**
 - **Hosting:** Vercel
 
-## 🚀 Setup Lokalny
-
-### 1. Instalacja zależności
+## Setup lokalny
 
 ```bash
 npm install
-```
-
-### 2. Konfiguracja zmiennych środowiskowych
-
-```bash
-cp .env.example .env.local
-```
-
-Uzupełnij klucze Supabase w `.env.local`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=<twój-supabase-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<twój-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<twój-service-role-key>
-```
-
-### 3. Uruchomienie
-
-```bash
+cp .env.example .env.local   # uzupełnij klucze Supabase
 npm run dev
 ```
 
-Otwórz [http://localhost:3000](http://localhost:3000)
+Wymagane zmienne: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY` — wyłącznie w env, nigdy w kodzie.
 
-## 🌐 Deploy na Vercel
+`npm run build` jest bramką jakości (lint ma znany, nienaprawiany błąd konfiguracji).
 
-1. Push na GitHub
-2. Import projektu w Vercel
-3. Dodaj zmienne środowiskowe
-4. Deploy
-
-## 📐 Struktura aplikacji
+## Trasy
 
 ```
-/                   → redirect do /do-akceptacji lub /login
-/login              → logowanie Magic Link (email)
-/do-akceptacji      → GŁÓWNA: faktury do akceptacji przez księgową
-/klienci            → lista klientów biura
-/klienci/[nip]      → szczegóły klienta
-/reguly             → reguły dopasowań (zakup/sprzedaż tabs, CRUD, paginacja)
-/dashboard          → metryki, wykresy, top klienci/reguły
-/faktury            → historia operacji na fakturach
-/logs               → logi zmian (audit)
+/                → redirect do /do-akceptacji (lub /login)
+/login           → logowanie Magic Link (whitelist panel_users)
+/do-akceptacji   → GŁÓWNA: kolejka kart do akceptacji przez księgową
+/klienci         → lista klientów biura
+/klienci/[nip]   → karta klienta (auto-write, symulacja bramki, pojazdy, opisy)
+/faktury         → historia operacji na fakturach (filtry statusów, przywracanie)
+/dashboard       → metryki, automatyzacja, wolumen KPiR
+/logs            → logi zmian (client_changes_log + audit)
+/wyjatki         → legacy redirect do /do-akceptacji
 ```
 
-## 🔐 Role i bezpieczeństwo
+## Role i bezpieczeństwo
 
-- **admin** — widzi wszystkich klientów, pełny dostęp do ustawień
-- **ksiegowa** — widzi tylko przypisanych klientów (`biuro_klienci_nipy`)
-- **klient** — widzi tylko swoje dane
+- **admin** — wszyscy klienci, ustawienia auto-write
+- **ksiegowa** — tylko przypisani klienci (`panel_users.biuro_klienci_nipy`)
+- **klient** — dostęp do panelu ZABLOKOWANY server-side (neutralna strona
+  „Portal klienta w przygotowaniu" w layoucie `(auth)`); portal klienta nie istnieje
 
-Dostęp kontrolowany przez:
-1. **Whitelist** — `panel_users.email` + `aktywny=true`
-2. **NIP filtering** — `getAllowedNips()` w każdej stronie SSR
-3. **RLS** — defense-in-depth na poziomie bazy danych
+Dostęp: whitelist `panel_users` (email + `aktywny`) → `getAllowedNips()` w każdej
+stronie SSR → RLS jako defense-in-depth.
 
-## 📦 Migracje SQL
+## Migracje SQL
 
-Migracje znajdują się w `supabase/migrations/`.
+Katalog `migrations/` (nie `supabase/migrations/`). Migracje uruchamia
+wyłącznie człowiek — nigdy agent ani CI. Stan wykonania i kolejność:
+nagłówki plików + docs/DECISIONS.md.
 
-## ⌨️ Skróty klawiszowe (strona Do Akceptacji)
+## Skróty klawiszowe (/do-akceptacji)
 
-Działają na AKTYWNEJ karcie (dziś: pierwsza karta sekcji „Czeka na akceptację")
-i nie działają, gdy fokus stoi w polu formularza, na przycisku albo w otwartym
-oknie.
+Działają na AKTYWNEJ karcie i nie działają, gdy fokus stoi w polu formularza,
+na przycisku albo w otwartym oknie.
 
 | Skrót | Akcja |
 |-------|-------|
@@ -91,6 +74,17 @@ oknie.
 | ⌘K / Ctrl+K | Wyszukiwarka globalna |
 | Esc | Zamyka otwarte okno lub powiększony podgląd |
 
-**Pominięcie faktury NIE MA skrótu klawiszowego** — wyłącznie przycisk „Pomiń"
-na karcie. Do 13.08.2026 robił to Esc; zostało to usunięte, bo pominięcia nie da
-się cofnąć z panelu, a Esc jest klawiszem odruchowym (docs/DECISIONS.md).
+**Pominięcie faktury nie ma skrótu** — wyłącznie przycisk „Pomiń". Do 13.08.2026
+robił to Esc; usunięte, bo pominięcia nie da się było cofnąć z panelu, a Esc jest
+klawiszem odruchowym (docs/DECISIONS.md).
+
+## Dokumentacja
+
+| Plik | Co zawiera |
+|------|------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | przepływ danych KSeF → AI → panel → worker → Rachmistrz |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | rejestr decyzji architektonicznych (czytać przed zmianami) |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | wymagania produktowe |
+| [docs/AUDIT-2026-08.md](docs/AUDIT-2026-08.md) | audyt sierpniowy (źródło Fal 1-3) |
+| [docs/ANALIZA-zaciesnienia-bramki.md](docs/ANALIZA-zaciesnienia-bramki.md) | retro-symulacja bramki auto-write |
+| [docs/ANALIZA-wzorce-bledow-bramki.md](docs/ANALIZA-wzorce-bledow-bramki.md) | wzorce błędnych kart, warianty zacieśnienia |

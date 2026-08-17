@@ -56,8 +56,10 @@ export async function updatePozycjaWymiar(
     return { success: false, error: error.message }
   }
 
-  // Audit log
-  await supabase.from('audit_log').insert({
+  // Audit log — wzorzec logFakturaEvent (AUDIT §2, C9): edycja pozycji już
+  // zapisana, więc błąd audytu NIE cofa operacji, ale nie znika po cichu:
+  // console.error (logi Vercel) + `warning` w zwrotce akcji.
+  const { error: auditError } = await supabase.from('audit_log').insert({
     action: 'pozycja_wymiar_edit',
     client_nip: poz?.client_nip ?? null,
     zapis_id: null,
@@ -70,6 +72,11 @@ export async function updatePozycjaWymiar(
       user: userEmail,
     },
   })
+  let auditWarning: string | undefined
+  if (auditError) {
+    auditWarning = `Nie zapisano wpisu audytu pozycja_wymiar_edit (audit_log): ${auditError.message}`
+    console.error('[updatePozycjaWymiar]', auditWarning, { pozycjaId, wymiar })
+  }
 
   // CELOWO bez revalidatePath: zmiana dropdownu pozycji przebudowywała CAŁĄ
   // kolejkę (setki kart, pełny RSC render). Sekcja trzyma stan lokalnie
@@ -77,7 +84,7 @@ export async function updatePozycjaWymiar(
   // effective_* liczone lokalnie tak samo jak GENERATED w bazie
   // (COALESCE(final, ...)). Świeże dane z serwera przyjdą przy następnej
   // nawigacji/akcji kończącej kartę.
-  return { success: true }
+  return { success: true, warning: auditWarning }
 }
 
 /**

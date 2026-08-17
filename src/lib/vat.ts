@@ -178,9 +178,6 @@ export function getCelZakupuLabel(value: number | string | null | undefined): st
   return CEL_ZAKUPU_LABELS[numValue] ?? `Nieznany (${value})`;
 }
 
-export const RODZAJE_ZAKUPU = ['Zaopatrzeniowe', 'Inwestycyjne', 'Pozostałe'];
-export const RODZAJE_ODLICZENIA = ['Całkowite', 'Proporcjonalne', 'Brak'];
-export const CELE_ZAKUPU = ['Gospodarczy', 'Mieszany', 'Niegospodarczy'];
 
 export const PROCEDURY_JPK = [
   { kod: null, label: '— brak —' },

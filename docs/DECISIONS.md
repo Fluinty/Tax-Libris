@@ -561,3 +561,47 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   z 12.08). Flag w danych NIE czyscic (zapis historyczny); przy kazdym
   cytowaniu precyzji W0 uzywac 75,7% | liczba 73,5% nie moze zyc jako
   "aktualna" — fundament decyzji o uzbrojeniu.
+- 2026-08-17 | BLOKADA ODCZYTU ROLI 'klient' (Fala 3, AUDIT §1): rola
+  panel_users.rola='klient' NIE wchodzi do panelu — layout (auth)
+  (src/app/(auth)/layout.tsx) zwraca neutralna strone "Portal klienta
+  w przygotowaniu" ZAMIAST dzieci, dla KAZDEJ trasy pod (auth). Jedno
+  miejsce egzekwowania, celowo bez redirectu (redirect na /login robilby
+  petle — uzytkownik JEST zalogowany, tylko nie ma czym ogladac panelu).
+  Dotad rola istniala w whitelist, ale zadna strona jej nie filtrowala:
+  zalogowany klient widzial pelna kolejke biura ze wszystkimi klientami.
+  Strona neutralna, bez tresci diagnostycznej | portal klienta nie
+  istnieje, a do czasu jego budowy 'klient' na whitelist nie moze byc
+  furtka do danych cudzych firm; pojedynczy punkt w layoucie nie do
+  ominiecia przez dopisanie nowej strony.
+- 2026-08-17 | SWIADOME WYJATKI symetrii Preview<->Pelna (Fala 3, AUDIT §3):
+  oba podglady faktury maja WSPOLNE zrodla dla danych ksiegowych — tabela
+  VAT z getOfficialVatTable (z normalizeStawka), wiersz roznicy Layer 2
+  z computeLayer2 (@/lib/vat), flagi Korekta/Zaliczka/Marza/MPP + rabat
+  naglowkowy, waluta z kodWaluty — a pozostale rozbieznosci sa CELOWE
+  i skatalogowane w komentarzu naglowkowym FakturaPreview.tsx (rabaty per
+  pozycja i „Ogolem" tylko w Pelnej; strony/termin/platnosc tylko w Preview;
+  Rozliczenia: te same dane, inny format). Kazda przyszla zmiana prezentacji:
+  do OBU widokow albo swiadomie do jednego Z DOPISKIEM do tej tabeli
+  | bez katalogu kazda roznica wyglada jak bug i kusi "wyrownanie",
+  a te roznice sa produktem (kompakt do akceptacji vs wierny obraz KSeF).
+- 2026-08-17 | WZORZEC ZAPISU AUDYTU (Fala 3, C9): logAudit w
+  do-akceptacji/actions.ts i insert audit_log w pozycje-actions.ts dziala
+  jak logFakturaEvent — blad zapisu audytu NIE przerywa operacji glownej
+  (zapis do exceptions_queue/faktury juz przeszedl; cofanie go z powodu
+  telemetrii byloby gorsze niz brak wpisu), ale NIE znika po cichu:
+  console.error (logi Vercel) + `warning` w zwrotce akcji, doklejany do
+  eventWarnings tam, gdzie juz istnieja. Dotad wynik insertu byl w ogole
+  nieczytany | audit_log bywa JEDYNYM nosnikiem historii (wpis o restored
+  z 17.08), wiec jego awaria musi byc widoczna — ale nie moze blokowac
+  ksiegowania.
+- 2026-08-17 | KOREKTA STATUSU MIGRACJI: wszystkie trzy migracje strumienia
+  sierpniowego SA WYKONANE na produkcji (17.08.2026) — 2026-08-fala1.sql
+  i 2026-08-restored.sql potwierdzone przez wlasciciela (restored: CHECK
+  zwrocil 22 typy eventow), 2026-08-status-backfill.sql wykonana z maszyny
+  agenta za JEDNORAZOWA jawna zgoda wlasciciela (KROK 3 po backfillu:
+  0 wierszy rozjechanych; regula read-only wrocila natychmiast po operacji).
+  Adnotacje "STATUS: DO WYKONANIA RECZNIE" przy wpisach z 12-17.08 oraz
+  w naglowkach plikow migracji sa HISTORYCZNE — plikow migracji celowo nie
+  ruszamy (decyzja wlasciciela 17.08: koniec zmian w migracjach) | czytelnik
+  rejestru nie moze czekac na migracje, ktora juz przeszla, ani probowac
+  wykonac jej drugi raz.

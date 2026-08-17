@@ -309,19 +309,6 @@ export interface ExceptionItem {
   client?: Client;
 }
 
-export interface AuditLog {
-  id: number;
-  timestamp: string;
-  client_nip: string | null;
-  zapis_id: number | null;
-  action: string;
-  pozycja_xml: string | null;
-  rule_id: number | null;
-  opis_zapisany: string | null;
-  duration_ms: number | null;
-  error_message: string | null;
-  details: Record<string, unknown> | null;
-}
 
 export type PanelUserRola = 'admin' | 'ksiegowa' | 'klient'
 
@@ -422,13 +409,6 @@ export interface AutomationRateClient {
 
 // Typ dla surowych danych wolumenu faktur (KPiR) — pobierane raz server-side,
 // agregowane klientem w komponencie (bez ponownego fetch przy zmianie zakładki okresu)
-export interface WolumenInvoiceRecord {
-  client_nip: string;
-  status: string;
-  resolved_by: string | null;
-  created_at: string;
-  auto_created_at: string | null;
-}
 
 export interface WolumenKpirViewRow {
   client_nip: string;
@@ -503,22 +483,4 @@ export interface ClientOpis {
   created_by: string;
 }
 
-export interface ClientChange {
-  id: number;
-  client_nip: string;
-  field_name: string;
-  old_value: string | null;
-  new_value: string | null;
-  changed_by: string;
-  changed_at: string;
-}
 
-export interface ClientFull extends Client {
-  pkd_glowny: string | null;
-  pkd_dodatkowe: string | null;
-  forma_dzialalnosci: string | null;
-  sprzedaz_mieszana: boolean;
-  platnik_vat: boolean;
-  proporcja_vat_odliczalna: number;
-  dodatkowe_info_ksiegowej: string | null;
-}

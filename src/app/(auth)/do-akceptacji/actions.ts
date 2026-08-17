@@ -89,20 +89,29 @@ function jestRedirect(e: unknown): boolean {
     (e as { digest: string }).digest.startsWith('NEXT_REDIRECT')
 }
 
-// Helper to log audit
+// Helper to log audit — wzorzec logFakturaEvent (AUDIT §2, C9): błąd insertu
+// NIE przerywa operacji głównej (zapis do exceptions_queue/faktury już przeszedł),
+// ale nie znika po cichu: console.error (logi Vercel) + zwrotka `warning`
+// doklejana przez wołającego do odpowiedzi akcji.
 async function logAudit(
   supabase: any,
   action: string,
   clientNip: string,
   zapisId: number | null,
   details: any
-) {
-  await supabase.from('audit_log').insert({
+): Promise<string | null> {
+  const { error } = await supabase.from('audit_log').insert({
     action,
     client_nip: clientNip,
     zapis_id: zapisId,
     details,
   })
+  if (error) {
+    const warning = `Nie zapisano wpisu audytu ${action} (audit_log): ${error.message}`
+    console.error('[logAudit]', warning, { action, clientNip, zapisId })
+    return warning
+  }
+  return null
 }
 
 // ── Oś czasu faktury: logowanie zdarzeń ──────────────────────
@@ -546,7 +555,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
     fakturaSyncWarning = sync.warning
   }
 
-  await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'approved', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     resolved_by: userEmail,
@@ -559,7 +568,7 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline1.warning, fakturaSyncWarning]
+  const eventWarnings: (string | null)[] = [baseline1.warning, fakturaSyncWarning, auditWarning]
   if (diff1) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff1 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -681,7 +690,7 @@ export async function approveExceptionFull(
     fakturaSyncWarning = sync.warning
   }
 
-  await logAudit(supabase, 'approved_with_full_edit', exception.client_nip, exception.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'approved_with_full_edit', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     resolved_by: userEmail,
@@ -693,7 +702,7 @@ export async function approveExceptionFull(
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline3.warning, fakturaSyncWarning]
+  const eventWarnings: (string | null)[] = [baseline3.warning, fakturaSyncWarning, auditWarning]
   if (diff3) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff3 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -774,7 +783,7 @@ export async function updateFinalZapisVAT(
     }
   }
 
-  await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'update_final_zapis_vat', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     user: userEmail,
@@ -782,7 +791,7 @@ export async function updateFinalZapisVAT(
   })
 
   revalidatePath('/do-akceptacji')
-  return { success: true }
+  return { success: true, warning: auditWarning ?? undefined }
 }
 
 // ROZWIĄŻ WYJĄTEK (dla pending - brak propozycji AI)
@@ -883,7 +892,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
     fakturaSyncWarning = sync.warning
   }
 
-  await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'resolved', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     resolved_by: userEmail,
@@ -893,7 +902,7 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   })
 
   // ── Oś czasu: edited → approved ──
-  const eventWarnings: (string | null)[] = [baseline4.warning, fakturaSyncWarning]
+  const eventWarnings: (string | null)[] = [baseline4.warning, fakturaSyncWarning, auditWarning]
   if (diff4) eventWarnings.push(await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'edited', userEmail, { diff: diff4 }))
   if (exception.rezim_edited) {
     const aiRezim = exception.kpir_pojazdowe_data?.strategia ?? null
@@ -981,7 +990,7 @@ export async function ignoreFaktura(exceptionId: number) {
     }
   }
 
-  await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'ignored', exception.client_nip, exception.zapis_id ?? null, {
     exception_id: exceptionId,
     faktura_id: fakturaId,
     resolved_by: userEmail
@@ -991,7 +1000,7 @@ export async function ignoreFaktura(exceptionId: number) {
   const skipWarning = await logFakturaEvent(supabase, fakturaId, queueId, exception.client_nip, 'skipped', userEmail, { reason: 'panel', by: userEmail })
 
   revalidatePath('/do-akceptacji')
-  return { success: true, warning: skipWarning ?? undefined }
+  return { success: true, warning: [auditWarning, skipWarning].filter(Boolean).join('; ') || undefined }
 }
 
 // PRZYWRÓĆ DO KOLEJKI — cofnięcie pominięcia zrobionego z panelu.
@@ -1141,7 +1150,7 @@ export async function restoreFaktura(queueId: number): Promise<{
     console.error('[restoreFaktura]', syncWarning, { queueId })
   }
 
-  await logAudit(supabase, 'restored', karta.client_nip, karta.zapis_id ?? null, {
+  const auditWarning = await logAudit(supabase, 'restored', karta.client_nip, karta.zapis_id ?? null, {
     queue_id: queueId,
     faktura_id: faktura?.id ?? null,
     restored_by: userEmail,
@@ -1178,7 +1187,7 @@ export async function restoreFaktura(queueId: number): Promise<{
   return {
     success: true,
     status: targetStatus,
-    warning: [syncWarning, eventWarning].filter(Boolean).join('; ') || undefined,
+    warning: [syncWarning, auditWarning, eventWarning].filter(Boolean).join('; ') || undefined,
   }
 }
 
@@ -1219,12 +1228,12 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
         .update({ aktywny: true, updated_at: new Date().toISOString() })
         .eq('id', found.id)
       
-      await logAudit(supabase, 'opis_reactivated_from_ai', exception.client_nip, null, {
+      const reactWarning = await logAudit(supabase, 'opis_reactivated_from_ai', exception.client_nip, null, {
         opis: found.opis,
         user: userEmail,
         exception_id: exceptionId
       })
-      return { success: true, message: 'Opis istniał, został aktywowany.' }
+      return { success: true, message: 'Opis istniał, został aktywowany.', warning: reactWarning ?? undefined }
     }
     return { success: true, message: 'Opis był już aktywny.' }
   }
@@ -1245,7 +1254,7 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
     return { success: false, error: errInsert.message }
   }
 
-  await logAudit(supabase, 'opis_added_from_ai', exception.client_nip, null, {
+  const auditWarning = await logAudit(supabase, 'opis_added_from_ai', exception.client_nip, null, {
     opis: opisT,
     user: userEmail,
     exception_id: exceptionId
@@ -1259,7 +1268,7 @@ export async function addProponowanyToClientOpisy(exceptionId: number) {
     ? `Nie zapisano zdarzenia opis_added_to_list: ${resolved2.error}`
     : await logFakturaEvent(supabase, resolved2.fakturaId, resolved2.queueId, exception.client_nip, 'opis_added_to_list', userEmail, { opis: opisT })
 
-  return { success: true, message: 'Opis dodany poprawnie.', warning: opisWarning ?? undefined }
+  return { success: true, message: 'Opis dodany poprawnie.', warning: [auditWarning, opisWarning].filter(Boolean).join('; ') || undefined }
 }
 
 
@@ -1362,7 +1371,7 @@ export async function updateJpkSection(
       }
     }
 
-    await logAudit(supabase, 'jpk_section_update', exception.client_nip, exception.zapis_id ?? null, {
+    const auditWarning = await logAudit(supabase, 'jpk_section_update', exception.client_nip, exception.zapis_id ?? null, {
       exception_id: exceptionId,
       faktura_id: fakturaId,
       fields: Object.keys(data),
@@ -1370,7 +1379,7 @@ export async function updateJpkSection(
     })
 
     revalidatePath('/do-akceptacji')
-    return { success: true }
+    return { success: true, warning: auditWarning ?? undefined }
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : 'Nieznany błąd' }
   }
@@ -1442,7 +1451,7 @@ export async function resetJpkSection(
       }
     }
 
-    await logAudit(supabase, 'jpk_section_reset', exception.client_nip, exception.zapis_id ?? null, {
+    const auditWarning = await logAudit(supabase, 'jpk_section_reset', exception.client_nip, exception.zapis_id ?? null, {
       exception_id: exceptionId,
       faktura_id: fakturaId,
       section,
@@ -1450,7 +1459,7 @@ export async function resetJpkSection(
     })
 
     revalidatePath('/do-akceptacji')
-    return { success: true }
+    return { success: true, warning: auditWarning ?? undefined }
   } catch (e: unknown) {
     return { success: false, error: e instanceof Error ? e.message : 'Nieznany błąd' }
   }
