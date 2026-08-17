@@ -553,3 +553,11 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   klikniecie przy 100+ kartach dziennie, a jedyny konsument swiezosci
   (ekran karty) da sie utrzymac lokalnie; okno wyscigu o skutku
   "zapis wlasnego sprzed chwili" nie uzasadnia tego kosztu.
+- 2026-08-17 | KOREKTA LICZBY: precyzja obecnej bramki (W0) to 137/181 =
+  75,7%, nie 73,5% z ANALIZA-zaciesnienia-bramki — 4 z 48 kart "blednych"
+  to FANTOMY FLAGI (rodzina E z ANALIZA-wzorce-bledow-bramki: #1889, #1890,
+  #1893, #1323 — final==ai co do pol grosza, rezim rozny wylacznie formatem
+  zapisu '75%'->'50_75'; flagi edycja_* ustawione przed fixem KWOTA_EPS
+  z 12.08). Flag w danych NIE czyscic (zapis historyczny); przy kazdym
+  cytowaniu precyzji W0 uzywac 75,7% | liczba 73,5% nie moze zyc jako
+  "aktualna" — fundament decyzji o uzbrojeniu.
