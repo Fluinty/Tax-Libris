@@ -9,12 +9,27 @@
  * 
  * Wszelkie zmiany wizualne i logiczne w prezentacji faktury (np. warstwy rozliczeń, nowe pola)
  * należy implementować W OBU PLIKACH, aby utrzymać spójność.
+ *
+ * ŚWIADOME WYJĄTKI od pełnej symetrii (AUDIT §3, decyzja Fala 3 17.08.2026) —
+ * każdy poniższy punkt jest celowy i NIE wymaga wyrównywania:
+ *  - rabaty per pozycja, dodatkowyOpis z badge, kwota VAT w kolumnach pozycji,
+ *    wiersz „Ogółem" — TYLKO w PelnaFakturaSection (wierny obraz KSeF;
+ *    Preview to kompakt do codziennej akceptacji, nadmiar kolumn go zabija);
+ *  - numer KSeF, strony (sprzedawca/nabywca z adresami), termin+forma
+ *    płatności, kolumny Cena/J.m. — TYLKO w FakturaPreview (to informacje
+ *    decyzyjne przy akceptacji; Pełna renderuje surowe wiersze podglądu);
+ *  - sekcja Rozliczenia ma w obu widokach inny FORMAT (tabela vs lista) —
+ *    te same DANE (dodatkoweRozliczenia + wspólny computeLayer2 z @/lib/vat).
+ * WSPÓLNE i wymagane w OBU: tabela VAT (getOfficialVatTable), wiersz różnicy
+ * Layer 2 (computeLayer2), flagi Korekta/Zaliczka/Marża/MPP + rabat
+ * nagłówkowy, waluta z kodWaluty.
  */
 
 import { CollapsibleJpkSection } from './CollapsibleJpkSection'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Car, AlertTriangle } from 'lucide-react'
 import { ExceptionItem } from '@/types/database'
+import { computeLayer2 } from '@/lib/vat'
 
 interface Props {
   exception: ExceptionItem
@@ -67,19 +82,9 @@ export function PelnaFakturaSection({ exception, officialVatTable }: Props) {
   }
 
   const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
-  let sumaDodatkowych = 0
-  dodatkoweRozliczenia.forEach((roz: any) => {
-    const parsed = parseAmount(roz.kwota)
-    if (!isNaN(parsed)) {
-      const isOdliczenie = roz.typ?.toLowerCase().includes('odliczenie')
-      sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
-    }
-  })
-
-  const rozrachunkiDiff = doZaplaty - vatTableBrutto
-  const showLayer2 = Math.abs(rozrachunkiDiff) > 0.02
-  const layer2Diff = dodatkoweRozliczenia.length > 0 ? (rozrachunkiDiff - sumaDodatkowych) : rozrachunkiDiff
-  const showLayer2Row = showLayer2 && Math.abs(layer2Diff) > 0.02
+  // Wiersz roznicy Layer 2 — WSPOLNY computeLayer2 z @/lib/vat (AUDIT §3):
+  // ta sama baza i prog co w FakturaPreview, jeden wzor w obu widokach.
+  const { layer2Diff, showLayer2Row } = computeLayer2(doZaplaty, vatTableBrutto, dodatkoweRozliczenia)
 
   // Diff rounding (to avoid float issues)
   const discountDiff = Math.abs(sumBruttoWiersze - doZaplaty) > 0.02 ? (sumBruttoWiersze - doZaplaty) : 0

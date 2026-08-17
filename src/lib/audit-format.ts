@@ -1,3 +1,11 @@
+// ── Kształt CSS dla RecentActivityList — WYPROWADZONY z audit-actions.ts ────
+// Słownik akcji (etykieta/ton/ikona) żyje WYŁĄCZNIE w audit-actions.ts;
+// ten plik tłumaczy ton na klasy Tailwind i ikonę na iconType widoku.
+// Ekstrakcja szczegółów wpisu (extractAuditDetailsInfo) zostaje tutaj —
+// to logika prezentacji listy aktywności, nie słownik akcji.
+
+import { resolveAuditAction, type AuditTone, type AuditIconKey } from './audit-actions'
+
 export interface AuditLogLike {
   action?: string
   details?: Record<string, unknown> | null
@@ -18,167 +26,72 @@ export interface AuditActionConfig {
   iconType: 'check' | 'purple-check' | 'blue-check' | 'clock' | 'alert' | 'error' | 'file' | 'skip' | 'wrench' | 'trash' | 'default'
 }
 
+const TONE_STYLES: Record<AuditTone, Pick<AuditActionConfig, 'badgeClass' | 'textColor' | 'bgColor' | 'circleColor' | 'circleBg'>> = {
+  green: {
+    badgeClass: 'text-green-700 bg-green-50 border border-green-200',
+    textColor: 'text-[#22C55E]', bgColor: 'bg-[#22C55E]/10',
+    circleColor: 'text-[#22C55E]', circleBg: 'bg-[#22C55E]/10',
+  },
+  purple: {
+    badgeClass: 'text-purple-700 bg-purple-50 border border-purple-200',
+    textColor: 'text-[#8B5CF6]', bgColor: 'bg-[#8B5CF6]/10',
+    circleColor: 'text-[#8B5CF6]', circleBg: 'bg-[#8B5CF6]/10',
+  },
+  blue: {
+    badgeClass: 'text-blue-700 bg-blue-50 border border-blue-200',
+    textColor: 'text-[#3B82F6]', bgColor: 'bg-[#3B82F6]/10',
+    circleColor: 'text-[#3B82F6]', circleBg: 'bg-[#3B82F6]/10',
+  },
+  orange: {
+    badgeClass: 'text-amber-700 bg-amber-50 border border-amber-200',
+    textColor: 'text-[#F59E0B]', bgColor: 'bg-[#F59E0B]/10',
+    circleColor: 'text-[#F59E0B]', circleBg: 'bg-[#F59E0B]/10',
+  },
+  red: {
+    badgeClass: 'text-red-700 bg-red-50 border border-red-200',
+    textColor: 'text-[#EF4444]', bgColor: 'bg-[#EF4444]/10',
+    circleColor: 'text-[#EF4444]', circleBg: 'bg-[#EF4444]/10',
+  },
+  gray: {
+    badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
+    textColor: 'text-[#64748B]', bgColor: 'bg-[#F1F5F9]',
+    circleColor: 'text-[#64748B]', circleBg: 'bg-[#F1F5F9]',
+  },
+}
+
+// iconType widoku z (ikona, ton) — check-circle rozróżnia wariant kolorem
+function toIconType(icon: AuditIconKey, tone: AuditTone): AuditActionConfig['iconType'] {
+  switch (icon) {
+    case 'check': return 'check'
+    case 'check-circle': return tone === 'purple' ? 'purple-check' : 'blue-check'
+    case 'alert': return 'alert'
+    case 'error': return 'error'
+    case 'file': return 'file'
+    case 'search': return 'file'
+    case 'skip': return 'skip'
+    case 'wrench': return 'wrench'
+    case 'trash': return 'trash'
+    case 'restore': return 'blue-check'
+    default: return 'default'
+  }
+}
+
 export function getAuditActionConfig(actionRaw?: string | null): AuditActionConfig {
-  const action = (actionRaw || '').trim()
-
-  switch (action) {
-    case 'auto_create_full':
-      return {
-        label: 'Zaksięgowano w Rachmistrzu',
-        badgeClass: 'text-green-700 bg-green-50 border border-green-200',
-        textColor: 'text-[#22C55E]',
-        bgColor: 'bg-[#22C55E]/10',
-        circleColor: 'text-[#22C55E]',
-        circleBg: 'bg-[#22C55E]/10',
-        iconType: 'check'
-      }
-
-    case 'external_booked':
-      return {
-        label: 'Zaksięgowano ręcznie w Rachmistrzu (poza panelem)',
-        badgeClass: 'text-purple-700 bg-purple-50 border border-purple-200',
-        textColor: 'text-[#8B5CF6]',
-        bgColor: 'bg-[#8B5CF6]/10',
-        circleColor: 'text-[#8B5CF6]',
-        circleBg: 'bg-[#8B5CF6]/10',
-        iconType: 'purple-check'
-      }
-
-    case 'approved':
-      return {
-        label: 'Zatwierdzono w panelu',
-        badgeClass: 'text-blue-700 bg-blue-50 border border-blue-200',
-        textColor: 'text-[#3B82F6]',
-        bgColor: 'bg-[#3B82F6]/10',
-        circleColor: 'text-[#3B82F6]',
-        circleBg: 'bg-[#3B82F6]/10',
-        iconType: 'blue-check'
-      }
-
-    case 'pre_fill_pending_review':
-      return {
-        label: 'Pre-fill gotowy do akceptacji',
-        badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
-        textColor: 'text-[#64748B]',
-        bgColor: 'bg-[#F1F5F9]',
-        circleColor: 'text-[#64748B]',
-        circleBg: 'bg-[#F1F5F9]',
-        iconType: 'file'
-      }
-
-    case 'exception':
-      return {
-        label: 'Wyjątek — wymaga decyzji',
-        badgeClass: 'text-amber-700 bg-amber-50 border border-amber-200',
-        textColor: 'text-[#F59E0B]',
-        bgColor: 'bg-[#F59E0B]/10',
-        circleColor: 'text-[#F59E0B]',
-        circleBg: 'bg-[#F59E0B]/10',
-        iconType: 'alert'
-      }
-
-    case 'error':
-      return {
-        label: 'Błąd',
-        badgeClass: 'text-red-700 bg-red-50 border border-red-200',
-        textColor: 'text-[#EF4444]',
-        bgColor: 'bg-[#EF4444]/10',
-        circleColor: 'text-[#EF4444]',
-        circleBg: 'bg-[#EF4444]/10',
-        iconType: 'error'
-      }
-
-    case 'dry_run_create':
-    case 'dry_run':
-      return {
-        label: 'Test (dry run)',
-        badgeClass: 'text-slate-600 bg-transparent border border-slate-300',
-        textColor: 'text-[#64748B]',
-        bgColor: 'bg-[#F1F5F9]',
-        circleColor: 'text-[#64748B]',
-        circleBg: 'bg-[#F1F5F9]',
-        iconType: 'file'
-      }
-
-    case 'set_opis':
-      return {
-        label: 'Zapis opisu',
-        badgeClass: 'text-green-700 bg-green-50 border border-green-200',
-        textColor: 'text-[#22C55E]',
-        bgColor: 'bg-[#22C55E]/10',
-        circleColor: 'text-[#22C55E]',
-        circleBg: 'bg-[#22C55E]/10',
-        iconType: 'check'
-      }
-
-    case 'resolve_exception':
-      return {
-        label: 'Rozwiązanie wyjątku',
-        badgeClass: 'text-blue-700 bg-blue-50 border border-blue-200',
-        textColor: 'text-[#4A90E2]',
-        bgColor: 'bg-[#4A90E2]/10',
-        circleColor: 'text-[#4A90E2]',
-        circleBg: 'bg-[#4A90E2]/10',
-        iconType: 'blue-check'
-      }
-
-    case 'ignore_exception':
-      return {
-        label: 'Pominięcie',
-        badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
-        textColor: 'text-[#64748B]',
-        bgColor: 'bg-[#F1F5F9]',
-        circleColor: 'text-[#64748B]',
-        circleBg: 'bg-[#F1F5F9]',
-        iconType: 'skip'
-      }
-
-    case 'rule_edited':
-      return {
-        label: 'Edycja reguły',
-        badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
-        textColor: 'text-[#64748B]',
-        bgColor: 'bg-[#F1F5F9]',
-        circleColor: 'text-[#64748B]',
-        circleBg: 'bg-[#F1F5F9]',
-        iconType: 'wrench'
-      }
-
-    case 'rule_deleted':
-      return {
-        label: 'Usunięcie reguły',
-        badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
-        textColor: 'text-[#64748B]',
-        bgColor: 'bg-[#F1F5F9]',
-        circleColor: 'text-[#64748B]',
-        circleBg: 'bg-[#F1F5F9]',
-        iconType: 'trash'
-      }
-
-    default: {
-      if (action.startsWith('skip_')) {
-        const skipPart = action.slice(5).replace(/_/g, ' ').trim()
-        return {
-          label: skipPart ? `Pominięto: ${skipPart}` : 'Pominięto',
-          badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200',
-          textColor: 'text-[#64748B]',
-          bgColor: 'bg-[#F1F5F9]',
-          circleColor: 'text-[#64748B]',
-          circleBg: 'bg-[#F1F5F9]',
-          iconType: 'skip'
-        }
-      }
-
-      return {
-        label: action || '—',
-        badgeClass: 'text-slate-600 bg-slate-50 border border-slate-200',
-        textColor: 'text-[#94A3B8]',
-        bgColor: 'bg-[#F8FAFC]',
-        circleColor: 'text-[#94A3B8]',
-        circleBg: 'bg-[#F8FAFC]',
-        iconType: 'default'
-      }
+  const meta = resolveAuditAction(actionRaw)
+  // default (nieznana akcja) zachowuje dotychczasowy, bledszy wygląd
+  if (meta.icon === 'default') {
+    return {
+      label: meta.label,
+      badgeClass: 'text-slate-600 bg-slate-50 border border-slate-200',
+      textColor: 'text-[#94A3B8]', bgColor: 'bg-[#F8FAFC]',
+      circleColor: 'text-[#94A3B8]', circleBg: 'bg-[#F8FAFC]',
+      iconType: 'default',
     }
+  }
+  return {
+    label: meta.label,
+    ...TONE_STYLES[meta.tone],
+    iconType: toIconType(meta.icon, meta.tone),
   }
 }
 

@@ -108,6 +108,49 @@ export function getOfficialVatTable(pozycjeXmlFull: any[] | null | undefined): a
   }))
 }
 
+// ── Wiersz różnicy „Layer 2" (rozliczenia poza fakturą) — JEDEN wzór ────────
+// Dotąd Preview liczył go z bazy `kwota_brutto − suma pozycji XML`,
+// a PelnaFaktura z `kwotaDoZaplaty − officialVatTable` — przy rozjeździe
+// jeden pokazywał saldo, a drugi nie (AUDIT §3). Wspólna baza:
+// doZaplaty (kwotaDoZaplaty z podglądu KSeF, fallback kwota_brutto karty)
+// minus brutto oficjalnej tabeli VAT, z odjęciem jawnie wykazanych
+// dodatkowychRozliczen. Różnice OBJAŚNIAMY, nigdy nie korygujemy (CLAUDE.md).
+export interface Layer2Result {
+  /** doZaplaty − brutto tabeli VAT (surowa różnica) */
+  rozrachunkiDiff: number
+  /** różnica po odjęciu jawnych dodatkowychRozliczen — to renderujemy */
+  layer2Diff: number
+  /** czy wiersz różnicy ma się pokazać (obie różnice > 2 gr) */
+  showLayer2Row: boolean
+  sumaDodatkowych: number
+}
+
+export function computeLayer2(
+  doZaplaty: number,
+  vatTableBrutto: number,
+  dodatkoweRozliczenia: unknown[] | null | undefined
+): Layer2Result {
+  const rozliczenia = Array.isArray(dodatkoweRozliczenia) ? dodatkoweRozliczenia : []
+  let sumaDodatkowych = 0
+  for (const roz of rozliczenia as { kwota?: unknown; typ?: string }[]) {
+    const raw = roz?.kwota
+    const parsed = typeof raw === 'string' ? parseFloat(raw.replace(',', '.').replace('−', '-')) : Number(raw)
+    if (!isNaN(parsed)) {
+      const isOdliczenie = roz?.typ?.toLowerCase().includes('odliczenie')
+      sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
+    }
+  }
+  const rozrachunkiDiff = doZaplaty - vatTableBrutto
+  const showLayer2 = Math.abs(rozrachunkiDiff) > 0.02
+  const layer2Diff = rozliczenia.length > 0 ? rozrachunkiDiff - sumaDodatkowych : rozrachunkiDiff
+  return {
+    rozrachunkiDiff,
+    layer2Diff,
+    showLayer2Row: showLayer2 && Math.abs(layer2Diff) > 0.02,
+    sumaDodatkowych,
+  }
+}
+
 export const CEL_ZAKUPU_LABELS: Record<number, string> = {
   0: 'Gospodarczy',
   1: 'Mieszany',

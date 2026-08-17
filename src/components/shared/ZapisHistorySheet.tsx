@@ -15,6 +15,7 @@ import {
   Loader2,
   ShoppingCart,
   DollarSign,
+  RotateCcw,
 } from 'lucide-react'
 import {
   Sheet,
@@ -58,6 +59,7 @@ const iconMap = {
   Trash2: Trash2,
   HelpCircle: HelpCircle,
   FileText: FileText,
+  RotateCcw: RotateCcw,
 } as const
 
 const colorMap: Record<ActionColor, { text: string; bg: string; dot: string }> = {

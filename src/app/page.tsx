@@ -8,7 +8,9 @@ export default async function Home() {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    redirect('/wyjatki')
+    // Bezpośrednio do kolejki — /wyjatki to relikt robiący DRUGIE przekierowanie
+    // na /do-akceptacji (AUDIT §3); trasa /wyjatki zostaje dla starych zakładek.
+    redirect('/do-akceptacji')
   } else {
     redirect('/login')
   }

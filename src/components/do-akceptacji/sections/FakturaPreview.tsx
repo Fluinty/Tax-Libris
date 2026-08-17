@@ -9,9 +9,25 @@
  * 
  * Wszelkie zmiany wizualne i logiczne w prezentacji faktury (np. warstwy rozliczeń, nowe pola)
  * należy implementować W OBU PLIKACH, aby utrzymać spójność.
+ *
+ * ŚWIADOME WYJĄTKI od pełnej symetrii (AUDIT §3, decyzja Fala 3 17.08.2026) —
+ * każdy poniższy punkt jest celowy i NIE wymaga wyrównywania:
+ *  - rabaty per pozycja, dodatkowyOpis z badge, kwota VAT w kolumnach pozycji,
+ *    wiersz „Ogółem" — TYLKO w PelnaFakturaSection (wierny obraz KSeF;
+ *    Preview to kompakt do codziennej akceptacji, nadmiar kolumn go zabija);
+ *  - numer KSeF, strony (sprzedawca/nabywca z adresami), termin+forma
+ *    płatności, kolumny Cena/J.m. — TYLKO w FakturaPreview (to informacje
+ *    decyzyjne przy akceptacji; Pełna renderuje surowe wiersze podglądu);
+ *  - sekcja Rozliczenia ma w obu widokach inny FORMAT (tabela vs lista) —
+ *    te same DANE (dodatkoweRozliczenia + wspólny computeLayer2 z @/lib/vat).
+ * WSPÓLNE i wymagane w OBU: tabela VAT (getOfficialVatTable), wiersz różnicy
+ * Layer 2 (computeLayer2), flagi Korekta/Zaliczka/Marża/MPP + rabat
+ * nagłówkowy, waluta z kodWaluty.
  */
 
 import type { ExceptionWithClient, PozycjaXml, PozycjaVAT } from '@/types/database'
+import { getOfficialVatTable, computeLayer2 } from '@/lib/vat'
+import { Badge } from '@/components/ui/badge'
 
 interface FakturaPreviewProps {
   exception: ExceptionWithClient
@@ -19,13 +35,16 @@ interface FakturaPreviewProps {
 
 // ── Helpers ──────────────────────────────────────────
 
-function fmtKwota(n: number | string | null | undefined): string {
+// Waluta z podglad_faktury (kodWaluty), nie sztywne „zł" — PelnaFaktura
+// renderuje kodWaluty, a kanoniczny Preview pokazywał EUR-owej fakturze „zł"
+// (AUDIT §3; dziś 0 faktur nie-PLN — prewencja). PLN → „zł" jak dotąd.
+function fmtKwota(n: number | string | null | undefined, waluta: string = 'zł'): string {
   const parsed = typeof n === 'string' ? parseFloat(n.replace(',', '.').replace('−', '-')) : Number(n)
   const v = isNaN(parsed) ? 0 : parsed
   return v.toLocaleString('pl-PL', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }) + ' zł'
+  }) + ' ' + waluta
 }
 
 function fmtDate(d: string | null | undefined): string {
@@ -164,11 +183,11 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
       case 'jm': return pVal(poz, 'jednostkaMiary', 'jednostka', 'jm') || ''
       case 'cena': {
         const v = pVal(poz, 'cenaNetto', 'cenaJednostkowa', 'cenaBrutto')
-        return v ? fmtKwota(v) : ''
+        return v ? fmt(v) : ''
       }
       case 'netto': {
         const v = pVal(poz, 'wartoscNetto', 'wartosc_netto')
-        return v ? fmtKwota(v) : ''
+        return v ? fmt(v) : ''
       }
       case 'vat': {
         const raw = pVal(poz, 'stawkaVat', 'stawka') || ''
@@ -177,7 +196,7 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
       case 'brutto': {
         const v = pVal(poz, 'wartoscBrutto', 'wartosc_brutto')
         if (v && !isNaN(Number(v))) {
-          return fmtKwota(v)
+          return fmt(v)
         }
         // Brak wartoscBrutto -> policz netto * (1 + stawka/100) dla liczb lub pokaż netto/"—" dla nienumerycznych (zw, np, oo)
         const nettoStr = pVal(poz, 'wartoscNetto', 'wartosc_netto')
@@ -185,41 +204,24 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
         const netto = Number(nettoStr)
         const rawStawka = (pVal(poz, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
         if (!rawStawka || isNaN(Number(rawStawka))) {
-          return fmtKwota(netto)
+          return fmt(netto)
         }
         const stawkaNum = Number(rawStawka)
         const calcBrutto = Math.round(netto * (1 + stawkaNum / 100) * 100) / 100
-        return fmtKwota(calcBrutto)
+        return fmt(calcBrutto)
       }
       default: return ''
     }
   }
 
-  // ── VAT table rows — always from ALL source positions (document preview) ──
+  // ── VAT table rows — WSPÓLNA funkcja z @/lib/vat (AUDIT §3) ──────────────
+  // Dotąd inline-duplikat getOfficialVatTable BEZ normalizeStawka — ta sama
+  // faktura mogła grupować stawki inaczej niż PozycjeVatSection/PelnaFaktura
+  // (np. „Stawka 23" vs „23"). Fallbacki na zapisVat bez zmian.
   const pozycjeVat: PozycjaVAT[] = (() => {
-    // Priority: compute from ALL XML positions (unfiltered source document)
     if (hasAnyPozycje) {
-      const groups: Record<string, { netto: number; brutto: number }> = {}
-      for (const p of pozycje) {
-        const rawStawka = (pVal(p, 'stawkaVat', 'stawka') || '').replace('Stawka', '').trim()
-        const stawka = rawStawka || 'zw'
-        if (!groups[stawka]) groups[stawka] = { netto: 0, brutto: 0 }
-        const nettoVal = Number(pVal(p, 'wartoscNetto', 'wartosc_netto') || 0)
-        let bruttoVal = Number(pVal(p, 'wartoscBrutto', 'wartosc_brutto') || 0)
-        if (!bruttoVal && nettoVal) {
-          const stawkaNum = parseFloat(stawka)
-          bruttoVal = !isNaN(stawkaNum) ? Math.round(nettoVal * (1 + stawkaNum / 100) * 100) / 100 : nettoVal
-        }
-        groups[stawka].netto += nettoVal
-        groups[stawka].brutto += bruttoVal
-      }
-      return Object.entries(groups).map(([stawka, { netto, brutto }]) => ({
-        stawka_symbol: stawka,
-        stawka_id: '',
-        netto: Math.round(netto * 100) / 100,
-        vat: Math.round((brutto - netto) * 100) / 100,
-        brutto: Math.round(brutto * 100) / 100,
-      }))
+      const official = getOfficialVatTable(pozycje)
+      if (official && official.length > 0) return official as PozycjaVAT[]
     }
     // Fallback: use zapisVat data if no pozycje available
     if (zapisVat && zapisVat.pozycje_vat && zapisVat.pozycje_vat.length > 0) {
@@ -241,23 +243,43 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
   const sumaVat = pozycjeVat.reduce((a, p) => a + p.vat, 0) || null
   const sumaBrutto = pozycjeVat.reduce((a, p) => a + p.brutto, 0) || e.kwota_brutto
 
-  // ── Rozliczenia poza fakturą (KSeF Layer 1 & 2) ──
+  // ── Rozliczenia poza fakturą (KSeF Layer 2) — WSPÓLNY computeLayer2 ──────
+  // Ta sama baza co PelnaFaktura: doZaplaty z podglądu KSeF (fallback
+  // kwota_brutto karty) minus brutto tabeli VAT — dotąd Preview liczył
+  // z `kwota_brutto − suma XML` i przy rozjeździe jeden z widoków pokazywał
+  // saldo, a drugi nie (AUDIT §3).
   const podglad = (e.podglad_faktury as any) || {}
   const dodatkoweRozliczenia = Array.isArray(podglad.dodatkoweRozliczenia) ? podglad.dodatkoweRozliczenia : []
-  let sumaDodatkowych = 0
-  dodatkoweRozliczenia.forEach((roz: any) => {
-    const parsed = typeof roz.kwota === 'string' ? parseFloat(roz.kwota.replace(',', '.').replace('−', '-')) : Number(roz.kwota)
-    if (!isNaN(parsed)) {
-      const isOdliczenie = roz.typ?.toLowerCase().includes('odliczenie')
-      sumaDodatkowych += parsed * (isOdliczenie ? -1 : 1)
-    }
-  })
+  const doZaplatyPodglad = typeof podglad.kwotaDoZaplaty === 'string'
+    ? parseFloat(String(podglad.kwotaDoZaplaty).replace(',', '.').replace('−', '-'))
+    : Number(podglad.kwotaDoZaplaty)
+  const doZaplaty = Number.isFinite(doZaplatyPodglad) && doZaplatyPodglad !== 0
+    ? doZaplatyPodglad
+    : (e.kwota_brutto ?? 0)
+  const { layer2Diff, showLayer2Row } = computeLayer2(doZaplaty, sumaBrutto ?? 0, dodatkoweRozliczenia)
 
-  const doZaplaty = e.kwota_brutto ?? 0
-  const rozrachunkiDiff = doZaplaty - (sumaBrutto ?? 0)
-  const showLayer2 = Math.abs(rozrachunkiDiff) > 0.02
-  const layer2Diff = dodatkoweRozliczenia.length > 0 ? (rozrachunkiDiff - sumaDodatkowych) : rozrachunkiDiff
-  const showLayer2Row = showLayer2 && Math.abs(layer2Diff) > 0.02
+  // ── Flagi dokumentu (Korekta/Zaliczka/Marża/MPP + rabat nagłówkowy) ──────
+  // Dotąd TYLKO w zwijanej PelnaFakturze — księgowa mogła zatwierdzić
+  // korektę/MPP nie widząc tego bez rozwinięcia (AUDIT §3; dziś 0 korekt
+  // w danych — prewencja przed korektami KSeF). Te same warunki co tam.
+  const wierszePodglad = Array.isArray(podglad.wiersze) ? podglad.wiersze : []
+  const flagaMpp = wierszePodglad.some((it: any) => it?.wymagaPodzielonejPlatnosci === 'True')
+  const flagaKorekta = podglad.korekta === 'True'
+  const flagaZaliczka = podglad.zaliczka === 'True'
+  const flagaMarza = podglad.fakturaMarza === 'True'
+  const sumBruttoWiersze = wierszePodglad.reduce((a: number, it: any) => {
+    const v = typeof it?.wartoscBrutto === 'string'
+      ? parseFloat(String(it.wartoscBrutto).replace(',', '.').replace('−', '-'))
+      : Number(it?.wartoscBrutto)
+    return a + (Number.isFinite(v) ? v : 0)
+  }, 0)
+  const rabatNaglowkowy = wierszePodglad.length > 0 && Math.abs(sumBruttoWiersze - doZaplaty) > 0.02
+    ? sumBruttoWiersze - doZaplaty
+    : 0
+
+  // Waluta dokumentu: kodWaluty z podglądu KSeF; PLN i brak → „zł" jak dotąd
+  const waluta = podglad.kodWaluty && podglad.kodWaluty !== 'PLN' ? String(podglad.kodWaluty) : 'zł'
+  const fmt = (n: number | string | null | undefined) => fmtKwota(n, waluta)
 
   // ── Payment info ──────────────────────────────────
   const { termin, forma } = extractPaymentInfo(e)
@@ -272,6 +294,21 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
         {e.numer_ksef && (
           <div className="text-[11px] text-slate-500 font-mono mt-0.5 break-all">
             KSeF: {e.numer_ksef}
+          </div>
+        )}
+        {/* Flagi dokumentu — te same co w PelnaFakturaSection (AUDIT §3):
+            korekta/zaliczka/marza/MPP musza byc widoczne BEZ rozwijania */}
+        {(flagaKorekta || flagaZaliczka || flagaMarza || flagaMpp) && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {flagaKorekta && <Badge variant="outline" className="border-red-200 text-red-700 bg-red-50">Korekta {podglad.przyczynaKorekty ? `(${podglad.przyczynaKorekty})` : ''}</Badge>}
+            {flagaZaliczka && <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50">Zaliczka</Badge>}
+            {flagaMarza && <Badge variant="outline" className="border-orange-200 text-orange-700 bg-orange-50">Marża</Badge>}
+            {flagaMpp && <Badge variant="outline" className="border-purple-200 text-purple-700 bg-purple-50">MPP</Badge>}
+          </div>
+        )}
+        {rabatNaglowkowy > 0 && (
+          <div className="mt-2 text-[11px] px-2 py-1 rounded bg-yellow-50 border border-yellow-200 text-yellow-800">
+            Rabat/korekta z podsumowania (nagłówkowy): <strong>-{fmt(rabatNaglowkowy)}</strong>
           </div>
         )}
         <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-slate-600 text-xs">
@@ -374,17 +411,17 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
                   <td className="px-3 py-1.5 text-slate-600 font-medium">
                     {pv.stawka_symbol || 'zw'}{!isNaN(Number(pv.stawka_symbol)) && pv.stawka_symbol !== '' ? '%' : ''}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmtKwota(pv.netto)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmtKwota(pv.vat)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmtKwota(pv.brutto)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmt(pv.netto)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmt(pv.vat)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{fmt(pv.brutto)}</td>
                 </tr>
               ))}
               {/* Sum row */}
               <tr className="bg-slate-50 font-semibold border-t border-slate-200">
                 <td className="px-3 py-1.5 text-slate-700">Razem</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaNetto != null ? fmtKwota(sumaNetto) : '—'}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaVat != null ? fmtKwota(sumaVat) : '—'}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaBrutto != null ? fmtKwota(sumaBrutto) : '—'}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaNetto != null ? fmt(sumaNetto) : '—'}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaVat != null ? fmt(sumaVat) : '—'}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-slate-700">{sumaBrutto != null ? fmt(sumaBrutto) : '—'}</td>
               </tr>
             </tbody>
           </table>
@@ -411,7 +448,7 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
                 <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
                   <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{roz.typ || 'Inne'}</td>
                   <td className="px-3 py-1.5 text-slate-800">{roz.opis || '-'}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">{fmtKwota(roz.kwota)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">{fmt(roz.kwota)}</td>
                 </tr>
               ))}
             </tbody>
@@ -437,14 +474,14 @@ export function FakturaPreview({ exception }: FakturaPreviewProps) {
               ? "Pozostałe saldo:" 
               : (layer2Diff > 0 ? "Rozliczenia/saldo poza fakturą:" : "Nadpłata/saldo na koncie:")} 
             <span className="font-medium text-slate-700 ml-1">
-              {layer2Diff > 0 ? '+' : ''}{fmtKwota(layer2Diff)}
+              {layer2Diff > 0 ? '+' : ''}{fmt(layer2Diff)}
             </span>
           </div>
         )}
         <div className="flex items-center gap-3">
           <span className="text-slate-500 text-xs uppercase tracking-wider font-semibold">Do zapłaty:</span>
           <span className="text-lg font-bold text-slate-800 tabular-nums whitespace-nowrap">
-            {fmtKwota(e.kwota_brutto)}
+            {fmt(e.kwota_brutto)}
           </span>
         </div>
       </div>

@@ -27,6 +27,33 @@ export default async function AuthLayout({
     .eq('aktywny', true)
     .single()
 
+  // ── Blokada ODCZYTU dla roli 'klient' (AUDIT 2026-08 §2, decyzja) ─────────
+  // DECISIONS 2026-08-11 odcina roli 'klient' akcje zapisu, ale strony biura
+  // (kolejka, dashboard, /logs z audit_log i e-mailami księgowych, /klienci)
+  // były czytelne dla każdego zalogowanego. Layout (auth) jest JEDYNYM wejściem
+  // do tych tras, więc blokada tutaj obejmuje je wszystkie server-side —
+  // zamiast dzieci renderujemy neutralną stronę (bez redirectu: pętla layoutu
+  // nie grozi, a klient na dowolnym URL biura widzi to samo). Portal klienta
+  // końcowego to osobny przyszły moduł (DECISIONS) — do tego czasu neutralna
+  // informacja, zero danych biura.
+  if (panelUser?.rola === 'klient') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] px-4">
+        <div className="max-w-md w-full bg-white border border-[#E2E8F0] rounded-xl shadow-sm p-8 text-center">
+          <h1 className="text-lg font-bold text-[#1E293B] mb-2">Portal klienta w przygotowaniu</h1>
+          <p className="text-sm text-slate-600">
+            Twoje konto jest aktywne, ale panel, który próbujesz otworzyć, jest
+            przeznaczony dla zespołu biura rachunkowego. Portal dla klientów
+            jest w budowie — o jego udostępnieniu poinformuje Cię biuro.
+          </p>
+          <p className="text-xs text-slate-400 mt-4">
+            Zalogowano jako {user.email}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const userProfile: UserProfile = {
     email: user.email ?? '',
     full_name: user.email?.split('@')[0] ?? 'Użytkownik',

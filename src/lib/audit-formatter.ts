@@ -1,5 +1,13 @@
+// ── Kształt dla ZapisHistorySheet — WYPROWADZONY z audit-actions.ts ─────────
+// Słownik akcji (etykieta/ton/ikona) żyje WYŁĄCZNIE w audit-actions.ts.
+// Tutaj zostają wyłącznie DYNAMICZNE tytuły/podtytuły budowane ze szczegółów
+// wpisu (kto rozwiązał, numer faktury, treść błędu) — czysta prezentacja.
+// Nowa akcja dopisana w audit-actions dostaje tu automatycznie tytuł, kolor
+// i ikonę przez ścieżkę domyślną.
+
 import { formatDistanceToNow, format } from 'date-fns'
 import { pl } from 'date-fns/locale'
+import { resolveAuditAction, type AuditIconKey, type AuditTone } from './audit-actions'
 
 export interface AuditEntry {
   id: number
@@ -27,30 +35,55 @@ export interface ZapisInfo {
 export type ActionColor = 'green' | 'blue' | 'orange' | 'red' | 'gray' | 'purple'
 
 export interface FormattedAction {
-  iconName: 'Check' | 'CheckCircle2' | 'AlertTriangle' | 'Search' | 'XCircle' | 'MinusCircle' | 'Wrench' | 'Trash2' | 'HelpCircle' | 'FileText'
+  iconName: 'Check' | 'CheckCircle2' | 'AlertTriangle' | 'Search' | 'XCircle' | 'MinusCircle' | 'Wrench' | 'Trash2' | 'HelpCircle' | 'FileText' | 'RotateCcw'
   color: ActionColor
   title: string
   subtitle: string | null
 }
 
-export function formatAuditAction(audit: AuditEntry): FormattedAction {
-  const details = (audit.details ?? {}) as Record<string, string>
+const ICON_NAMES: Record<AuditIconKey, FormattedAction['iconName']> = {
+  'check': 'Check',
+  'check-circle': 'CheckCircle2',
+  'alert': 'AlertTriangle',
+  'error': 'XCircle',
+  'file': 'FileText',
+  'skip': 'MinusCircle',
+  'wrench': 'Wrench',
+  'trash': 'Trash2',
+  'search': 'Search',
+  'restore': 'RotateCcw',
+  'default': 'HelpCircle',
+}
 
+const TONE_COLORS: Record<AuditTone, ActionColor> = {
+  green: 'green', blue: 'blue', purple: 'purple', orange: 'orange', red: 'red', gray: 'gray',
+}
+
+const numerFaktury = (details: Record<string, string>, audit: AuditEntry) =>
+  details.numer_faktury || details.numer_dokumentu || details.ksiegowe_numer || details.invoice_number ||
+  details.faktura_numer || details.numer || details.faktura || audit.pozycja_xml || ''
+
+export function formatAuditAction(audit: AuditEntry): FormattedAction {
+  const meta = resolveAuditAction(audit.action)
+  const details = (audit.details ?? {}) as Record<string, string>
+  const base: FormattedAction = {
+    iconName: ICON_NAMES[meta.icon],
+    color: TONE_COLORS[meta.tone],
+    title: meta.label,
+    subtitle: null,
+  }
+
+  // Dynamiczne tytuły/podtytuły per akcja — reszta (etykieta/kolor/ikona)
+  // z bazowej mapy, więc akcje bez wpisu tutaj też wyglądają poprawnie.
   switch (audit.action) {
     case 'exception':
-      return {
-        iconName: 'AlertTriangle',
-        color: 'orange',
-        title: 'Wykryto wyjątek',
-        subtitle: `brak reguły dla pozycji "${audit.pozycja_xml || details.pierwsza_pozycja || 'nieznana'}"`,
-      }
+      return { ...base, subtitle: `brak reguły dla pozycji "${audit.pozycja_xml || details.pierwsza_pozycja || 'nieznana'}"` }
 
     case 'resolve_exception': {
       const resolvedBy = details.resolved_by || 'księgowa'
       const isPatternStr = details.is_pattern === 'true' ? 'pattern LIKE' : 'dokładny match'
       return {
-        iconName: 'CheckCircle2',
-        color: 'blue',
+        ...base,
         title: `${resolvedBy} rozwiązał wyjątek`,
         subtitle: `→ opis: "${audit.opis_zapisany}"\n→ ${isPatternStr}\n→ utworzona reguła #${audit.rule_id}`,
       }
@@ -59,111 +92,55 @@ export function formatAuditAction(audit: AuditEntry): FormattedAction {
     case 'set_opis': {
       const pozycjiMatch = details.pozycji_matchujacych || '1'
       const opis = audit.opis_zapisany || details.opis
-      return {
-        iconName: 'Check',
-        color: 'green',
-        title: 'Worker wpisał opis',
-        subtitle: `"${opis}" (reguła #${audit.rule_id}, dopasowano ${pozycjiMatch} pozycję)`,
-      }
+      return { ...base, title: 'Worker wpisał opis', subtitle: `"${opis}" (reguła #${audit.rule_id}, dopasowano ${pozycjiMatch} pozycję)` }
     }
 
-    case 'auto_create_full': {
-      const nr = details.numer_faktury || details.numer_dokumentu || details.ksiegowe_numer || details.invoice_number || details.faktura_numer || details.numer || details.faktura || audit.pozycja_xml || ''
-      return {
-        iconName: 'CheckCircle2',
-        color: 'green',
-        title: 'Zaksięgowano w Rachmistrzu',
-        subtitle: nr ? `Faktura: ${nr}` : 'Automatyczne księgowanie',
-      }
+    case 'auto_create_full':
+    case 'resolved_to_auto_create': {
+      const nr = numerFaktury(details, audit)
+      return { ...base, subtitle: nr ? `Faktura: ${nr}` : 'Automatyczne księgowanie' }
     }
 
     case 'external_booked': {
-      const nr = details.numer_faktury || details.numer_dokumentu || details.ksiegowe_numer || details.invoice_number || details.faktura_numer || details.numer || details.faktura || audit.pozycja_xml || ''
-      return {
-        iconName: 'CheckCircle2',
-        color: 'purple',
-        title: 'Zaksięgowano ręcznie w Rachmistrzu (poza panelem)',
-        subtitle: nr ? `Faktura: ${nr}` : null,
-      }
+      const nr = numerFaktury(details, audit)
+      return { ...base, subtitle: nr ? `Faktura: ${nr}` : null }
     }
 
-    case 'approved': {
-      return {
-        iconName: 'CheckCircle2',
-        color: 'blue',
-        title: 'Zatwierdzono w panelu',
-        subtitle: details.by ? `przez ${details.by}` : null,
-      }
-    }
+    case 'approved':
+    case 'approved_with_edit_full':
+    case 'approved_with_full_edit':
+    case 'resolved':
+      return { ...base, subtitle: details.by || details.resolved_by ? `przez ${details.by || details.resolved_by}` : null }
 
-    case 'pre_fill_pending_review': {
-      return {
-        iconName: 'FileText',
-        color: 'gray',
-        title: 'Pre-fill gotowy do akceptacji',
-        subtitle: null,
-      }
-    }
+    case 'ignored':
+      return { ...base, subtitle: details.resolved_by ? `przez ${details.resolved_by}` : null }
+
+    case 'restored':
+      return { ...base, subtitle: details.restored_by ? `przez ${details.restored_by}` : null }
 
     case 'dry_run_create':
     case 'dry_run':
-      return {
-        iconName: 'Search',
-        color: 'gray',
-        title: 'Test (dry run)',
-        subtitle: `byłby wpisany opis "${details.opis || audit.opis_zapisany || ''}"`,
-      }
+      return { ...base, subtitle: `byłby wpisany opis "${details.opis || audit.opis_zapisany || ''}"` }
 
     case 'error':
-      return {
-        iconName: 'XCircle',
-        color: 'red',
-        title: 'Błąd',
-        subtitle: audit.error_message || details.error || 'nieznany błąd',
-      }
+      return { ...base, subtitle: audit.error_message || details.error || 'nieznany błąd' }
 
     case 'ignore_exception': {
       const ignoredBy = details.ignored_by || details.by || 'księgowa'
-      return {
-        iconName: 'MinusCircle',
-        color: 'gray',
-        title: `${ignoredBy} pominął wyjątek`,
-        subtitle: null,
-      }
+      return { ...base, title: `${ignoredBy} pominął wyjątek` }
     }
 
     case 'rule_edited':
-      return {
-        iconName: 'Wrench',
-        color: 'gray',
-        title: `Edytowano regułę #${audit.rule_id}`,
-        subtitle: details.edited_by ? `przez ${details.edited_by}` : null,
-      }
+      return { ...base, title: `Edytowano regułę #${audit.rule_id}`, subtitle: details.edited_by ? `przez ${details.edited_by}` : null }
 
     case 'rule_deleted':
-      return {
-        iconName: 'Trash2',
-        color: 'gray',
-        title: `Usunięto regułę #${audit.rule_id}`,
-        subtitle: details.deleted_by ? `przez ${details.deleted_by}` : null,
-      }
+      return { ...base, title: `Usunięto regułę #${audit.rule_id}`, subtitle: details.deleted_by ? `przez ${details.deleted_by}` : null }
 
     default: {
       if (audit.action && audit.action.startsWith('skip_')) {
-        const skipPart = audit.action.slice(5).replace(/_/g, ' ').trim()
-        return {
-          iconName: 'MinusCircle',
-          color: 'gray',
-          title: skipPart ? `Pominięto: ${skipPart}` : 'Pominięto',
-          subtitle: details.reason || details.powod || null,
-        }
+        return { ...base, subtitle: details.reason || details.powod || null }
       }
-      return {
-        iconName: 'HelpCircle',
-        color: 'gray',
-        title: audit.action || 'Nieznana akcja',
-        subtitle: null,
-      }
+      return base
     }
   }
 }
