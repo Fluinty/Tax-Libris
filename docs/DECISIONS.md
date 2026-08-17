@@ -665,3 +665,26 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   ktorych produkcja nigdy nie renderowala — jedna funkcja z twardym
   kontraktem i TEN wpis maja gwarantowac, ze nastepna analiza pozycji
   zacznie od pytania "ktore zrodlo czyta konsument?".
+- 2026-08-17 | ZNANY KOMPROMIS: brutto WYPROWADZANE w tabeli VAT podgladow
+  (badanie officialMatch, read-only): widok v2 nie serwuje wartoscBrutto
+  pozycji, wiec getOfficialVatTable liczy brutto per pozycja jako
+  round(netto x (1+stawka/100)) — a faktury bywaja liczone od SUM netto
+  stawki, stad groszowe rozjazdy wobec realnych brutto pozycji.
+  Pomiar 17.08 (396 aktywnych kart z pozycjami): 24 karty z roznica
+  > 0,5 gr, 3 karty > 1 gr, 1 karta > 2 gr; przy progu pol grosza
+  pojedyncze karty moga migrowac miedzy pomiarem numeric (SQL) a double
+  (przegladarka) — klasa wyniku bez zmian. Derived brutto per pozycja
+  moze rozniec sie o grosze od faktury; TABELA WORKERA (zapis_vat_data)
+  POZOSTAJE PRAWDA KSIEGOWA — zwykly approve bez edycji VAT bierze ja,
+  nie officialMatch, a sciezka "Przelicz stawki VAT" -> pozycje_vat_final
+  ma 9 uzyc w calej historii (0 aktywnych, 0 na kartach rozbieznych).
+  Kompromis AKCEPTOWANY (decyzja wlasciciela 17.08), kod bez zmian.
+  BACKLOG / zlecenie K1 (bez pilnosci): karta 2154 (FS 433/06/2026) —
+  zbadac, skad worker wzial wartosc_brutto=492 przy netto=300
+  w pojedynczej pozycji faktury_pozycje (podejrzenie: cena sprzed rabatu
+  z XML); ksiegowanie karty poprawne (derived = tabela workera = naglowek
+  369,00; ai_kwoty_per_kolumna licza z netto 300), rozjazd czysto ekranowy
+  | groszowa precyzja wyprowadzonej tabeli to koszt braku wartoscBrutto
+  w v2, a nie blad logiki — naprawianie jej zapisem z pozycji wprowadziloby
+  wieksze rozjazdy niz te grosze (przypadek 2154: "realne" brutto pozycji
+  bywa bledne, wyprowadzone zgadza sie z nexo).
