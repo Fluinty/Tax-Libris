@@ -1,5 +1,13 @@
 -- ============================================================================
 -- STATUS: DO WYKONANIA RĘCZNIE. Agent NIE wykonuje.
+-- WYKONANIE ODŁOŻONE (decyzja właściciela 17.08.2026): migracje 2026-08-*
+-- czekają na nową maszynę K1. Pliki ZAMROŻONE — bez poprawek do wykonania.
+-- WARUNEK WEJŚCIA: KROK 0 (snapshot CSV) wykonany i NIEPUSTY. Puste CSV =
+-- STOP — przy oczekiwanych ~338 rozjechanych pusty snapshot oznacza złą bazę,
+-- złe zapytanie albo stan inny niż zakładany; nie kontynuować bez wyjaśnienia.
+-- Kolejność na K1: KROK 0 snapshot -> trzy migracje 2026-08-* (między sobą
+-- obojętnie) -> KROK 2c VALIDATE -> KROK 3 (T1) -> osobne zlecenie: sync
+-- workera (external_booked/rollback) + kolejność zapisu w updateJpkSection.
 -- KROK 0 wymaga psql (\copy); KROKI 1-3 działają też w Supabase SQL Editor.
 -- KOLEJNOŚĆ WZGLĘDEM INNYCH MIGRACJI: obojętna. 2026-08-fala1.sql (RLS na
 -- faktura_events), 2026-08-restored.sql (CHECK na faktura_events.event_type)

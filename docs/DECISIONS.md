@@ -508,3 +508,20 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   | jedna tabela klamiaca o statusie to pulapka na kazdego przyszlego
   konsumenta i analityka (CLAUDE.md: kazda analiza statusow na queue), a dwie
   tabele mowiace to samo — warunek zaufania do guardow i osi czasu.
+- 2026-08-17 | WZORZEC PULAPKI (z domkniecia backfillu, Z6): LUZNA MAPA
+  badge'ow/etykiet indeksowana statusem przechodzi TypeScript BEZ BLEDU —
+  `Record<string, string>` i lancuchy `item.status === 'x' && <Badge/>`
+  nie sa wyczerpujace, wiec status spoza mapy renderuje sie jako PUSTA
+  kolumna/brak etykiety, a kompilator milczy. SKUTEK PRAKTYCZNY: kazde
+  rozszerzenie unionu statusow (i kazde pojawienie sie nowego statusu
+  w danych) wymaga GREPU PO MAPACH ETYKIET — po literalach statusow
+  w komponentach i po `Record<...>` — nie tylko po exhaustive-switchach,
+  ktorych w tym repo dla statusow kart w ogole nie ma (sprawdzone 17.08).
+  Przyklad z 17.08: external_booked (436 wierszy) i rolled_back (36) —
+  razem 472 wiersze renderowaly pusta kolumne statusu, bo trzy luzne mapy
+  ich nie znaly: getStatusBadge w src/app/(auth)/faktury/page.tsx,
+  getStatusBadge w src/components/client-detail/RecentExceptionsTable.tsx,
+  statusLabel w src/components/do-akceptacji/sections/FakturaEventsDrawer.tsx
+  (tam tez brakowalo 'skipped'). Wszystkie trzy uzupelnione przy backfillu
+  | union w types mowi, co MOZE przyjsc, ale o tym, co uzytkownik ZOBACZY,
+  decyduja mapy w komponentach — i one nie maja kompilatorowej siatki.
