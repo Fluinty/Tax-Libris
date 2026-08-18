@@ -700,8 +700,12 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   miec WIEKSZEJ frykcji niz klik ("ta sama swiadoma decyzja"). Karta bez
   alarmow: pojedynczy Enter bez zmian. rachunek_match_status='mismatch'
   NIE zmienia przycisku, wiec nie wchodzi do listy (fakturaWymagaUwagi to
-  INNY, szerszy predykat — sortowanie/oznaczenie, nie frykcja przycisku);
-  ewentualne rozszerzenie przycisku o mismatch = osobna decyzja
+  INNY, szerszy predykat — sortowanie/oznaczenie, nie frykcja przycisku).
+  DECYZJA WLASCICIELA 18.08: mismatch ZOSTAJE poza alarmami blokujacymi —
+  lista = dokladnie warunki zmieniajace przycisk (spojnosc klik<->Enter);
+  ranga rachunku wraca przy temacie bialej listy VAT w bramce i WTEDY
+  rozszerza sie OBA miejsca naraz (przycisk + Enter). Tej roznicy NIE
+  "naprawiac" jednostronnie
   | frykcja przy kliku byla iluzoryczna, skoro rytm Enter-Enter ja omijal.
 - 2026-08-17 | KONTRAKT OPISU przy zatwierdzaniu (AUDIT §4): `undefined`
   = bez zmiany -> zapis bierze propozycje AI; `''` (po trim) = celowe
