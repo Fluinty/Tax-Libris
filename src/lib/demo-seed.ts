@@ -10,9 +10,18 @@ export async function resetDemo() {
   const { data: queueIds } = await supabase.schema('fluinty').from('exceptions_queue').select('id').eq('client_nip', DEMO_NIP)
   const { data: fakturaIds } = await supabase.schema('fluinty').from('faktury').select('id').eq('client_nip', DEMO_NIP)
 
+  // Reset/seed CELOWO bez transakcyjności (AUDIT §4 wycenił RPC na L,
+  // decyzja 17.08: nieproporcjonalne dla środowiska demo). Zamiast tego:
+  // kolejność minimalizująca stan częściowy (dzieci przed rodzicami przy
+  // usuwaniu, rodzice przed dziećmi przy seedzie — jest niżej), każdy krok
+  // z jawnym błędem, a wszystkie operacje IDEMPOTENTNE — ponowny reset
+  // zaczyna od zera i bezpiecznie domyka stan częściowy.
   const checkError = (step: string, error: any) => {
     if (error) {
-      throw new Error(`Reset przerwany: nie można usunąć ${step} — ${error.message} ${error.details || ''}`)
+      throw new Error(
+        `Reset przerwany: nie można usunąć ${step} — ${error.message} ${error.details || ''}. ` +
+        `Uruchom reset demo ponownie — operacje są idempotentne i dokończą czyszczenie.`
+      )
     }
   }
 
@@ -241,6 +250,16 @@ export async function seedDemo(): Promise<{ created: number, errors: string[] }>
       result.created++;
     }
   }
-  
+
+  // Częściowy seed (część faktur weszła, część nie) = stan widoczny w UI,
+  // ale w pełni naprawialny — komunikat mówi jak, zamiast zostawiać admina
+  // z połowicznym demo bez instrukcji.
+  if (result.errors.length > 0) {
+    result.errors.push(
+      'Środowisko demo może być niekompletne — uruchom reset demo ponownie ' +
+      '(reset czyści wszystko i zasiewa od zera, operacja jest idempotentna).'
+    )
+  }
+
   return result;
 }

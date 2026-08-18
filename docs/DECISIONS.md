@@ -688,3 +688,48 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   w v2, a nie blad logiki — naprawianie jej zapisem z pozycji wprowadziloby
   wieksze rozjazdy niz te grosze (przypadek 2154: "realne" brutto pozycji
   bywa bledne, wyprowadzone zgadza sie z nexo).
+- 2026-08-17 | ENTER PRZY ALARMACH — dwustopniowy (ROADMAP §3, ogony audytu):
+  karta z aktywnym alarmem hasVendorAlarms (vendor_vat_active===false,
+  is_potential_duplicate, vendor_first_occurrence, date_anomaly —
+  confidence-helpers.ts; DOKLADNIE te, ktore zmieniaja przycisk w zolte
+  "Akceptuj mimo ostrzezen") nie zatwierdza sie pierwszym Enterem: pierwszy
+  fokusuje przycisk + toast z lista alarmow (listVendorAlarmy — te same
+  warunki, jedno zrodlo), drugi trafia w sfokusowany przycisk i guard
+  skrotow oddaje go przegladarce (natywna aktywacja = identyczna sciezka
+  co klik). CELOWO bez dialogu: klik nie ma dialogu, wiec Enter nie moze
+  miec WIEKSZEJ frykcji niz klik ("ta sama swiadoma decyzja"). Karta bez
+  alarmow: pojedynczy Enter bez zmian. rachunek_match_status='mismatch'
+  NIE zmienia przycisku, wiec nie wchodzi do listy (fakturaWymagaUwagi to
+  INNY, szerszy predykat — sortowanie/oznaczenie, nie frykcja przycisku);
+  ewentualne rozszerzenie przycisku o mismatch = osobna decyzja
+  | frykcja przy kliku byla iluzoryczna, skoro rytm Enter-Enter ja omijal.
+- 2026-08-17 | KONTRAKT OPISU przy zatwierdzaniu (AUDIT §4): `undefined`
+  = bez zmiany -> zapis bierze propozycje AI; `''` (po trim) = celowe
+  wyczyszczenie -> WALIDACJA z komunikatem (resolved_opis jest obowiazkowy —
+  worker bez opisu pomija karte). Dotad approveFaktura robil `override || ai`
+  (wyczyszczenie po cichu wracalo do AI, a klient dodatkowo zamienial ''
+  na undefined), gdy approveExceptionFull zapisywal pusty string. Teraz
+  OBIE sciezki + resolveException identycznie: pusty final opis = blad;
+  klient (FakturaCard) przekazuje undefined tylko gdy opis == propozycja AI.
+  Domkniete tez z drugiej strony: undefined + brak propozycji AI = ta sama
+  walidacja, nie zapis NULL | trzy zachowania jednego pola na dwoch
+  sciezkach to pulapka na kazdego, kto liczy na "opis zawsze jest".
+- 2026-08-17 | DIFF WIDZI RECZNA EDYCJE VAT + NIECIAGLOSC METRYKI (AUDIT §4):
+  buildEditDiff dostawal finalVat/finalPojazd i IGNOROWAL oba — edycja VAT
+  z EditModalu i updateFinalZapisVAT (transakcja zagraniczna) nie wchodzila
+  do diffu, wiec edycja_realna/edycja_ksiegowa/event 'edited' jej nie
+  widzialy (zapis final_* poprawny po fali 2; slad edycji niepelny).
+  Fix (dopiszVatDoDiffu): porownujemy scalenie Z final_zapis_vat_data vs
+  scalenie BEZ niego (sameJson, reuse z fali 2) — auto-wyprowadzenia
+  (wykluczenia art. 88/NKUP, auto-korekta rodzaju odliczenia) i kanaly
+  z wlasnymi flagami licza sie po OBU stronach i SIE KASUJA, wiec roznica
+  = wylacznie reka ksiegowej; naiwne sameJson(scalony, AI) daloby fantomy
+  klasy 75,7%-vs-73,5%. Pojazd CELOWO bez czlonu: oba reczne wejscia
+  (pojazd_id_final/rezim_paliwowy_final) sa pod flaga rezim_edited
+  + eventem rezim_changed — czlon dublowalby slad. NIECIAGLOSC METRYKI:
+  od tego commita edycja_ksiegowa lapie wiecej realnych edycji (VAT
+  z modalu/transakcji zagranicznej), wiec czystosc ksiegowa i precyzja
+  bramki liczone przez flagi NIE sa porownywalne 1:1 z liczbami sprzed
+  — kazde zestawienie przed/po wymaga adnotacji o dacie tego commita
+  | metryka, ktora nie widzi realnych edycji VAT, zawyzala czystosc:
+  lepiej jawna nieciaglosc niz ciagla nieprawda.

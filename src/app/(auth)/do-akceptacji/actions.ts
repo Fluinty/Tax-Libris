@@ -42,6 +42,15 @@ function validateOpisInput(opis: string | null | undefined): string | null {
   return null
 }
 
+// ── Kontrakt opisu (AUDIT §4, DECISIONS 17.08) ──────────────────────────────
+// `undefined` = bez zmiany → zapis bierze propozycję AI. `''` (po trim)
+// = celowe wyczyszczenie → BLOKUJEMY z komunikatem: resolved_opis jest
+// obowiązkowy (worker bez opisu pomija kartę). Dotąd jedna ścieżka po cichu
+// wracała do AI (`overrideOpis || ai`), a bliźniacza zapisywała pusty string —
+// teraz obie identycznie.
+const OPIS_WYMAGANY =
+  'Opis księgowy jest wymagany do księgowania — wpisz opis albo przywróć propozycję AI'
+
 // Lekka walidacja strukturalna zapisu VAT z wejścia wołającego — payload idzie
 // 1:1 do final_zapis_vat_data, z którego worker księguje; łapiemy klasę
 // "nie-liczba/nie-finite w polu kwotowym", pełna walidacja domenowa jest po
@@ -253,6 +262,36 @@ function buildEditDiff(
   return Object.keys(diff).length > 0 ? diff : null
 }
 
+// ── Człon diffu dla ręcznej edycji VAT (AUDIT §4, decyzja 17.08) ────────────
+// buildEditDiff dostawał finalVat/finalPojazd i IGNOROWAŁ oba — edycja VAT
+// z modalu i updateFinalZapisVAT nie wchodziła do diffu, więc flagi/eventy/
+// metryka edycja_ksiegowa jej nie widziały (zapis poprawny po fali 2, ślad
+// niepełny). Naiwne sameJson(scalonyVat, AI) wprowadziłoby FANTOMY: scalony
+// VAT to wartość WYPROWADZONA (wykluczenia art. 88/NKUP, auto-korekta rodzaju
+// odliczenia) — różnica od AI nie dowodzi ręki księgowej (klasa 75,7% vs
+// 73,5%). Dlatego porównujemy scalenie Z final_zapis_vat_data vs scalenie BEZ
+// niego: auto-wyprowadzenia i kanały z własnymi flagami (GTU, procedury,
+// pozycje VAT) liczone po OBU stronach się kasują — różnica to wyłącznie
+// wkład jedynego NIEoflagowanego ręcznego kanału VAT (updateFinalZapisVAT,
+// EditModal). Pojazd celowo BEZ członu: oba ręczne wejścia
+// (pojazd_id_final/rezim_paliwowy_final) są pod flagą rezim_edited
+// + eventem rezim_changed — człon dublowałby ślad.
+function dopiszVatDoDiffu(
+  diff: Record<string, { z: unknown; na: unknown }> | null,
+  scalonyVat: unknown,
+  exceptionScalone: any,
+  pozycjeEditable: any[],
+  scalonyPojazd: any,
+): Record<string, { z: unknown; na: unknown }> | null {
+  const vatBezReki = mergeInlineEditsVat(
+    { ...exceptionScalone, final_zapis_vat_data: null },
+    pozycjeEditable,
+    scalonyPojazd
+  )
+  if (sameJson(scalonyVat ?? null, vatBezReki ?? null)) return diff
+  return { ...(diff ?? {}), zapis_vat: { z: 'wyprowadzone (AI + auto-korekty)', na: 'edytowane ręcznie' } }
+}
+
 // ── Kontrakt final_* (docs/DECISIONS.md 2026-08-05, przywrócony 2026-08-12) ──
 // Zatwierdzenie BEZ realnej edycji nie kopiuje ai_* do final_*: pole idzie jako
 // NULL do OBU tabel, a worker księguje z ai_* (kwoty czyta jako `final or ai`,
@@ -453,6 +492,10 @@ async function updateFakturaOnFinish(
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
+  // Kontrakt opisu: '' = celowe wyczyszczenie → walidacja, nie cichy powrót do AI
+  if (overrideOpis !== undefined && overrideOpis.trim() === '') {
+    return { success: false, error: OPIS_WYMAGANY }
+  }
   const opisError = validateOpisInput(overrideOpis)
   if (opisError) return { success: false, error: opisError }
 
@@ -496,13 +539,22 @@ export async function approveFaktura(exceptionId: number, overrideOpis?: string)
   const scalonyPojazd = mergeInlineEditsPojazd(exception, pozycjeEditable ?? [], kwotyDoZapisu)
   const scalonyVat = mergeInlineEditsVat(exception, pozycjeEditable ?? [], scalonyPojazd)
 
-  const opisDoZapisu = overrideOpis || exception.ai_proponowany_opis
+  // `??` zamiast `||`: undefined = bez zmiany → AI; '' zablokowane na wejściu.
+  // Wynik pusty (undefined + brak propozycji AI) też blokujemy — resolved_opis
+  // jest obowiązkowy, worker bez opisu pomija kartę przy księgowaniu.
+  const opisDoZapisu = overrideOpis ?? exception.ai_proponowany_opis
+  if (!opisDoZapisu || !String(opisDoZapisu).trim()) {
+    return { success: false, error: OPIS_WYMAGANY }
+  }
 
   const targetStatus = isDemo ? 'auto_created' : 'approved'
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
   const baseline1 = await resolveAiBaseline(supabase, exception, queueId)
-  const diff1 = buildEditDiff(exception, baseline1, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd)
+  const diff1 = dopiszVatDoDiffu(
+    buildEditDiff(exception, baseline1, opisDoZapisu, kwotyDoZapisu, scalonyVat, scalonyPojazd),
+    scalonyVat, exception, pozycjeEditable ?? [], scalonyPojazd
+  )
   const editFlags = computeEditFlags(diff1, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
   const finalne = finalDoZapisu({
     kwoty: kwotyDoZapisu, vat: scalonyVat, pojazd: scalonyPojazd,
@@ -589,6 +641,11 @@ export async function approveExceptionFull(
 ) {
   const kwotyCheck = validateKwotyInput(finalKwotyPerKolumna)
   if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
+  // Kontrakt opisu: bliźniacza ścieżka zapisywała pusty string — teraz jak
+  // approveFaktura: pusty (po trim) opis blokowany, resolved_opis obowiązkowy
+  if ((finalOpis ?? '').trim() === '') {
+    return { success: false, error: OPIS_WYMAGANY }
+  }
   const inputError = validateOpisInput(finalOpis) ?? validateZapisVatInput(finalZapisVatData)
   if (inputError) return { success: false, error: inputError }
 
@@ -635,7 +692,13 @@ export async function approveExceptionFull(
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
   const baseline3 = await resolveAiBaseline(supabase, exception, queueId)
-  const diff3 = buildEditDiff(exception, baseline3, finalOpis, roundedKwoty, baseVat, scalonyPojazd)
+  // exceptionScalone z finalZapisVatData modala — vatBezReki zeruje TEN wkład
+  const diff3 = dopiszVatDoDiffu(
+    buildEditDiff(exception, baseline3, finalOpis, roundedKwoty, baseVat, scalonyPojazd),
+    baseVat,
+    finalZapisVatData ? { ...exception, final_zapis_vat_data: finalZapisVatData } : exception,
+    pozycjeEditable ?? [], scalonyPojazd
+  )
   const editFlags = computeEditFlags(diff3, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
   const finalne = finalDoZapisu({
     kwoty: roundedKwoty, vat: baseVat, pojazd: scalonyPojazd,
@@ -798,6 +861,11 @@ export async function updateFinalZapisVAT(
 export async function resolveException(exceptionId: number, opis: string, kwoty: Record<string, number> = {}, zapisVatData: any = null) {
   const kwotyCheck = validateKwotyInput(kwoty)
   if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
+  // Ten sam kontrakt opisu co approve*: UI blokuje przycisk bez opisu, ale
+  // server action to publiczny POST — pusty resolved_opis nie może przejść
+  if ((opis ?? '').trim() === '') {
+    return { success: false, error: OPIS_WYMAGANY }
+  }
   const inputError = validateOpisInput(opis) ?? validateZapisVatInput(zapisVatData)
   if (inputError) return { success: false, error: inputError }
 
@@ -841,7 +909,12 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
 
   // ── Oblicz diff i flagi edycji PRZED zapisem ──
   const baseline4 = await resolveAiBaseline(supabase, exception, queueId)
-  const diff4 = buildEditDiff(exception, baseline4, opis, roundedKwoty, baseVat, scalonyPojazd)
+  const diff4 = dopiszVatDoDiffu(
+    buildEditDiff(exception, baseline4, opis, roundedKwoty, baseVat, scalonyPojazd),
+    baseVat,
+    zapisVatData ? { ...exception, final_zapis_vat_data: zapisVatData } : exception,
+    pozycjeEditable ?? [], scalonyPojazd
+  )
   const editFlags = computeEditFlags(diff4, !!exception.rezim_edited, !!exception.pozycje_vat_edited)
   const finalne = finalDoZapisu({
     kwoty: roundedKwoty, vat: baseVat, pojazd: scalonyPojazd,

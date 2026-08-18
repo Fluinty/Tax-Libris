@@ -415,12 +415,19 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
       JSON.stringify(currentKpirKwoty) !== JSON.stringify(exception.ai_kwoty_per_kolumna || {})
     )
 
+    // Kontrakt opisu (DECISIONS 17.08): undefined = bez zmiany (serwer bierze
+    // AI), '' = celowe wyczyszczenie → serwer ZABLOKUJE z komunikatem.
+    // Dotąd `editableOpis || undefined` zamieniało wyczyszczenie na cichy
+    // powrót do AI, a bliźniacza ścieżka (`|| ''`) zapisywała pusty string.
+    const opisParam = editableOpis === (exception.ai_proponowany_opis || '')
+      ? undefined
+      : editableOpis
     let res;
     if (isKpirChanged || exception.pozycje_vat_edited) {
       // Pass the current KPiR amounts to save them
-      res = await approveExceptionFull(actionId, currentKpirKwoty, exception.final_zapis_vat_data || exception.zapis_vat_data, editableOpis || '')
+      res = await approveExceptionFull(actionId, currentKpirKwoty, exception.final_zapis_vat_data || exception.zapis_vat_data, editableOpis)
     } else {
-      res = await approveFaktura(actionId, editableOpis || undefined)
+      res = await approveFaktura(actionId, opisParam)
     }
     
     if (res.success) {
