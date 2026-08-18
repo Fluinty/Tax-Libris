@@ -71,5 +71,25 @@ export function hasVendorAlarms(exception: {
   return false;
 }
 
+/**
+ * Etykiety AKTYWNYCH alarmów — dokładnie te same warunki co hasVendorAlarms
+ * (jedno źródło: rozszerzając jeden, rozszerz drugi). Używane w komunikacie
+ * dwustopniowego Entera (FakturaCard): pierwszy Enter przy alarmach nie
+ * zatwierdza, tylko fokusuje przycisk i wymienia, CO jest nie tak.
+ */
+export function listVendorAlarmy(exception: {
+  vendor_vat_active?: boolean | null;
+  vendor_first_occurrence?: boolean;
+  is_potential_duplicate?: boolean;
+  date_anomaly?: string | null;
+}): string[] {
+  const alarmy: string[] = [];
+  if (exception.vendor_vat_active === false) alarmy.push('kontrahent z nieaktywnym VAT');
+  if (exception.is_potential_duplicate) alarmy.push('możliwy duplikat');
+  if (exception.vendor_first_occurrence) alarmy.push('pierwsza faktura od tego dostawcy');
+  if (exception.date_anomaly) alarmy.push(`anomalia daty (${exception.date_anomaly})`);
+  return alarmy;
+}
+
 export { fakturaWymagaUwagi } from './faktura-uwaga';
 

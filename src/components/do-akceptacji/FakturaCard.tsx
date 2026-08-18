@@ -33,7 +33,7 @@ import {
   REZIM_VAT_LABELS,
   REZIM_KPIR_LABELS
 } from '@/lib/vat'
-import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms } from '@/lib/confidence-helpers'
+import { getConfidenceCardClasses, getWeakDimensionsCount, hasVendorAlarms, listVendorAlarmy } from '@/lib/confidence-helpers'
 import { parsePolishNumber } from '@/lib/parse-number'
 import { kpirDisplayNum } from '@/lib/kpir-labels'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, normalizujRezim, applyPozycjeVatFinal, computeEffectivePozycjeVat } from '@/lib/merge-helpers'
@@ -301,6 +301,21 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
   const overlayStateRef = useRef(false)
   overlayStateRef.current = showEditModal || showPreviewModal || showEventsDrawer || openCombobox
 
+  // ── Dwustopniowy Enter przy alarmach (ROADMAP §3, decyzja 17.08) ──────────
+  // Przycisk „Zatwierdź i księguj" przy alarmach hasVendorAlarms zmienia się
+  // w żółte „Akceptuj mimo ostrzeżeń ⚠" — klik wymaga przeczytania tej treści.
+  // Enter tę frykcję omijał (rytm Enter-Enter-Enter księgował też karty
+  // z czerwonymi flagami). Teraz: pierwszy Enter na karcie z alarmem NIE
+  // zatwierdza — fokusuje żółty przycisk i wymienia alarmy w toaście; drugi
+  // Enter trafia w SFOKUSOWANY przycisk, a guard (2) niżej przepuszcza go do
+  // natywnej aktywacji — czyli dosłownie ta sama ścieżka co klik, bez
+  // dodatkowego dialogu (klik go nie ma, więc Enter też nie może mieć więcej
+  // frykcji niż klik). Karta BEZ alarmów: pojedynczy Enter jak dotąd.
+  // Ref-wzorzec jak overlayStateRef: listener czyta zawsze aktualny stan.
+  const approveButtonRef = useRef<HTMLButtonElement>(null)
+  const alarmStateRef = useRef<{ active: boolean; lista: string[] }>({ active: false, lista: [] })
+  alarmStateRef.current = { active: showAlarms, lista: listVendorAlarmy(exception) }
+
   useEffect(() => {
     if (!isActive) return
 
@@ -344,7 +359,24 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
       // w UI — patrz docs/DECISIONS.md 2026-08-13.
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (stan === 'pending_review') keyActionsRef.current.approve()
+        if (stan === 'pending_review') {
+          // Karta z alarmem: pierwszy Enter uzbraja zamiast zatwierdzać —
+          // fokus na żółtym przycisku + lista alarmów. Drugi Enter przyjdzie
+          // z fokusem NA przycisku, więc guard (2) wyżej odda go przeglądarce
+          // (natywna aktywacja = handleApprove, jak klik). Frykcja dotyczy
+          // wyłącznie ścieżki approve — przycisk resolve (pending) nie ma
+          // wariantu alarmowego, więc i Enter go tam nie dostaje (symetria).
+          if (alarmStateRef.current.active) {
+            approveButtonRef.current?.focus()
+            approveButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            toast.warning('Karta ma aktywne ostrzeżenia — Enter nie zatwierdza za pierwszym razem', {
+              description: `${alarmStateRef.current.lista.join(', ')}. Naciśnij Enter ponownie (przycisk jest sfokusowany) albo kliknij „Akceptuj mimo ostrzeżeń", żeby zatwierdzić świadomie.`,
+              duration: 6000,
+            })
+            return
+          }
+          keyActionsRef.current.approve()
+        }
         if (stan === 'pending') keyActionsRef.current.resolve()
       } else if (e.key === 'e' || e.key === 'E') {
         e.preventDefault()
@@ -1378,7 +1410,7 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
             <div className="text-xs text-[#64748B] mb-3 sm:mb-0">
               {/* Bez Esc — pominięcie wyłącznie przyciskiem „Pomiń" obok
                   (docs/DECISIONS.md 2026-08-13). */}
-              <kbd className="bg-white border rounded px-1.5 py-0.5 mr-1 font-mono shadow-sm">Enter</kbd> zatwierdź ·
+              <kbd className="bg-white border rounded px-1.5 py-0.5 mr-1 font-mono shadow-sm">Enter</kbd> {showAlarms ? 'zatwierdź (×2 — ostrzeżenia)' : 'zatwierdź'} ·
               <kbd className="bg-white border rounded px-1.5 py-0.5 mx-1 font-mono shadow-sm">E</kbd> edytuj
             </div>
             <div className="flex gap-2">
@@ -1388,9 +1420,10 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
               <Button variant="ghost" className="text-[#64748B]" onClick={handleIgnore} disabled={isSubmitting}>
                 Pomiń
               </Button>
-              <Button 
-                className={cn("text-white", showAlarms ? "bg-yellow-600 hover:bg-yellow-700" : "bg-[#1F3A5F] hover:bg-[#2A4D7C]")} 
-                onClick={handleApprove} 
+              <Button
+                ref={approveButtonRef}
+                className={cn("text-white", showAlarms ? "bg-yellow-600 hover:bg-yellow-700" : "bg-[#1F3A5F] hover:bg-[#2A4D7C]")}
+                onClick={handleApprove}
                 disabled={isSubmitting}
               >
                 {showAlarms ? 'Akceptuj mimo ostrzeżeń ⚠' : 'Zatwierdź i księguj'}
