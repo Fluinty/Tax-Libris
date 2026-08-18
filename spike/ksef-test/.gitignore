@@ -1,0 +1,6 @@
+bin/
+obj/
+spike-wynik.log
+spike-console.log
+*.pfx
+*.cer

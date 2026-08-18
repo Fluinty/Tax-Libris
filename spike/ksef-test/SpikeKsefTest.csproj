@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SPIKE — kod NIE-produkcyjny (docs/SPIKE-TEST-ksef.md). Poza buildem panelu
+       (Next.js nie widzi spike/). Wymaga lokalnego klonu oficjalnego klienta KSeF:
+       C:\Users\Adamn\ksef-client-csharp na tagu 2.7.0 (ścieżka względna niżej —
+       klon obok katalogu OneDrive użytkownika; na innej maszynie popraw ścieżki). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Klon multi-targetuje net48..net10.0, a lokalny SDK to 9 — budować
+         ZAWSZE z globalnym nadpisaniem listy TFM:
+           dotnet build -p:TargetFrameworks=net9.0
+           dotnet run  -p:TargetFrameworks=net9.0
+         (bez tej flagi restore klonu wywala się na net10.0 / NETSDK1045) -->
+    <ProjectReference Include="..\..\..\..\..\ksef-client-csharp\KSeF.Client\KSeF.Client.csproj" />
+    <ProjectReference Include="..\..\..\..\..\ksef-client-csharp\KSeF.Client.Core\KSeF.Client.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\..\ksef-client-csharp\KSeF.Client.Tests.Utils\KSeF.Client.Tests.Utils.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Szablon FA(3) z oficjalnego repo testów — OnlineSessionUtils czyta
+         z {BaseDirectory}/Templates/ -->
+    <Content Include="Templates\invoice-template-fa-3.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
