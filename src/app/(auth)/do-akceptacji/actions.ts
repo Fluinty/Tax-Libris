@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { mergeInlineEditsVat, mergeInlineEditsPojazd, roundKwoty } from '@/lib/merge-helpers'
 import { assertCanWrite, assertCanWriteClient, getAllowedNips, assertNipReadAccess } from '@/lib/auth-helpers'
 import { KOLUMNY_PER_TYP } from '@/lib/kpir'
-import { parsePolishNumber } from '@/lib/parse-number'
+import { parsePolishNumber, roundKwota } from '@/lib/parse-number'
 
 // ── Walidacja wejść formularza (kwoty KPiR + opis) ────────────────────────
 // Server actions to publiczne endpointy POST — `kwoty` idą wprost do
@@ -48,8 +48,10 @@ function validateOpisInput(opis: string | null | undefined): string | null {
 // obowiązkowy (worker bez opisu pomija kartę). Dotąd jedna ścieżka po cichu
 // wracała do AI (`overrideOpis || ai`), a bliźniacza zapisywała pusty string —
 // teraz obie identycznie.
+// Treść neutralna wobec ścieżki: na pending zwykle NIE ma propozycji AI do
+// „przywrócenia", więc komunikat nie może jej obiecywać (recenzja 18.08).
 const OPIS_WYMAGANY =
-  'Opis księgowy jest wymagany do księgowania — wpisz opis albo przywróć propozycję AI'
+  'Opis księgowy jest wymagany do księgowania — wpisz lub wybierz opis'
 
 // Lekka walidacja strukturalna zapisu VAT z wejścia wołającego — payload idzie
 // 1:1 do final_zapis_vat_data, z którego worker księguje; łapiemy klasę
@@ -276,6 +278,24 @@ function buildEditDiff(
 // EditModal). Pojazd celowo BEZ członu: oba ręczne wejścia
 // (pojazd_id_final/rezim_paliwowy_final) są pod flagą rezim_edited
 // + eventem rezim_changed — człon dublowałby ślad.
+// Liczby zaokrąglane do grosza PRZED porównaniem — WYŁĄCZNIE w tym diffie,
+// tor zapisu nietknięty. Bez tego EditModal robił fantomy: handleSave modala
+// przelicza sumy niezaokrąglonym reduce (62.800000000000004), a baza trzyma
+// 62.8 — sameJson widziało „edycję" po samym szumie double (recenzja 18.08:
+// 5 kart w próbce 200 z sumami różnymi binarnie o ~1e-13).
+function zaokraglijKwotyDoPorownania(v: unknown): unknown {
+  if (typeof v === 'number') return roundKwota(v) ?? v
+  if (Array.isArray(v)) return v.map(zaokraglijKwotyDoPorownania)
+  if (v !== null && typeof v === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = zaokraglijKwotyDoPorownania(val)
+    }
+    return out
+  }
+  return v
+}
+
 function dopiszVatDoDiffu(
   diff: Record<string, { z: unknown; na: unknown }> | null,
   scalonyVat: unknown,
@@ -288,7 +308,10 @@ function dopiszVatDoDiffu(
     pozycjeEditable,
     scalonyPojazd
   )
-  if (sameJson(scalonyVat ?? null, vatBezReki ?? null)) return diff
+  if (sameJson(
+    zaokraglijKwotyDoPorownania(scalonyVat ?? null),
+    zaokraglijKwotyDoPorownania(vatBezReki ?? null)
+  )) return diff
   return { ...(diff ?? {}), zapis_vat: { z: 'wyprowadzone (AI + auto-korekty)', na: 'edytowane ręcznie' } }
 }
 
@@ -492,7 +515,12 @@ async function updateFakturaOnFinish(
 
 // ZATWIERDŹ (dla pending_review - pełna akceptacja tego co AI wymyśliło)
 export async function approveFaktura(exceptionId: number, overrideOpis?: string) {
-  // Kontrakt opisu: '' = celowe wyczyszczenie → walidacja, nie cichy powrót do AI
+  // Kontrakt opisu: '' = celowe wyczyszczenie → walidacja, nie cichy powrót
+  // do AI. Kontrola TYPU przed .trim(): publiczny POST może przysłać
+  // nie-stringa, a TypeError zamroziłby akcję zamiast zwrócić błąd.
+  if (overrideOpis !== undefined && typeof overrideOpis !== 'string') {
+    return { success: false, error: 'Nieprawidłowy opis księgowy' }
+  }
   if (overrideOpis !== undefined && overrideOpis.trim() === '') {
     return { success: false, error: OPIS_WYMAGANY }
   }
@@ -642,7 +670,11 @@ export async function approveExceptionFull(
   const kwotyCheck = validateKwotyInput(finalKwotyPerKolumna)
   if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
   // Kontrakt opisu: bliźniacza ścieżka zapisywała pusty string — teraz jak
-  // approveFaktura: pusty (po trim) opis blokowany, resolved_opis obowiązkowy
+  // approveFaktura: pusty (po trim) opis blokowany, resolved_opis obowiązkowy.
+  // Kontrola typu przed .trim() (publiczny POST — nie-string to błąd, nie TypeError)
+  if (finalOpis != null && typeof finalOpis !== 'string') {
+    return { success: false, error: 'Nieprawidłowy opis księgowy' }
+  }
   if ((finalOpis ?? '').trim() === '') {
     return { success: false, error: OPIS_WYMAGANY }
   }
@@ -862,7 +894,11 @@ export async function resolveException(exceptionId: number, opis: string, kwoty:
   const kwotyCheck = validateKwotyInput(kwoty)
   if (kwotyCheck.error) return { success: false, error: kwotyCheck.error }
   // Ten sam kontrakt opisu co approve*: UI blokuje przycisk bez opisu, ale
-  // server action to publiczny POST — pusty resolved_opis nie może przejść
+  // server action to publiczny POST — pusty resolved_opis nie może przejść.
+  // Kontrola typu przed .trim() (nie-string to błąd, nie TypeError)
+  if (opis != null && typeof opis !== 'string') {
+    return { success: false, error: 'Nieprawidłowy opis księgowy' }
+  }
   if ((opis ?? '').trim() === '') {
     return { success: false, error: OPIS_WYMAGANY }
   }

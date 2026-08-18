@@ -50,7 +50,7 @@ export function RealtimeToast({ currentPendingCount }: RealtimeToastProps) {
             </div>
             <div className="flex items-center justify-between p-2 rounded bg-slate-50">
               <span className="font-mono bg-white px-2 py-1 rounded border shadow-sm">Enter</span>
-              <span className="text-slate-600">Zatwierdź</span>
+              <span className="text-slate-600">Zatwierdź (ostrzeżenia: ×2)</span>
             </div>
             <div className="flex items-center justify-between p-2 rounded bg-slate-50">
               <span className="font-mono bg-white px-2 py-1 rounded border shadow-sm">E</span>

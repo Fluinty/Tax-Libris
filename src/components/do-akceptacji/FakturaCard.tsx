@@ -331,13 +331,29 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
         return
       }
+      // 1b) AUTO-REPEAT Entera jest odrzucany W CAŁOŚCI (recenzja 18.08):
+      //    bez tego przytrzymanie Entera na karcie z alarmem redukowało
+      //    dwustopniową frykcję do jednego fizycznego naciśnięcia — keydown #1
+      //    uzbrajał (fokus na przycisku), a keydown #2 (repeat) trafiał już
+      //    w sfokusowany przycisk i guard (2) oddawał go przeglądarce
+      //    (natywna aktywacja). preventDefault na repeat blokuje też natywną
+      //    aktywację sfokusowanego przycisku — drugi Enter musi być NOWYM
+      //    naciśnięciem (keyup pomiędzy). Pola formularzy repeat dostają
+      //    normalnie (guard (1) wyżej zwraca wcześniej).
+      if (e.key === 'Enter' && e.repeat) {
+        e.preventDefault()
+        return
+      }
       // 2) Sfokusowany przycisk/link — Enter musi go AKTYWOWAĆ, nie zatwierdzić
       //    karty. Bez tego dojście Tabem do „Pomiń" i naciśnięcie Enter
       //    księgowało fakturę (preventDefault kasował natywny klik przycisku),
       //    czyli jedyna dozwolona droga pominięcia robiła z klawiatury coś
       //    dokładnie odwrotnego. Dotyczy też „Edytuj" i triggerów sekcji, które
       //    zostają sfokusowane po kliknięciu myszą.
-      if (target?.closest?.('button, a[href], [role="button"], [role="link"]')) return
+      //    TYLKO dla Enter: litera „E" na sfokusowanym przycisku nie ma żadnej
+      //    natywnej akcji, a po uzbrojeniu alarmowym (fokus na przycisku
+      //    approve) skrót edycji musi dalej działać (recenzja 18.08).
+      if (e.key === 'Enter' && target?.closest?.('button, a[href], [role="button"], [role="link"]')) return
       // 3) Fokus wewnątrz nakładki — nakładki renderują się w portalu, więc
       //    cardRef.contains() ich nie obejmuje; identyfikujemy po data-slot.
       if (target?.closest?.(OVERLAY_SELECTOR)) return
@@ -367,7 +383,13 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
           // wyłącznie ścieżki approve — przycisk resolve (pending) nie ma
           // wariantu alarmowego, więc i Enter go tam nie dostaje (symetria).
           if (alarmStateRef.current.active) {
-            approveButtonRef.current?.focus()
+            // Submit w toku: przycisk jest disabled (nie przyjmie fokusu),
+            // a toast obiecywałby fokus, którego nie ma + spamował co Enter.
+            // Cichy no-op — jak guard isSubmitting w handleApprove.
+            if (approveButtonRef.current?.disabled) return
+            // preventScroll: sam focus() scrollowałby SKOKOWO zanim
+            // scrollIntoView zrobi płynne wyśrodkowanie (recenzja 18.08)
+            approveButtonRef.current?.focus({ preventScroll: true })
             approveButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
             toast.warning('Karta ma aktywne ostrzeżenia — Enter nie zatwierdza za pierwszym razem', {
               description: `${alarmStateRef.current.lista.join(', ')}. Naciśnij Enter ponownie (przycisk jest sfokusowany) albo kliknij „Akceptuj mimo ostrzeżeń", żeby zatwierdzić świadomie.`,
@@ -445,7 +467,10 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
   }
 
   const handleEditSave = async (opis: string, kwoty: Record<string, number>, zapisVat: ZapisVATData | null) => {
-    setShowEditModal(false)
+    // Modal zamykamy dopiero PO sukcesie akcji: zamknięcie resetuje stan
+    // modala (useEffect na open), więc odrzucenie walidacją (np. pusty opis —
+    // OPIS_WYMAGANY) kasowałoby wszystkie zmienione kwoty i tabelę VAT,
+    // zostawiając księgową z samym toastem (recenzja 18.08).
     setIsSubmitting(true)
 
     // Pre-check status w Supabase
@@ -453,12 +478,15 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
     try {
       const { status: currentStatus } = await checkExceptionStatus(actionId)
       if (!currentStatus || !['pending', 'pending_review'].includes(currentStatus)) {
+        // Karta znika z listy — modal nie ma już czego edytować
+        setShowEditModal(false)
         toast.warning('Ta faktura ma już inny status (ktoś ją zaksięgował lub zatwierdził). Odświeżam listę.', { duration: 5000 })
         router.refresh()
         setIsSubmitting(false)
         return
       }
     } catch {
+      // Modal zostaje — retry bez utraty wpisanych zmian
       toast.error('Nie udało się zweryfikować statusu faktury. Spróbuj ponownie.')
       setIsSubmitting(false)
       return
@@ -466,11 +494,13 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
 
     const res = await approveExceptionFull(actionId, kwoty, zapisVat, opis)
     if (res.success) {
+      setShowEditModal(false)
       toast.success('Zapisano z edytowanymi kwotami')
       if (res.warning) toast.warning('Uwaga', { description: res.warning })
       onResolved?.(exception.id)
       // BEZ router.refresh() — revalidatePath w akcji dostarcza swiezy payload (patrz handleApprove)
     } else {
+      // Modal ZOSTAJE otwarty — księgowa poprawia opis/kwoty bez utraty zmian
       toast.error(res.error || 'Wystąpił błąd')
       setIsSubmitting(false)
     }
@@ -1534,7 +1564,9 @@ function FakturaCardInner({ exception, stan, isActive, clientOpisy, clientPojazd
                       <button
                         className="w-full text-left px-2 py-1.5 text-sm hover:bg-slate-100"
                         onClick={() => {
-                          setSelectedOpis(searchValue)
+                          // trim: spacje w wyszukiwarce odblokowywały Zatwierdź
+                          // whitespace-opisem, który serwer i tak odrzuci
+                          setSelectedOpis(searchValue.trim())
                           setOpenCombobox(false)
                         }}
                       >

@@ -577,9 +577,9 @@ export function EditModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Anuluj
           </Button>
-          <Button 
-            onClick={handleSave} 
-            disabled={!isMatched || !opis}
+          <Button
+            onClick={handleSave}
+            disabled={!isMatched || !opis.trim()}
             className="bg-[#1F3A5F] hover:bg-[#2A4D7C] text-white"
           >
             Zatwierdź zmiany

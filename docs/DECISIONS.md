@@ -726,7 +726,18 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   = wylacznie reka ksiegowej; naiwne sameJson(scalony, AI) daloby fantomy
   klasy 75,7%-vs-73,5%. Pojazd CELOWO bez czlonu: oba reczne wejscia
   (pojazd_id_final/rezim_paliwowy_final) sa pod flaga rezim_edited
-  + eventem rezim_changed — czlon dublowalby slad. NIECIAGLOSC METRYKI:
+  + eventem rezim_changed — czlon dublowalby slad. ZNANE OGRANICZENIE
+  (recenzja 18.08): na kartach z aktywnym wykluczeniem (effective 'brak'/
+  NKUP) recompute mergeInlineEditsVat NADPISUJE wiersze payloadu modala
+  wartosciami wyprowadzonymi PO OBU stronach porownania — reczna edycja
+  pozycji VAT w EditModalu jest tam kasowana przez tor zapisu (keepManualRows
+  chroni wylacznie inline pozycje_vat_final — defekt FALI 2, sprzed tego
+  zakresu) i diff jej nie widzi, bo do zapisu nie dociera. Domkniecie =
+  zmiana toru zapisu (keepManualRows dla payloadu modala) — wymaga osobnej
+  zgody wlasciciela, w backlogu. Porownanie diffu zaokragla kwoty do grosza
+  (zaokraglijKwotyDoPorownania) — sumy modala licza sie niezaokraglonym
+  reduce i szum double (~1e-13; 5 kart w probce 200, pomiar 18.08) robilby
+  fantomy "edytowane recznie" bez reki. NIECIAGLOSC METRYKI:
   od tego commita edycja_ksiegowa lapie wiecej realnych edycji (VAT
   z modalu/transakcji zagranicznej), wiec czystosc ksiegowa i precyzja
   bramki liczone przez flagi NIE sa porownywalne 1:1 z liczbami sprzed
