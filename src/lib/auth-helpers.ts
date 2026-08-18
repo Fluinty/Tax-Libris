@@ -132,15 +132,22 @@ export async function assertCanWriteClient(clientNip: string) {
 export async function assertCanWrite(exceptionId: number) {
   const { nips, isAdmin, panelUser, demoNips } = await getAllowedNips()
   if (!panelUser || panelUser.rola === 'klient') throw new Error('Brak uprawnień do zapisu')
+  // Błąd odczytu ≠ brak wiersza (AUDIT §2): przy awarii bazy data=null dawało
+  // mylące „Nie znaleziono faktury". Fail-closed zostaje (dalej throw), ale
+  // komunikat mówi prawdę — tabelę i przyczynę, nie fałszywy brak uprawnień.
   const admin = createSupabaseAdmin()
-  let { data } = await admin.from('faktury').select('client_nip, status').eq('id', exceptionId).maybeSingle()
+  const r1 = await admin.from('faktury').select('client_nip, status').eq('id', exceptionId).maybeSingle()
+  if (r1.error) throw new Error(`Błąd odczytu uprawnień (faktury): ${r1.error.message}`)
+  let data = r1.data
   if (!data) {
-    const res = await admin.from('faktury').select('client_nip, status').eq('legacy_queue_id', exceptionId).maybeSingle()
-    data = res.data
+    const r2 = await admin.from('faktury').select('client_nip, status').eq('legacy_queue_id', exceptionId).maybeSingle()
+    if (r2.error) throw new Error(`Błąd odczytu uprawnień (faktury/legacy): ${r2.error.message}`)
+    data = r2.data
   }
   if (!data) {
-    const res = await admin.from('exceptions_queue').select('client_nip, status').eq('id', exceptionId).maybeSingle()
-    data = res.data
+    const r3 = await admin.from('exceptions_queue').select('client_nip, status').eq('id', exceptionId).maybeSingle()
+    if (r3.error) throw new Error(`Błąd odczytu uprawnień (exceptions_queue): ${r3.error.message}`)
+    data = r3.data
   }
   if (!data) throw new Error('Nie znaleziono faktury')
   if (!isAdmin) {

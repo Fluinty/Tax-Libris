@@ -5,7 +5,14 @@ import { cookies } from 'next/headers'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/do-akceptacji'
+  // Open redirect (AUDIT §1): `next` szedł do NextResponse.redirect bez
+  // walidacji — `?next=//evil.com` dawał redirect protokołowo-względny poza
+  // panel (a `/\` przeglądarki traktują jak `//`). Akceptujemy wyłącznie
+  // ścieżki wewnętrzne: zaczyna się od '/', ale nie od '//' ani '/\'.
+  const nextRaw = searchParams.get('next') ?? '/do-akceptacji'
+  const next = nextRaw.startsWith('/') && !nextRaw.startsWith('//') && !nextRaw.startsWith('/\\')
+    ? nextRaw
+    : '/do-akceptacji'
 
   if (code) {
     const cookieStore = await cookies()

@@ -60,12 +60,17 @@ export async function GET(req: NextRequest) {
     let alertSent = false
 
     if (hasAlarm) {
-      // Anti-spam: check cooldown
-      const { data: configRow } = await supabase
+      // Anti-spam: check cooldown. Błąd odczytu NIE blokuje alertu (lepszy
+      // spam co 5 min niż cisza o martwym workerze), ale nie znika po cichu —
+      // bez tego logu spam wyglądał jak zepsuty cooldown bez przyczyny.
+      const { data: configRow, error: configErr } = await supabase
         .from('config')
         .select('value')
         .eq('key', 'watchdog_last_alert')
         .maybeSingle()
+      if (configErr) {
+        console.error(`[watchdog] Błąd odczytu cooldownu (config.watchdog_last_alert): ${configErr.message} — alert pójdzie mimo cooldownu`)
+      }
 
       let shouldSend = true
       if (configRow?.value) {
@@ -122,10 +127,14 @@ export async function GET(req: NextRequest) {
           console.error(`[watchdog] Resend API error ${resendRes.status}: ${errText}`)
         } else {
           alertSent = true
-          // Update anti-spam timestamp
-          await supabase
+          // Update anti-spam timestamp — błąd upsertu = następny cykl wyśle
+          // alert ponownie mimo cooldownu; ślad w logach zamiast cichego spamu
+          const { error: upsertErr } = await supabase
             .from('config')
             .upsert({ key: 'watchdog_last_alert', value: now.toISOString() }, { onConflict: 'key' })
+          if (upsertErr) {
+            console.error(`[watchdog] Błąd zapisu cooldownu (config.watchdog_last_alert): ${upsertErr.message} — kolejne cykle będą alertować mimo cooldownu`)
+          }
         }
       }
     }

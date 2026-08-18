@@ -117,6 +117,40 @@ export async function updateClientData(
   return { success: true }
 }
 
+// ── Whitelisty kolumn per tabela (AUDIT §1) ─────────────────────────────────
+// Dotąd pojazdy/opisy sanityzowały BLACKLISTĄ (tylko client_nip/id) — patch
+// mógł ustawić kolumny systemowe (data_dodania w pojazdach; created_by,
+// hit_count, last_used_at w opisach). Wzór CLIENT_EDITABLE_FIELDS, ale pola
+// spoza listy ODCINAMY z console.error zamiast zwracać błąd: payloady idą
+// z szerokich draftów UI (PojazdyTable/OpisyTable) i nowe pole w drafcie nie
+// może zablokować zapisu legalnych — a próba przemycenia zostawia ślad
+// w logach Vercel. Listy = dokładnie to, co formularze wysyłają dziś.
+const POJAZD_EDITABLE_FIELDS = [
+  'nr_rejestracyjny', 'marka_model', 'nr_umowy_leasingu', 'sposob_rozliczenia',
+  'sposob_rozliczenia_enum', 'aktywny', 'data_zakonczenia', 'notatki',
+  'forma_wlasnosci', 'typ_pojazdu', 'zastosowanie', 'ewidencja_przebiegu',
+  'wartosc_netto_zakupu', 'data_rozpoczecia_uzytkowania', 'typ_napedu',
+  'wartosc_nabycia', 'vat26', 'leasingodawca_nip',
+]
+const OPIS_EDITABLE_FIELDS = ['opis', 'typ_dokumentu', 'aktywny']
+
+function whitelistPatch(
+  patch: Record<string, unknown> | null | undefined,
+  allowed: string[],
+  kontekst: string
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {}
+  const odrzucone: string[] = []
+  for (const [k, v] of Object.entries(patch ?? {})) {
+    if (allowed.includes(k)) safe[k] = v
+    else odrzucone.push(k)
+  }
+  if (odrzucone.length > 0) {
+    console.error(`[${kontekst}] Odrzucono pola spoza whitelisty: ${odrzucone.join(', ')}`)
+  }
+  return safe
+}
+
 export async function addPojazd(
   nip: string,
   pojazd: any
@@ -126,9 +160,9 @@ export async function addPojazd(
 
   const supabaseAdmin = createSupabaseAdmin()
 
-  // client_nip PO spreadzie (wymusza zweryfikowany NIP), id wycięte z payloadu —
-  // inaczej payload mógłby przemycić wiersz do cudzego klienta (mass assignment)
-  const { client_nip: _ignoredNip, id: _ignoredId, ...pojazdData } = (pojazd ?? {}) as Record<string, unknown>
+  // client_nip PO whiteliście (wymusza zweryfikowany NIP); whitelista wycina
+  // id/client_nip/kolumny systemowe — mass assignment bez drogi wejścia
+  const pojazdData = whitelistPatch(pojazd, POJAZD_EDITABLE_FIELDS, 'addPojazd')
   const { error } = await supabaseAdmin.from('client_pojazdy').insert({
     ...pojazdData,
     client_nip: nip,
@@ -159,8 +193,8 @@ export async function updatePojazd(
     return { success: false, error: `Pojazd o id ${id} nie należy do klienta NIP ${nip} (client_pojazdy)` }
   }
 
-  // client_nip/id wycięte z patcha — SET nie może przepiąć wiersza do innego klienta
-  const { client_nip: _ignoredNip, id: _ignoredId, ...safePatch } = (patch ?? {}) as Record<string, unknown>
+  // Whitelista (nie blacklista): wycina id/client_nip ORAZ kolumny systemowe
+  const safePatch = whitelistPatch(patch, POJAZD_EDITABLE_FIELDS, 'updatePojazd')
   const { error } = await supabaseAdmin
     .from('client_pojazdy').update(safePatch).eq('id', id).eq('client_nip', nip)
   if (error) return { success: false, error: `Błąd aktualizacji pojazdu (client_pojazdy): ${error.message}` }
@@ -214,8 +248,9 @@ export async function updateOpis(
     return { success: false, error: `Opis o id ${id} nie należy do klienta NIP ${nip} (client_opisy)` }
   }
 
-  // client_nip/id wycięte z patcha — SET nie może przepiąć wiersza do innego klienta
-  const { client_nip: _ignoredNip, id: _ignoredId, ...safePatch } = (patch ?? {}) as Record<string, unknown>
+  // Whitelista (nie blacklista): wycina id/client_nip ORAZ created_by/
+  // hit_count/last_used_at — księgowa nie może patchem resetować statystyk opisu
+  const safePatch = whitelistPatch(patch, OPIS_EDITABLE_FIELDS, 'updateOpis')
   const { error } = await supabaseAdmin
     .from('client_opisy').update(safePatch).eq('id', id).eq('client_nip', nip)
   if (error) return { success: false, error: `Błąd aktualizacji opisu (client_opisy): ${error.message}` }
