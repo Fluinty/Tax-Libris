@@ -748,3 +748,17 @@ DOPISZ wpis (commit razem ze zmiana). Nie "naprawiaj" rzeczy z tej listy bez roz
   — kazde zestawienie przed/po wymaga adnotacji o dacie tego commita
   | metryka, ktora nie widzi realnych edycji VAT, zawyzala czystosc:
   lepiej jawna nieciaglosc niz ciagla nieprawda.
+- 2026-08-18 | PORTAL KLIENTA — decyzje kamienia 1 (pelny projekt:
+  docs/PORTAL-P1-architektura.md): projekcja w OSOBNYM schemacie `portal`
+  (fluinty zostaje default-deny dla rol klienckich); decyzja klienta jest
+  PER KARTA, nie per user (PK faktura_id, ostatni glos wygrywa, atrybucja
+  w user_id/historii/events); asymetria pasow ODNOTOWANA (odczyty: projekcja
+  +RLS; zapisy: wylacznie bramka server action — kazda nowa akcja zapisu
+  portalu przechodzi adwersaryjna recenzje bramki); "odrzuc po zaksiegowaniu"
+  = alert dla ksiegowej, NIGDY rollback. TWARDA BRAMKA PRODUKCYJNA: pierwsze
+  realne zaproszenie klienta DOPIERO PO PODPISANIU ANEKSU DPA (kategoria
+  "uzytkownicy portalu" + regulamin); do tego czasu wylacznie demo/adresy
+  zespolu. Rozstrzygniecia 1-8 w dokumencie architektury | portal to pierwsza
+  powierzchnia, gdzie ofiara bledu jest klient koncowy biura — bramki
+  i kolejnosc (projekt -> review -> kod -> recenzja dostepu -> aneks ->
+  zaproszenia) sa wazniejsze niz tempo.

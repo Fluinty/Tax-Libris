@@ -118,7 +118,7 @@ w events).** Tabela stanu + emisja eventu:
 portal.faktury_decyzje
   faktura_id    bigint   (fluinty.faktury.id)
   client_nip    text
-  user_id       uuid
+  user_id       uuid     -- KTO OSTATNIO podjął/zmienił decyzję (atrybucja, nie klucz)
   decyzja       text CHECK (decyzja IN ('zatwierdzona','odrzucona'))
   komentarz     text     (NULL przy braku; komentarz możliwy też bez decyzji)
   po_zaksiegowaniu boolean NOT NULL  -- TRUE gdy karta była już zaksięgowana
@@ -126,6 +126,13 @@ portal.faktury_decyzje
   PRIMARY KEY (faktura_id)           -- stan AKTUALNY; zmiana decyzji = UPDATE
 portal.faktury_decyzje_historia      -- append-only kopia każdej zmiany
 ```
+
+**KONTRAKT (review 18.08, nazwany wprost): decyzja jest PER KARTA, nie per user.**
+Karta ma dokładnie JEDEN aktualny stan decyzji (`PRIMARY KEY (faktura_id)`) —
+gdy firma ma wielu użytkowników portalu, kolejna decyzja NADPISUJE poprzednią
+(ostatni głos wygrywa), a `user_id` + historia + event niosą atrybucję „kto".
+Księgowa widzi jeden badge, nie macierz głosów per user. Zmiana tego kontraktu
+(np. wymóg zgodności wszystkich userów) = zmiana modelu, nie konfiguracji.
 
 + do `fluinty.faktura_events` nowe typy `portal_zatwierdzona` / `portal_odrzucona` /
 `portal_komentarz` (aktor = email klienta) — **wymaga migracji rozszerzającej CHECK
@@ -178,8 +185,11 @@ tych ról na niestandardowym schemacie (PostgREST expose ≠ grant).
 
 **Co trzeba nadać (wyłącznie na `portal`):**
 - `GRANT USAGE ON SCHEMA portal TO authenticated;`
-- `GRANT SELECT ON portal.faktury, portal.faktura_pozycje, portal.faktura_podglad,
-  portal.user_klienci TO authenticated;` (user_klienci z RLS `user_id = auth.uid()`);
+- `GRANT SELECT ON portal.faktury, portal.faktura_pozycje, portal.faktura_podglad
+  TO authenticated;` oraz projekcja `portal.moje_firmy` (widok na user_klienci
+  z RLS-filtrem `user_id = auth.uid()`) — **BEZ kolumny `nadal`** (review 18.08:
+  email admina biura, który zaprosił, to informacja wewnętrzna biura — zostaje
+  w tabeli, poza projekcją dla authenticated);
 - `portal.faktury_decyzje`: **BEZ grantu INSERT/UPDATE dla authenticated** — zapisy
   wyłącznie przez server actions (service_role) z bramką; SELECT przez widok
   filtrowany;
@@ -189,6 +199,15 @@ tych ról na niestandardowym schemacie (PostgREST expose ≠ grant).
 `assertNipReadAccess`, fail-closed): auth.uid() → pary z `portal.user_klienci`
 (aktywne) → client_nip karty ∈ pary → inaczej odmowa. Walidacje wejścia jak
 w panelu (długość komentarza, enum decyzji, typ przed `.trim()` — lekcje z recenzji).
+
+**Asymetria pasów bezpieczeństwa (review 18.08, odnotowana świadomie):**
+ODCZYTY mają pas podwójny (projekcja z filtrem auth.uid() + RLS na tabelach
+portalowych), ZAPISY mają pas POJEDYNCZY — wyłącznie bramkę w server action
+(`assertPortalAccess`), bo akcja pisze przez service_role, który omija RLS.
+To ta sama asymetria, na której stoi cały panel — i ta sama klasa ryzyka, którą
+audyt fali 1 łapał jako IDOR. Konsekwencja praktyczna: KAŻDA nowa akcja zapisu
+portalu przechodzi adwersaryjną recenzję bramki przed merge; recenzja dostępu
+przed pierwszym zaproszeniem (ryzyko nr 1) testuje właśnie zapisy.
 
 **Zasada twarda: przeglądarka portalu NIGDY nie widzi service_role.** Klient JS
 używa wyłącznie klucza anon + sesji użytkownika; service_role żyje tylko w server
@@ -244,22 +263,33 @@ bez wyszukiwarki w MVP (D7).
 4. `inviteUserByEmail` wysyła mail z szablonu Supabase — branding/treść po polsku
    wymaga konfiguracji szablonów w projekcie.
 
-**Pytania otwarte (decyzje właściciela, nie blokują startu implementacji §a-b):**
-1. Czy klient widzi karty pominięte (ignored/skipped)? Rekomendacja: NIE w MVP.
-2. Zakres historyczny feedu: wszystko (od maja 2026) czy od daty startu portalu?
-   Rekomendacja: wszystko — dane są (100% pozycji), różnicowanie to złożoność.
-3. Tryb blocking (`portal_wymaga_akceptacji`) — POZA MVP; kiedy wraca, dotyka
-   bramki auto-write → osobna zgoda i projekt.
-4. Podgląd portalu dla księgowej/admina (impersonacja read-only „zobacz co widzi
-   klient")? Przydatne dla wsparcia; wymaga jawnego trybu w bramkach.
-5. Powiadomienia e-mail o nowej fakturze — poza MVP (D7), ale szablony/preferencje
-   warto zaprojektować w danych od razu (kolumna w user_klienci?).
-6. Domena: `/portal` na tej samej aplikacji Vercel (rekomendacja: tak w MVP —
-   jeden deploy, izolacja przez layout/middleware) vs subdomena osobna później.
-7. Komentarz bez decyzji (samodzielny) — dopuszczony w modelu (§b); potwierdzić
-   produktowo.
-8. RODO/DPA: rozszerzenie Umowy Powierzenia o kategorię „użytkownicy portalu"
-   + regulamin portalu (burza §5.3) — do prawnika równolegle z implementacją.
+**Pytania 1–8 — ROZSTRZYGNIĘTE decyzjami właściciela 18.08.2026:**
+1. Karty pominięte (ignored/skipped): **NIE w MVP** — niewidoczne w projekcji.
+2. Zakres historyczny feedu: **wszystko** (cała historia; render z pozycji pokrywa 100%).
+3. Tryb blocking (`portal_wymaga_akceptacji`): **poza MVP**; powrót = osobna zgoda
+   i projekt (dotyka bramki auto-write).
+4. Impersonacja read-only dla księgowej/admina: **poza MVP, ALE bramki przewidują
+   tryb OD RAZU** — `assertPortalAccess` projektowana z jawnym parametrem trybu
+   (`'klient'` | `'podglad_biura'`), żeby późniejsze włączenie nie wymagało
+   przebudowy kontraktu bramek.
+5. Powiadomienia e-mail: **poza MVP, ale kolumna preferencji TERAZ** —
+   `portal.user_klienci.powiadomienia_email boolean NOT NULL DEFAULT false`
+   wchodzi do migracji K2 (bez żadnego kodu wysyłki).
+6. Domena: **`/portal` na tej samej aplikacji Vercel** (jeden deploy; izolacja
+   przez layout + middleware).
+7. Komentarz bez decyzji: **TAK, potwierdzone** — model §b zostaje.
+8. RODO/DPA: **kod może iść równolegle, ALE — TWARDA BRAMKA PRODUKCYJNA:
+   PIERWSZE REALNE ZAPROSZENIE KLIENTA DOPIERO PO PODPISANIU ANEKSU DPA**
+   (rozszerzenie Umowy Powierzenia o kategorię „użytkownicy portalu"
+   + regulamin portalu). Do czasu aneksu wolno: implementować, testować na
+   danych demo/fikcyjnych adresach zespołu biura. Bramka wpisana też
+   w DECISIONS — nie jest zależna od gotowości kodu.
+
+**Taski implementacyjne dopisane w review 18.08:**
+- (K3) **zweryfikować rate limity Supabase Auth dla `signInWithOtp`** (domyślne
+  limity wysyłki maili/OTP per godzinę i per adres; czy wystarczą dla ~kilkudziesięciu
+  userów portalu; czy wymagany własny SMTP) — PRZED oddaniem ekranu logowania,
+  żeby klient nie zderzył się z cichym „spróbuj później".
 
 **Kolejność implementacji po zatwierdzeniu projektu (propozycja):**
 K2: schemat `portal` + widoki + granty + RLS (migracja, wykonanie ręczne) →
